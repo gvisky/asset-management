@@ -11,7 +11,8 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 // ── GET /api/assets — list (excludes soft-deleted) with search & filter ───────
 router.get('/', wrap(async (req, res) => {
-  const { search = '', status = '', location = '', page = 1, limit = 50 } = req.query;
+  const { search = '', status = '', location = '', brand = '', department = '',
+          incomplete = '', page = 1, limit = 50 } = req.query;
 
   const conditions = ['deleted_at IS NULL'];
   const params = [];
@@ -25,8 +26,17 @@ router.get('/', wrap(async (req, res) => {
     const like = `%${search}%`;
     params.push(like, like, like, like, like, like, like);
   }
-  if (status)   { conditions.push('status = ?');   params.push(status); }
-  if (location) { conditions.push('location = ?'); params.push(location); }
+  if (status)     { conditions.push('status = ?');      params.push(status); }
+  if (location)   { conditions.push('location = ?');    params.push(location); }
+  if (brand)      { conditions.push('brand_model = ?'); params.push(brand); }
+  if (department) { conditions.push('department = ?');  params.push(department); }
+  if (incomplete) {
+    conditions.push(`(
+      serial_no   IS NULL OR serial_no   = '' OR
+      asset_code  IS NULL OR asset_code  = '' OR
+      computer_no IS NULL OR computer_no = ''
+    )`);
+  }
 
   const where = 'WHERE ' + conditions.join(' AND ');
   const offset = (Number(page) - 1) * Number(limit);
@@ -69,6 +79,17 @@ router.get('/stats', wrap(async (req, res) => {
     )`)).cnt);
 
   res.json({ total, byStatus, byLocation, byBrand, recentlyAdded, deletedCount, incompleteCount });
+}));
+
+// ── GET /api/assets/filters — distinct values for the filter dropdowns ────────
+router.get('/filters', wrap(async (req, res) => {
+  const brands = (await all(
+    "SELECT DISTINCT brand_model AS v FROM assets WHERE deleted_at IS NULL AND brand_model <> '' ORDER BY brand_model COLLATE NOCASE"
+  )).map(r => r.v);
+  const departments = (await all(
+    "SELECT DISTINCT department AS v FROM assets WHERE deleted_at IS NULL AND department <> '' ORDER BY department COLLATE NOCASE"
+  )).map(r => r.v);
+  res.json({ brands, departments });
 }));
 
 // ── GET /api/assets/incomplete — assets missing key identifiers ───────────────

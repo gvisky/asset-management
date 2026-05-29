@@ -5,18 +5,39 @@ const PAGE_SIZE = 25;
 let deleteTargetId = null;
 let viewAsset = null;
 let editMode = false;
+let incompleteMode = false;   // "Needs Attention" filter toggle
+
+// Populate the Brand Model and Department dropdowns with distinct values.
+async function loadFilters() {
+  try {
+    const { brands, departments } = await apiGet('/api/assets/filters');
+    const brandSel = document.getElementById('filter-brand');
+    const deptSel  = document.getElementById('filter-department');
+    brandSel.innerHTML = '<option value="">All Models</option>' +
+      brands.map(b => `<option value="${b.replace(/"/g,'&quot;')}">${b}</option>`).join('');
+    deptSel.innerHTML = '<option value="">All Departments</option>' +
+      departments.map(d => `<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
+  } catch (err) {
+    console.error('Failed to load filter options', err);
+  }
+}
 
 // ── Fetch & render table ──────────────────────────────────────────────────────
 async function loadAssets(page = 1) {
   currentPage = page;
-  const search   = document.getElementById('search-input').value.trim();
-  const location = document.getElementById('filter-location').value;
-  const status   = document.getElementById('filter-status').value;
+  const search     = document.getElementById('search-input').value.trim();
+  const location   = document.getElementById('filter-location').value;
+  const status     = document.getElementById('filter-status').value;
+  const brand      = document.getElementById('filter-brand').value;
+  const department = document.getElementById('filter-department').value;
 
   const params = new URLSearchParams({ page, limit: PAGE_SIZE });
-  if (search)   params.set('search',   search);
-  if (location) params.set('location', location);
-  if (status)   params.set('status',   status);
+  if (search)        params.set('search',     search);
+  if (location)      params.set('location',   location);
+  if (status)        params.set('status',     status);
+  if (brand)         params.set('brand',      brand);
+  if (department)    params.set('department', department);
+  if (incompleteMode) params.set('incomplete', '1');
 
   try {
     const result = await apiGet(`${API}?${params}`);
@@ -172,18 +193,32 @@ function applyUrlFilters() {
   const status = p.get('status') || '';
   const location = p.get('location') || '';
   const search = p.get('search') || '';
-  if (status)   document.getElementById('filter-status').value = status;
-  if (location) document.getElementById('filter-location').value = location;
-  if (search)   document.getElementById('search-input').value = search;
+  const brand = p.get('brand') || '';
+  const department = p.get('department') || '';
+  if (status)     document.getElementById('filter-status').value = status;
+  if (location)   document.getElementById('filter-location').value = location;
+  if (search)     document.getElementById('search-input').value = search;
+  if (brand)      document.getElementById('filter-brand').value = brand;
+  if (department) document.getElementById('filter-department').value = department;
+  if (p.get('incomplete')) { incompleteMode = true; setIncompleteButton(true); }
+}
+
+// Visual state of the "Needs Attention" toggle button.
+function setIncompleteButton(active) {
+  const btn = document.getElementById('btn-incomplete');
+  if (!btn) return;
+  btn.classList.toggle('btn-primary', active);
+  btn.classList.toggle('btn-ghost', !active);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  applyUrlFilters();
-  loadAssets();
-
-  // If arriving from a dashboard "Fill in" link (?edit=<id>), open that asset's editor.
-  const editId = new URLSearchParams(window.location.search).get('edit');
-  if (editId) onEdit(editId);
+  // Load dropdown options first, then apply any URL filters and load the table.
+  loadFilters().then(() => {
+    applyUrlFilters();
+    loadAssets();
+    const editId = new URLSearchParams(window.location.search).get('edit');
+    if (editId) onEdit(editId);
+  });
 
   // Search & filter with debounce
   let debounce;
@@ -191,14 +226,27 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => loadAssets(1), 320);
   });
-  document.getElementById('filter-location').addEventListener('change', () => loadAssets(1));
-  document.getElementById('filter-status').addEventListener('change',   () => loadAssets(1));
+  document.getElementById('filter-location').addEventListener('change',   () => loadAssets(1));
+  document.getElementById('filter-status').addEventListener('change',     () => loadAssets(1));
+  document.getElementById('filter-brand').addEventListener('change',      () => loadAssets(1));
+  document.getElementById('filter-department').addEventListener('change', () => loadAssets(1));
+
+  // "Needs Attention — Missing Info" toggle
+  document.getElementById('btn-incomplete').addEventListener('click', () => {
+    incompleteMode = !incompleteMode;
+    setIncompleteButton(incompleteMode);
+    loadAssets(1);
+  });
 
   // Reset
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
     document.getElementById('filter-location').value = '';
     document.getElementById('filter-status').value = '';
+    document.getElementById('filter-brand').value = '';
+    document.getElementById('filter-department').value = '';
+    incompleteMode = false;
+    setIncompleteButton(false);
     loadAssets(1);
   });
 
