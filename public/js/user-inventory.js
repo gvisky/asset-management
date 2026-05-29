@@ -145,6 +145,30 @@ function pagRange(c, t) {
   return [1,'…',c-1,c,c+1,'…',t];
 }
 
+// Load last-import info; show the upload button (IT) and the monthly reminder.
+async function loadMeta() {
+  try {
+    const m = await apiGet('/api/personnel/meta');
+    if (m.canImport) {
+      document.getElementById('btn-upload').style.display = '';
+    }
+    if (m.canImport && m.due) {
+      const txt = m.last_import
+        ? `Last updated ${m.days_since} day(s) ago. Please download the latest export from Azure and upload it.`
+        : `No import on record yet. Download the latest export from Azure and upload it.`;
+      document.getElementById('reminder-text').textContent = txt;
+      document.getElementById('reminder').style.display = '';
+    }
+  } catch (e) { /* HR users: meta still returns, no-op */ }
+}
+
+// Read a chosen CSV file and send it to the import endpoint.
+function handleUpload() {
+  const input = document.getElementById('csv-file');
+  input.value = '';
+  input.click();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Page guard: HR or IT only.
   setTimeout(() => {
@@ -153,6 +177,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 400);
 
   loadCountries().then(() => loadPeople());
+  loadMeta();
+
+  // Upload buttons (top bar + reminder banner)
+  document.getElementById('btn-upload').addEventListener('click', handleUpload);
+  document.getElementById('btn-upload-2').addEventListener('click', handleUpload);
+  document.getElementById('csv-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    showToast('Reading file…');
+    const text = await file.text();
+    try {
+      const result = await apiPost('/api/personnel/import', { csv: text });
+      showToast(`Imported: +${result.added} new, ${result.updated} updated (VN ${result.byCountry.Vietnam}, TH ${result.byCountry.Thailand}, MY ${result.byCountry.Malaysia})`);
+      document.getElementById('reminder').style.display = 'none';
+      loadPeople(1);
+    } catch (err) {
+      const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Import failed'; } })();
+      showToast(msg, 'error');
+    }
+  });
 
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => {

@@ -119,7 +119,13 @@ async function initSchema() {
                             CHECK(role IN ('admin','editor','viewer')),
       country       TEXT    DEFAULT NULL,   -- NULL = sees all countries; else limited to that country
       team          TEXT    DEFAULT NULL,   -- 'IT' or 'HR' (for the User Inventory page)
+      asset_access  INTEGER NOT NULL DEFAULT 1,  -- 0 = cannot see Asset Inventory (e.g. HR-only users)
       created_at    TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT
     );
 
     CREATE TABLE IF NOT EXISTS personnel (
@@ -165,8 +171,20 @@ async function migrate() {
   if (!cols.includes('country'))    await backend.run("ALTER TABLE assets ADD COLUMN country TEXT NOT NULL DEFAULT 'Vietnam'");
 
   const ucols = (await backend.all('PRAGMA table_info(users)')).map(c => c.name);
-  if (!ucols.includes('country'))   await backend.run('ALTER TABLE users ADD COLUMN country TEXT DEFAULT NULL');
-  if (!ucols.includes('team'))      await backend.run('ALTER TABLE users ADD COLUMN team TEXT DEFAULT NULL');
+  if (!ucols.includes('country'))      await backend.run('ALTER TABLE users ADD COLUMN country TEXT DEFAULT NULL');
+  if (!ucols.includes('team'))         await backend.run('ALTER TABLE users ADD COLUMN team TEXT DEFAULT NULL');
+  if (!ucols.includes('asset_access')) await backend.run('ALTER TABLE users ADD COLUMN asset_access INTEGER NOT NULL DEFAULT 1');
+
+  await backend.script(`CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT);`);
+}
+
+async function getMeta(key) {
+  const r = await get('SELECT value FROM app_meta WHERE key = ?', [key]);
+  return r ? r.value : null;
+}
+async function setMeta(key, value) {
+  await run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+            [key, String(value)]);
 }
 
 // Assign IT/HR teams and ensure the new HR user (Ha Tran) exists. Idempotent.
@@ -176,21 +194,27 @@ async function ensureTeams() {
   for (const u of IT) await backend.run("UPDATE users SET team = 'IT' WHERE username = ? AND (team IS NULL OR team = '')", [u]);
   for (const u of HR) await backend.run("UPDATE users SET team = 'HR' WHERE username = ? AND (team IS NULL OR team = '')", [u]);
 
-  // Ha Tran — new HR member for Vietnam.
+  // Ha Tran — new HR member for Vietnam (no Asset Inventory access).
   const exists = await backend.get('SELECT id FROM users WHERE username = ?', ['hatran']);
   if (!exists) {
     await backend.run(
-      'INSERT INTO users (username, full_name, password_hash, role, country, team) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO users (username, full_name, password_hash, role, country, team, asset_access) VALUES (?, ?, ?, ?, ?, ?, 0)',
       ['hatran', 'Ha Tran', hashPassword('hatran123'), 'editor', 'Vietnam', 'HR']
     );
-    console.log('[seed] Created HR member hatran -> Vietnam');
+    console.log('[seed] Created HR member hatran -> Vietnam (no asset access)');
   }
+  // HR-only members do not get Asset Inventory access.
+  await backend.run("UPDATE users SET asset_access = 0 WHERE username = 'hatran'");
 }
 
 // On first boot with empty personnel, load db/personnel-seed.json if present.
 async function seedPersonnel() {
   const { c } = await backend.get('SELECT COUNT(*) AS c FROM personnel');
-  if (Number(c) > 0) return;
+  if (Number(c) > 0) {
+    // Backfill the import timestamp for databases seeded before this field existed.
+    await backend.run("INSERT INTO app_meta (key, value) VALUES ('personnel_last_import', datetime('now')) ON CONFLICT(key) DO NOTHING");
+    return;
+  }
   const seedPath = path.join(__dirname, 'personnel-seed.json');
   if (!fs.existsSync(seedPath)) return;
   let rows;
@@ -204,6 +228,10 @@ async function seedPersonnel() {
        r.status || 'Active', r.company_name || '', r.position || '', r.leaving_date || '']
     );
   }
+  // Record the initial import time (only if not already set) for the IT reminder.
+  await backend.run(
+    "INSERT INTO app_meta (key, value) VALUES ('personnel_last_import', datetime('now')) ON CONFLICT(key) DO NOTHING"
+  );
   console.log(`[seed] Loaded ${rows.length} personnel records`);
 }
 
@@ -284,4 +312,4 @@ async function audit(user, action, assetId, details) {
   }
 }
 
-module.exports = { init, get, all, run, script, audit, USE_TURSO };
+module.exports = { init, get, all, run, script, audit, getMeta, setMeta, USE_TURSO };

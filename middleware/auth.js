@@ -32,7 +32,7 @@ async function getUserFromRequest(req) {
   }
 
   const user = await get(
-    'SELECT id, username, full_name, role, country, team FROM users WHERE id = ?', [session.user_id]
+    'SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [session.user_id]
   );
   return user || null;
 }

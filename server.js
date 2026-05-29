@@ -7,8 +7,8 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '25mb' }));   // large enough for raw Azure CSV uploads
+app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
 // API routes
 app.use('/api/auth',      require('./routes/auth'));

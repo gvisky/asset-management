@@ -8,6 +8,14 @@ const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 // Every asset route requires a logged-in user.
 router.use(requireAuth);
 
+// Block users who don't have Asset Inventory access (e.g. HR-only members).
+router.use((req, res, next) => {
+  if (req.user && req.user.asset_access === 0) {
+    return res.status(403).json({ error: 'No access to Asset Inventory' });
+  }
+  next();
+});
+
 // Small wrapper so async handler errors become 500s instead of hanging.
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 

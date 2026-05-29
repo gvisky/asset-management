@@ -11,6 +11,7 @@ async function ensureAuth() {
     window.CURRENT_USER = await r.json();
     renderUserChrome();
     applyRoleGates();
+    applyAssetGating();
     return window.CURRENT_USER;
   } catch {
     window.location.href = '/login.html';
@@ -97,6 +98,18 @@ function renderUserChrome() {
         if (window.location.pathname.includes('users.html')) usersLink.classList.add('active');
       }
     }
+  }
+}
+
+// Users without Asset Inventory access (e.g. HR-only) don't see Dashboard/Assets.
+function applyAssetGating() {
+  const u = window.CURRENT_USER;
+  if (!u || u.asset_access !== 0) return;
+  document.querySelectorAll('.sidebar nav a[href="/"], .sidebar nav a[href="/inventory.html"], #nav-add')
+    .forEach(a => a.style.display = 'none');
+  const p = window.location.pathname;
+  if (p === '/' || p === '/index.html' || p === '/inventory.html') {
+    window.location.href = '/user-inventory.html';
   }
 }
 

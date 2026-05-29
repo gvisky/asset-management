@@ -34,9 +34,24 @@
   <header class="topbar">
     <span class="topbar-title">User Inventory</span>
     <span id="total-label" class="text-muted text-sm"></span>
+    <input type="file" id="csv-file" accept=".csv" style="display:none">
+    <button class="btn btn-primary btn-sm" id="btn-upload" style="display:none;margin-left:auto">⬆ Upload Azure CSV</button>
   </header>
 
   <main class="content">
+
+    <!-- Monthly reminder for IT -->
+    <div id="reminder" class="card" style="display:none;border-left:4px solid var(--retired);margin-bottom:18px">
+      <div class="card-body" style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:22px">🔔</span>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:14px">Time to refresh the User Inventory</div>
+          <div class="text-muted text-sm" id="reminder-text"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-upload-2">⬆ Upload Azure CSV</button>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header" style="flex-wrap:wrap;gap:10px">
         <div class="search-box" style="min-width:240px;flex:1">

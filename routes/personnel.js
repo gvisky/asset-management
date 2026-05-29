@@ -1,12 +1,22 @@
 const express = require('express');
+const XLSX = require('xlsx');
 const router = express.Router();
-const { get, all, run, audit } = require('../db/database');
+const { get, all, run, audit, getMeta, setMeta } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 const USER_TYPES = ['', 'Hayat Member', 'No Hayat Member'];
 const STATUSES   = ['Active', 'to be delete', 'pending delete', 'deleted'];
+
+// Map an Azure "Company Name" to one of our 3 countries (else null = ignore).
+function countryFromCompany(company) {
+  const c = String(company || '').toLowerCase();
+  if (c.includes('vietnam')) return 'Vietnam';
+  if (c.includes('thailand') || c.includes('thailans')) return 'Thailand';  // handles the export typo
+  if (c.includes('malaysia')) return 'Malaysia';
+  return null;
+}
 
 router.use(requireAuth);
 
@@ -67,6 +77,71 @@ router.get('/', wrap(async (req, res) => {
 router.get('/filters', wrap(async (req, res) => {
   const countries = scopeOf(req) ? [scopeOf(req)] : ['Vietnam', 'Thailand', 'Malaysia'];
   res.json({ countries });
+}));
+
+// ── GET /api/personnel/meta — last import + monthly reminder (for IT) ──────────
+router.get('/meta', wrap(async (req, res) => {
+  const last = await getMeta('personnel_last_import');
+  let days = null, due = true;
+  if (last) {
+    const r = await get("SELECT (julianday('now') - julianday(?)) AS d", [last]);
+    days = Math.floor(Number(r.d));
+    due = days >= 30;
+  }
+  res.json({ last_import: last, days_since: days, due, canImport: isIT(req) });
+}));
+
+// ── POST /api/personnel/import — IT uploads a raw Azure CSV export ────────────
+// Filters to Vietnam/Thailand/Malaysia by Company Name, then upserts by email,
+// preserving HR/IT workflow fields (user_type, status, leaving_date).
+router.post('/import', wrap(async (req, res) => {
+  if (!isIT(req)) return res.status(403).json({ error: 'Only IT members can upload' });
+
+  const csv = req.body && req.body.csv;
+  if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'No CSV content received' });
+
+  let rows;
+  try {
+    const wb = XLSX.read(csv, { type: 'string' });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+  } catch (e) {
+    return res.status(400).json({ error: 'Could not parse the CSV file' });
+  }
+
+  const existing = await all('SELECT id, email FROM personnel');
+  const byEmail = new Map(existing.map(r => [String(r.email).toLowerCase(), r.id]));
+
+  let added = 0, updated = 0, skipped = 0;
+  const byCountry = { Vietnam: 0, Thailand: 0, Malaysia: 0 };
+
+  for (const r of rows) {
+    const display = String(r.displayName || r['Display Name'] || '').trim();
+    const email   = String(r.userPrincipalName || r.Email || r.email || '').trim();
+    const company = String(r.companyName || r['Company Name'] || '').trim();
+    const country = countryFromCompany(company);
+    if (!country || !email) { skipped++; continue; }
+    byCountry[country]++;
+
+    const id = byEmail.get(email.toLowerCase());
+    if (id) {
+      // Update roster fields only; keep HR/IT workflow fields intact.
+      await run("UPDATE personnel SET display_name = ?, company_name = ?, country = ?, updated_at = datetime('now') WHERE id = ?",
+                [display, company, country, id]);
+      updated++;
+    } else {
+      await run(`INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date)
+                 VALUES (?, ?, ?, '', 'Active', ?, '', '')`,
+                [country, display, email, company]);
+      added++;
+    }
+  }
+
+  const nowStr = (await get("SELECT datetime('now') AS n")).n;
+  await setMeta('personnel_last_import', nowStr);
+  await audit(req.user, 'IMPORT', null,
+    `Imported personnel: +${added} new, ${updated} updated (VN ${byCountry.Vietnam}, TH ${byCountry.Thailand}, MY ${byCountry.Malaysia}); ${skipped} skipped`);
+
+  res.json({ added, updated, skipped, byCountry, last_import: nowStr });
 }));
 
 // ── PUT /api/personnel/:id — field-level edit by team ─────────────────────────
