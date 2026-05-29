@@ -1,0 +1,8 @@
+node_modules
+npm-debug.log
+db/assets.db
+db/assets.db-shm
+db/assets.db-wal
+.git
+.claude
+*.md

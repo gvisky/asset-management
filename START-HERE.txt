@@ -1,0 +1,58 @@
+==================================================================
+   IT ASSET MANAGER  —  HV Hygiene Vietnam
+==================================================================
+
+HOW TO START THE APP
+--------------------
+1. Double-click  "Start-AssetManager.bat"
+2. Wait until you see the message "running at http://localhost:3000"
+3. Open your web browser and go to:   http://localhost:3000
+4. Log in with your account (see below).
+5. To stop the app, close the black window.
+
+   (The very first time on a new PC it installs components and may
+    take a minute. Node.js must be installed — https://nodejs.org )
+
+
+YOUR LOGIN ACCOUNTS
+-------------------
+   Viet      password: viet123       (Administrator)
+   Hiep      password: hiep123        (Editor)
+   Quoc Viet password: quocviet123    (Editor)
+
+   >> Everyone should change their password after the first login
+      (use the "Change password" button at the top-right).
+
+
+WHAT EACH ROLE CAN DO
+---------------------
+   Administrator (Viet)
+       - View everything
+       - Add / edit / delete assets
+       - See the RECYCLE BIN: who deleted any record and when
+       - RESTORE deleted records
+       - Manage user accounts + view the full audit log
+
+   Editor (Hiep, Quoc Viet)
+       - View everything
+       - Add / edit / delete assets
+       - (Cannot restore deleted records or manage users)
+
+
+IMPORTANT — ABOUT SHARING THE DATA
+----------------------------------
+Sharing this OneDrive folder lets each person RUN the app on their
+own PC, but OneDrive does NOT share the live data between PCs at the
+same time (it only syncs files, and two people running at once can
+corrupt the database).
+
+RECOMMENDED setup for shared data:
+   * ONE computer (e.g. Viet's PC) runs the app.
+   * The others open it over the office network using that PC's
+     address, e.g.  http://192.168.1.50:3000
+     (See DEPLOYMENT.md -> "Option B - Office network" for the
+      one-time firewall step.)
+
+For access from anywhere (home, other branches, phones), deploy to
+the cloud instead — see DEPLOYMENT.md -> "Option A - Cloud".
+==================================================================

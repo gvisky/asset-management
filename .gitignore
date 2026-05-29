@@ -1,0 +1,8 @@
+node_modules/
+db/assets.db
+db/assets.db-shm
+db/assets.db-wal
+npm-debug.log
+.env
+.DS_Store
+.claude/

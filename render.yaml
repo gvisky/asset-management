@@ -1,0 +1,21 @@
+# Render.com Blueprint — FREE plan, using Turso as the shared cloud database.
+# No persistent disk needed here because all data lives in Turso (not on the server).
+#
+# Steps: see CLOUD-SETUP.md
+services:
+  - type: web
+    name: asset-management
+    runtime: node
+    plan: free                 # free plan is fine — data is in Turso, not on disk
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /login.html
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TURSO_DATABASE_URL
+        sync: false            # paste from Turso (libsql://...) in the Render dashboard
+      - key: TURSO_AUTH_TOKEN
+        sync: false            # paste your Turso token in the Render dashboard
+      - key: ADMIN_PASS
+        sync: false            # Viet's admin password — set in the Render dashboard

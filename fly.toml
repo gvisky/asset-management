@@ -1,0 +1,31 @@
+# Fly.io configuration for the Asset Manager.
+# Deploys the Dockerfile in this folder with a persistent volume for the SQLite DB.
+#
+# IMPORTANT: "app" must be globally unique across all of Fly.io.
+# If "asset-manager-hv" is taken, change it to something else (e.g. add your initials).
+
+app = "asset-manager-hv"
+primary_region = "sin"   # Singapore — closest Fly region to Vietnam
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  PORT = "3000"
+  DB_PATH = "/data/assets.db"   # lives on the persistent volume below
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"   # sleep when idle (keeps it within the free allowance)
+  auto_start_machines = true    # wake automatically on the next visit
+  min_machines_running = 0
+
+# Persistent volume — your data survives restarts, deploys, and sleep/wake.
+[[mounts]]
+  source = "asset_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

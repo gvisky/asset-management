@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asset Management — Inventory</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────────────── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">🖥️ IT Asset Manager</div>
+    <div class="logo-sub">HV Hygiene Vietnam</div>
+  </div>
+  <nav>
+    <div class="nav-section-label">Menu</div>
+    <a href="/" class="nav-link" id="nav-dashboard">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/inventory.html" class="nav-link active">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg>
+      Asset Inventory
+    </a>
+    <div class="nav-section-label" style="margin-top:8px">Quick Actions</div>
+    <a href="#" class="nav-link" id="nav-add">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      Add Asset
+    </a>
+  </nav>
+</aside>
+
+<!-- ── Main ──────────────────────────────────────────────────────────── -->
+<div class="main-wrap">
+  <header class="topbar">
+    <span class="topbar-title">Asset Inventory</span>
+    <span id="total-label" class="text-muted text-sm"></span>
+    <button class="btn btn-primary btn-sm" id="btn-add-top">+ Add Asset</button>
+  </header>
+
+  <main class="content">
+    <div class="card">
+      <!-- Toolbar -->
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <div class="search-box" style="min-width:260px;flex:1">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" placeholder="Search by department, serial, user, model…">
+        </div>
+        <select class="filter-select" id="filter-location">
+          <option value="">All Locations</option>
+          <option>Factory</option>
+          <option>Office</option>
+        </select>
+        <select class="filter-select" id="filter-status">
+          <option value="">All Statuses</option>
+          <option>Active</option>
+          <option>Broken</option>
+          <option>Retired</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
+      </div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Asset Code</th>
+              <th>Brand / Model</th>
+              <th>Computer No</th>
+              <th>Location</th>
+              <th>Department</th>
+              <th>User Name</th>
+              <th>Serial #</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="assets-tbody">
+            <tr><td colspan="10" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="page-info" id="page-info"></span>
+        <div style="flex:1"></div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── View Detail Modal ──────────────────────────────────────────────── -->
+<div class="modal-overlay" id="view-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Asset Detail</span>
+      <button class="modal-close" id="view-close">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="view-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="view-close-btn">Close</button>
+      <button class="btn btn-primary" id="view-edit-btn">Edit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Modal ───────────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Add Asset</span>
+      <button class="modal-close" id="modal-close">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <form id="asset-form">
+        <input type="hidden" id="asset-id">
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label">Location *</label>
+            <select class="form-control" id="f-location" required>
+              <option value="">Select…</option>
+              <option>Factory</option>
+              <option>Office</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status *</label>
+            <select class="form-control" id="f-status" required>
+              <option>Active</option>
+              <option>Broken</option>
+              <option>Retired</option>
+            </select>
+          </div>
+          <div class="form-group span-2">
+            <label class="form-label">Department</label>
+            <input class="form-control" id="f-department" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Computer No</label>
+            <input class="form-control" id="f-computer_no" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Brand / Model</label>
+            <input class="form-control" id="f-brand_model" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Serial #</label>
+            <input class="form-control" id="f-serial_no" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Asset Code</label>
+            <input class="form-control" id="f-asset_code" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">User Name</label>
+            <input class="form-control" id="f-user_name" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">AD Name</label>
+            <input class="form-control" id="f-ad_name" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">M&K</label>
+            <input class="form-control" id="f-mk" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date Assigned</label>
+            <input class="form-control" id="f-date_assigned" type="date">
+          </div>
+          <div class="form-group span-2">
+            <label class="form-label">History Usage</label>
+            <input class="form-control" id="f-history_usage" type="text">
+          </div>
+          <div class="form-group span-2">
+            <label class="form-label">Remark</label>
+            <textarea class="form-control" id="f-remark" rows="2"></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button class="btn btn-primary" id="modal-save">Save Asset</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Confirm Modal ───────────────────────────────────────────── -->
+<div class="modal-overlay" id="del-overlay">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title">Delete Asset</span>
+      <button class="modal-close" id="del-close">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p>Move asset <strong id="del-label"></strong> to the recycle bin? An administrator can restore it later if needed.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="del-cancel">Cancel</button>
+      <button class="btn btn-danger" id="del-confirm">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/js/auth.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/inventory.js"></script>
+</body>
+</html>
