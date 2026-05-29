@@ -15,7 +15,7 @@ async function loadStats() {
     const brandEl = document.getElementById('brand-bars');
     const maxCount = stats.byBrand[0]?.cnt || 1;
     brandEl.innerHTML = stats.byBrand.map(b => `
-      <div class="bar-item">
+      <a class="bar-item" href="/inventory.html?search=${encodeURIComponent(b.brand_model || '')}" title="View ${b.brand_model || 'these'} assets">
         <div class="bar-label">
           <span>${b.brand_model || 'Unknown'}</span>
           <span><strong>${b.cnt}</strong></span>
@@ -23,7 +23,7 @@ async function loadStats() {
         <div class="bar-track">
           <div class="bar-fill" style="width:${Math.round(b.cnt / maxCount * 100)}%"></div>
         </div>
-      </div>
+      </a>
     `).join('') || '<div class="text-muted text-sm">No data</div>';
 
     // Status breakdown bars
@@ -34,7 +34,7 @@ async function loadStats() {
       const cnt = stats.byStatus[s] || 0;
       const pct = Math.round(cnt / total * 100);
       return `
-        <div class="bar-item">
+        <a class="bar-item" href="/inventory.html?status=${s}" title="View ${s} assets">
           <div class="bar-label">
             <span>${statusBadge(s)}</span>
             <span><strong>${cnt}</strong> <span class="text-muted">(${pct}%)</span></span>
@@ -42,7 +42,7 @@ async function loadStats() {
           <div class="bar-track">
             <div class="bar-fill" style="width:${pct}%;background:${statusColors[s]}"></div>
           </div>
-        </div>
+        </a>
       `;
     }).join('');
 

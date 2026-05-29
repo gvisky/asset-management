@@ -165,7 +165,20 @@ function onDelete(id, label) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+// Apply filters passed via the URL (e.g. from the dashboard cards):
+//   ?status=Broken   ?location=Factory   ?search=Lenovo T490
+function applyUrlFilters() {
+  const p = new URLSearchParams(window.location.search);
+  const status = p.get('status') || '';
+  const location = p.get('location') || '';
+  const search = p.get('search') || '';
+  if (status)   document.getElementById('filter-status').value = status;
+  if (location) document.getElementById('filter-location').value = location;
+  if (search)   document.getElementById('search-input').value = search;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  applyUrlFilters();
   loadAssets();
 
   // Search & filter with debounce
