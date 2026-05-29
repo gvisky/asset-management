@@ -52,6 +52,37 @@ async function loadStats() {
   }
 }
 
+// Load the User Inventory (personnel) summary cards for the dashboard.
+async function loadPersonnelSummary() {
+  try {
+    const s = await apiGet('/api/personnel/summary');
+    const grid = document.getElementById('personnel-grid');
+    const cards = [
+      ['Total People',   s.total,                      '#e0e7ff', '#4338ca', 'all'],
+      ['Hayat: No',      s.noHayat || 0,               '#fee2e2', '#dc2626', 'No Hayat Member'],
+      ['Leaving set',    s.leaving || 0,               '#fef3c7', '#d97706', ''],
+      ['To Be Delete',   s.byStatus['to be delete'] || 0,   '#fef9c3', '#ca8a04', 'to be delete'],
+      ['Pending Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c', 'pending delete'],
+      ['Deleted',        s.byStatus['deleted'] || 0,        '#fee2e2', '#b91c1c', 'deleted'],
+    ];
+    grid.innerHTML = cards.map(([label, val, bg, fg, statusFilter]) => {
+      const href = statusFilter === 'No Hayat Member'
+        ? `/user-inventory.html?user_type=${encodeURIComponent(statusFilter)}`
+        : statusFilter ? `/user-inventory.html?status=${encodeURIComponent(statusFilter)}`
+        : `/user-inventory.html`;
+      return `<a class="stat-card" href="${href}">
+        <div class="stat-icon" style="background:${bg}">
+          <svg width="22" height="22" fill="none" stroke="${fg}" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        </div>
+        <div><div class="stat-label">${label}</div><div class="stat-value">${val}</div></div>
+      </a>`;
+    }).join('');
+    document.getElementById('personnel-section').style.display = '';
+  } catch (e) {
+    // user without personnel access — leave the section hidden
+  }
+}
+
 // Render one clickable card per country, appended to the stat grid.
 function renderCountryCards(byCountry) {
   const grid = document.getElementById('stat-grid');
@@ -135,7 +166,9 @@ let _saveMode = 'add';
 
 document.addEventListener('DOMContentLoaded', () => {
   loadStats();
-  loadAlerts();
+  loadAlerts();                         // missing-info table (asset data quality)
+  loadPersonnelSummary();               // User Inventory summary cards
+  loadAlertBox('alert-box', '');        // consolidated notifications (all scopes)
 
   const saveBtn = document.getElementById('modal-save');
   if (!saveBtn) return;

@@ -139,8 +139,20 @@ async function initSchema() {
       position      TEXT    DEFAULT '',
       leaving_date  TEXT    DEFAULT '',
       status_changed_at TEXT DEFAULT NULL,  -- when status last changed (for 1-month auto-transition)
+      touched       INTEGER NOT NULL DEFAULT 0,  -- 1 once HR/IT edits it (import won't overwrite)
       created_at    TEXT    DEFAULT (datetime('now')),
       updated_at    TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      audience   TEXT    NOT NULL DEFAULT 'all',   -- 'all' | 'IT' | 'HR'
+      country    TEXT    DEFAULT NULL,             -- NULL = all countries
+      scope      TEXT    NOT NULL DEFAULT 'system',-- 'asset' | 'personnel' | 'system'
+      level      TEXT    NOT NULL DEFAULT 'info',  -- 'info' | 'warning'
+      message    TEXT    NOT NULL,
+      read       INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT    DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -176,6 +188,21 @@ async function migrate() {
   if (!ucols.includes('asset_access')) await backend.run('ALTER TABLE users ADD COLUMN asset_access INTEGER NOT NULL DEFAULT 1');
 
   await backend.script(`CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT);`);
+  await backend.script(`CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, audience TEXT NOT NULL DEFAULT 'all',
+      country TEXT DEFAULT NULL, scope TEXT NOT NULL DEFAULT 'system', level TEXT NOT NULL DEFAULT 'info',
+      message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));`);
+
+  const pcols = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
+  if (!pcols.includes('touched')) await backend.run('ALTER TABLE personnel ADD COLUMN touched INTEGER NOT NULL DEFAULT 0');
+}
+
+// Create a notification for a given audience/country/scope.
+async function notify({ audience = 'all', country = null, scope = 'system', level = 'info', message }) {
+  try {
+    await run('INSERT INTO notifications (audience, country, scope, level, message) VALUES (?, ?, ?, ?, ?)',
+              [audience, country, scope, level, message]);
+  } catch (e) { console.error('notify failed:', e.message); }
 }
 
 async function getMeta(key) {
@@ -312,4 +339,4 @@ async function audit(user, action, assetId, details) {
   }
 }
 
-module.exports = { init, get, all, run, script, audit, getMeta, setMeta, USE_TURSO };
+module.exports = { init, get, all, run, script, audit, notify, getMeta, setMeta, USE_TURSO };

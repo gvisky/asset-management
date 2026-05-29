@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run, audit } = require('../db/database');
+const { get, all, run, audit, notify } = require('../db/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
@@ -239,8 +239,10 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   await run("UPDATE assets SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?",
             [req.user.username, req.params.id]);
 
-  await audit(req.user, 'DELETE', Number(req.params.id),
-              `Deleted asset "${existing.asset_code || existing.brand_model || 'untitled'}"`);
+  const label = existing.asset_code || existing.brand_model || 'untitled';
+  await audit(req.user, 'DELETE', Number(req.params.id), `Deleted asset "${label}"`);
+  await notify({ audience: 'all', country: existing.country, scope: 'asset', level: 'warning',
+    message: `${req.user.full_name} moved asset "${label}" [${existing.country}] to the recycle bin.` });
   res.json({ message: 'Moved to recycle bin' });
 }));
 
@@ -255,8 +257,10 @@ router.post('/:id/restore', requireRole('admin'), wrap(async (req, res) => {
 
   await run('UPDATE assets SET deleted_at = NULL, deleted_by = NULL WHERE id = ?', [req.params.id]);
 
-  await audit(req.user, 'RESTORE', Number(req.params.id),
-              `Restored asset "${existing.asset_code || existing.brand_model || 'untitled'}" (deleted by ${existing.deleted_by})`);
+  const rlabel = existing.asset_code || existing.brand_model || 'untitled';
+  await audit(req.user, 'RESTORE', Number(req.params.id), `Restored asset "${rlabel}" (deleted by ${existing.deleted_by})`);
+  await notify({ audience: 'all', country: existing.country, scope: 'asset', level: 'info',
+    message: `${req.user.full_name} restored asset "${rlabel}" [${existing.country}] from the recycle bin.` });
   res.json({ message: 'Asset restored' });
 }));
 

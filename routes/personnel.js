@@ -1,7 +1,7 @@
 const express = require('express');
 const XLSX = require('xlsx');
 const router = express.Router();
-const { get, all, run, audit, getMeta, setMeta } = require('../db/database');
+const { get, all, run, audit, notify, getMeta, setMeta } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
@@ -79,6 +79,26 @@ router.get('/filters', wrap(async (req, res) => {
   res.json({ countries });
 }));
 
+// ── GET /api/personnel/summary — dashboard metrics (country-scoped) ───────────
+router.get('/summary', wrap(async (req, res) => {
+  await applyAutoTransition();
+  const scope = scopeOf(req);
+  const cond = scope ? 'WHERE country = ?' : '';
+  const params = scope ? [scope] : [];
+
+  const total = Number((await get(`SELECT COUNT(*) AS c FROM personnel ${cond}`, params)).c);
+  const byStatus = (await all(`SELECT status, COUNT(*) AS c FROM personnel ${cond} GROUP BY status`, params))
+    .reduce((a, r) => { a[r.status] = Number(r.c); return a; }, {});
+  const byCountry = (await all(`SELECT country, COUNT(*) AS c FROM personnel ${cond} GROUP BY country`, params))
+    .reduce((a, r) => { a[r.country] = Number(r.c); return a; }, {});
+  const noHayat = Number((await get(
+    `SELECT COUNT(*) AS c FROM personnel ${cond ? cond + ' AND' : 'WHERE'} user_type = 'No Hayat Member'`, params)).c);
+  const leaving = Number((await get(
+    `SELECT COUNT(*) AS c FROM personnel ${cond ? cond + ' AND' : 'WHERE'} leaving_date <> ''`, params)).c);
+
+  res.json({ total, byStatus, byCountry, noHayat, leaving });
+}));
+
 // ── GET /api/personnel/meta — last import + monthly reminder (for IT) ──────────
 router.get('/meta', wrap(async (req, res) => {
   const last = await getMeta('personnel_last_import');
@@ -108,10 +128,10 @@ router.post('/import', wrap(async (req, res) => {
     return res.status(400).json({ error: 'Could not parse the CSV file' });
   }
 
-  const existing = await all('SELECT id, email FROM personnel');
-  const byEmail = new Map(existing.map(r => [String(r.email).toLowerCase(), r.id]));
+  const existing = await all('SELECT id, email, touched FROM personnel');
+  const byEmail = new Map(existing.map(r => [String(r.email).toLowerCase(), r]));
 
-  let added = 0, updated = 0, skipped = 0;
+  let added = 0, updated = 0, skipped = 0, preserved = 0;
   const byCountry = { Vietnam: 0, Thailand: 0, Malaysia: 0 };
 
   for (const r of rows) {
@@ -122,13 +142,16 @@ router.post('/import', wrap(async (req, res) => {
     if (!country || !email) { skipped++; continue; }
     byCountry[country]++;
 
-    const id = byEmail.get(email.toLowerCase());
-    if (id) {
-      // Update roster fields only; keep HR/IT workflow fields intact.
+    const found = byEmail.get(email.toLowerCase());
+    if (found) {
+      // Never overwrite records an HR/IT member has already edited.
+      if (found.touched) { preserved++; continue; }
+      // Untouched existing: refresh roster fields only (workflow fields kept).
       await run("UPDATE personnel SET display_name = ?, company_name = ?, country = ?, updated_at = datetime('now') WHERE id = ?",
-                [display, company, country, id]);
+                [display, company, country, found.id]);
       updated++;
     } else {
+      // New person → insert (no duplicates, matched by email above).
       await run(`INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date)
                  VALUES (?, ?, ?, '', 'Active', ?, '', '')`,
                 [country, display, email, company]);
@@ -139,9 +162,11 @@ router.post('/import', wrap(async (req, res) => {
   const nowStr = (await get("SELECT datetime('now') AS n")).n;
   await setMeta('personnel_last_import', nowStr);
   await audit(req.user, 'IMPORT', null,
-    `Imported personnel: +${added} new, ${updated} updated (VN ${byCountry.Vietnam}, TH ${byCountry.Thailand}, MY ${byCountry.Malaysia}); ${skipped} skipped`);
+    `Imported personnel: +${added} new, ${updated} updated, ${preserved} preserved (edited), ${skipped} skipped`);
+  await notify({ audience: 'all', scope: 'personnel', message:
+    `${req.user.full_name} imported the Azure user export: +${added} new, ${updated} refreshed, ${preserved} kept (already edited).` });
 
-  res.json({ added, updated, skipped, byCountry, last_import: nowStr });
+  res.json({ added, updated, skipped, preserved, byCountry, last_import: nowStr });
 }));
 
 // ── PUT /api/personnel/:id — field-level edit by team ─────────────────────────
@@ -182,11 +207,25 @@ router.put('/:id', wrap(async (req, res) => {
 
   if (!sets.length) return res.status(403).json({ error: 'Nothing you are allowed to change' });
 
+  sets.push('touched = 1');                 // mark edited → import won't overwrite it
   sets.push("updated_at = datetime('now')");
   await run(`UPDATE personnel SET ${sets.join(', ')} WHERE id = ?`, [...params, req.params.id]);
 
   const updated = await get('SELECT * FROM personnel WHERE id = ?', [req.params.id]);
   await audit(req.user, 'PERSONNEL', updated.id, `Updated personnel "${updated.display_name}" (${updated.country})`);
+
+  // Raise an alert about the change for the other team.
+  if (isHR(req) && ('user_type' in req.body || 'leaving_date' in req.body)) {
+    const bits = [];
+    if (updated.user_type) bits.push(`User Type "${updated.user_type}"`);
+    if (updated.leaving_date) bits.push(`leaving ${updated.leaving_date}`);
+    await notify({ audience: 'IT', country: updated.country, scope: 'personnel', level: 'warning',
+      message: `HR (${req.user.full_name}) updated ${updated.display_name} [${updated.country}]: ${bits.join(', ') || 'cleared'}.` });
+  }
+  if (isIT(req) && 'status' in req.body) {
+    await notify({ audience: 'HR', country: updated.country, scope: 'personnel', level: 'info',
+      message: `IT (${req.user.full_name}) set ${updated.display_name} [${updated.country}] status → "${updated.status}".` });
+  }
   res.json(updated);
 }));
 

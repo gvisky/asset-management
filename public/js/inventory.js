@@ -237,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const editId = new URLSearchParams(window.location.search).get('edit');
     if (editId) onEdit(editId);
   });
+  if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'asset');
 
   // Search & filter with debounce
   let debounce;

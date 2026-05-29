@@ -178,6 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadCountries().then(() => loadPeople());
   loadMeta();
+  if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'personnel');
 
   // Upload buttons (top bar + reminder banner)
   document.getElementById('btn-upload').addEventListener('click', handleUpload);
