@@ -181,6 +181,10 @@ document.addEventListener('DOMContentLoaded', () => {
   applyUrlFilters();
   loadAssets();
 
+  // If arriving from a dashboard "Fill in" link (?edit=<id>), open that asset's editor.
+  const editId = new URLSearchParams(window.location.search).get('edit');
+  if (editId) onEdit(editId);
+
   // Search & filter with debounce
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => {

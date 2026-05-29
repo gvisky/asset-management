@@ -26,26 +26,6 @@ async function loadStats() {
       </a>
     `).join('') || '<div class="text-muted text-sm">No data</div>';
 
-    // Status breakdown bars
-    const statusColors = { Active: '#22c55e', Broken: '#ef4444', Retired: '#f59e0b' };
-    const statusEl = document.getElementById('status-chart');
-    const total = stats.total || 1;
-    statusEl.innerHTML = ['Active','Broken','Retired'].map(s => {
-      const cnt = stats.byStatus[s] || 0;
-      const pct = Math.round(cnt / total * 100);
-      return `
-        <a class="bar-item" href="/inventory.html?status=${s}" title="View ${s} assets">
-          <div class="bar-label">
-            <span>${statusBadge(s)}</span>
-            <span><strong>${cnt}</strong> <span class="text-muted">(${pct}%)</span></span>
-          </div>
-          <div class="bar-track">
-            <div class="bar-fill" style="width:${pct}%;background:${statusColors[s]}"></div>
-          </div>
-        </a>
-      `;
-    }).join('');
-
     // Recent assets table
     const tbody = document.getElementById('recent-tbody');
     if (!stats.recentlyAdded.length) {
@@ -69,11 +49,60 @@ async function loadStats() {
   }
 }
 
+// ── Missing-info alerts table ─────────────────────────────────────────────────
+async function loadAlerts() {
+  const tbody = document.getElementById('alert-tbody');
+  try {
+    const rows = await apiGet('/api/assets/incomplete');
+
+    const badge = document.getElementById('alert-count');
+    if (rows.length) {
+      badge.textContent = `${rows.length} to fix`;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state">
+        <svg width="36" height="36" fill="none" stroke="#22c55e" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <p>All assets have their key info. 🎉</p>
+      </div></td></tr>`;
+      return;
+    }
+
+    const miss = (v) => (v === null || v === undefined || String(v).trim() === '');
+
+    tbody.innerHTML = rows.map(a => {
+      const tags = [];
+      if (miss(a.serial_no))   tags.push('Serial');
+      if (miss(a.asset_code))  tags.push('Code');
+      if (miss(a.computer_no)) tags.push('PC No');
+      const tagHtml = tags.map(t =>
+        `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
+      const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
+      return `
+        <tr>
+          <td style="min-width:120px">
+            <div class="truncate" title="${(label).replace(/"/g,'&quot;')}" style="max-width:140px">${label}</div>
+            <span class="text-muted text-sm">#${a.id} · ${a.location}</span>
+          </td>
+          <td>${tagHtml}</td>
+          <td><a class="btn btn-primary btn-sm" href="/inventory.html?edit=${a.id}" title="Fill in missing info">Fill</a></td>
+        </tr>`;
+    }).join('');
+  } catch (err) {
+    console.error(err);
+    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Failed to load alerts</td></tr>`;
+  }
+}
+
 // ── Save handler (modal save on dashboard page) ───────────────────────────────
 let _saveMode = 'add';
 
 document.addEventListener('DOMContentLoaded', () => {
   loadStats();
+  loadAlerts();
 
   const saveBtn = document.getElementById('modal-save');
   if (!saveBtn) return;

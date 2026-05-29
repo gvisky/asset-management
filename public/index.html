@@ -66,13 +66,25 @@
         </div>
       </div>
 
-      <!-- Status donut (CSS) -->
+      <!-- Missing info alerts -->
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Status Breakdown</span>
+          <span class="card-title">⚠️ Needs Attention — Missing Info</span>
+          <span class="badge badge-broken" id="alert-count" style="display:none"></span>
         </div>
-        <div class="card-body">
-          <div id="status-chart" style="display:flex;flex-direction:column;gap:12px"></div>
+        <div class="table-wrap" style="max-height:340px;overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Asset</th>
+                <th>Missing</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="alert-tbody">
+              <tr><td colspan="3" class="empty-state">Loading…</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

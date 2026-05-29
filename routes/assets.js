@@ -59,7 +59,30 @@ router.get('/stats', wrap(async (req, res) => {
   const recentlyAdded = await all(`SELECT * FROM assets ${live} ORDER BY id DESC LIMIT 5`);
   const deletedCount = Number((await get('SELECT COUNT(*) as cnt FROM assets WHERE deleted_at IS NOT NULL')).cnt);
 
-  res.json({ total, byStatus, byLocation, byBrand, recentlyAdded, deletedCount });
+  // Assets missing any of the key identifiers (serial / asset code / computer no).
+  const incompleteCount = Number((await get(`
+    SELECT COUNT(*) as cnt FROM assets
+    WHERE deleted_at IS NULL AND (
+      serial_no   IS NULL OR serial_no   = '' OR
+      asset_code  IS NULL OR asset_code  = '' OR
+      computer_no IS NULL OR computer_no = ''
+    )`)).cnt);
+
+  res.json({ total, byStatus, byLocation, byBrand, recentlyAdded, deletedCount, incompleteCount });
+}));
+
+// ── GET /api/assets/incomplete — assets missing key identifiers ───────────────
+// Flags missing Serial #, Asset Code, or Computer No (the most important fields).
+router.get('/incomplete', wrap(async (req, res) => {
+  const rows = await all(`
+    SELECT * FROM assets
+    WHERE deleted_at IS NULL AND (
+      serial_no   IS NULL OR serial_no   = '' OR
+      asset_code  IS NULL OR asset_code  = '' OR
+      computer_no IS NULL OR computer_no = ''
+    )
+    ORDER BY location, id`);
+  res.json(rows);
 }));
 
 // ── GET /api/assets/deleted — recycle bin (admin only) ────────────────────────
