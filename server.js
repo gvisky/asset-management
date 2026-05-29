@@ -11,9 +11,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // API routes
-app.use('/api/auth',   require('./routes/auth'));
-app.use('/api/assets', require('./routes/assets'));
-app.use('/api/users',  require('./routes/users'));
+app.use('/api/auth',      require('./routes/auth'));
+app.use('/api/assets',    require('./routes/assets'));
+app.use('/api/users',     require('./routes/users'));
+app.use('/api/personnel', require('./routes/personnel'));
 
 // Public files that must load before login (login page + shared CSS/JS)
 const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico'];

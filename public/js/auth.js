@@ -51,6 +51,22 @@ function renderUserChrome() {
     document.getElementById('changepw-btn').addEventListener('click', changePassword);
   }
 
+  // User Inventory link — for HR and IT members (appears on every page).
+  if (u.team === 'HR' || u.team === 'IT') {
+    const nav = document.querySelector('.sidebar nav');
+    if (nav && !document.getElementById('nav-userinv')) {
+      const link = document.createElement('a');
+      link.href = '/user-inventory.html';
+      link.id = 'nav-userinv';
+      link.className = 'nav-link';
+      link.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg> User Inventory`;
+      const invLink = nav.querySelector('a[href="/inventory.html"]');
+      if (invLink && invLink.nextSibling) nav.insertBefore(link, invLink.nextSibling);
+      else nav.appendChild(link);
+      if (window.location.pathname.includes('user-inventory')) link.classList.add('active');
+    }
+  }
+
   // Admin-only nav links (Recycle Bin + Users & Audit) — inject into sidebar
   if (isAdmin()) {
     const nav = document.querySelector('.sidebar nav');

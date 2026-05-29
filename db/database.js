@@ -76,7 +76,9 @@ async function setup() {
   await migrate();
   await seedUsers();
   await ensureRegionalUsers();
+  await ensureTeams();
   await seedAssets();
+  await seedPersonnel();
 }
 
 async function initSchema() {
@@ -116,7 +118,23 @@ async function initSchema() {
       role          TEXT    NOT NULL DEFAULT 'viewer'
                             CHECK(role IN ('admin','editor','viewer')),
       country       TEXT    DEFAULT NULL,   -- NULL = sees all countries; else limited to that country
+      team          TEXT    DEFAULT NULL,   -- 'IT' or 'HR' (for the User Inventory page)
       created_at    TEXT    DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS personnel (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      country       TEXT    NOT NULL DEFAULT 'Vietnam',
+      display_name  TEXT    DEFAULT '',
+      email         TEXT    DEFAULT '',
+      user_type     TEXT    DEFAULT '',     -- HR sets: 'Hayat Member' / 'No Hayat Member'
+      status        TEXT    NOT NULL DEFAULT 'Active',  -- IT sets: to be delete / pending delete / deleted
+      company_name  TEXT    DEFAULT '',
+      position      TEXT    DEFAULT '',
+      leaving_date  TEXT    DEFAULT '',
+      status_changed_at TEXT DEFAULT NULL,  -- when status last changed (for 1-month auto-transition)
+      created_at    TEXT    DEFAULT (datetime('now')),
+      updated_at    TEXT    DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS sessions (
@@ -148,6 +166,45 @@ async function migrate() {
 
   const ucols = (await backend.all('PRAGMA table_info(users)')).map(c => c.name);
   if (!ucols.includes('country'))   await backend.run('ALTER TABLE users ADD COLUMN country TEXT DEFAULT NULL');
+  if (!ucols.includes('team'))      await backend.run('ALTER TABLE users ADD COLUMN team TEXT DEFAULT NULL');
+}
+
+// Assign IT/HR teams and ensure the new HR user (Ha Tran) exists. Idempotent.
+async function ensureTeams() {
+  const IT = ['viet', 'hiep', 'quocviet'];
+  const HR = ['somrutai', 'izzati'];
+  for (const u of IT) await backend.run("UPDATE users SET team = 'IT' WHERE username = ? AND (team IS NULL OR team = '')", [u]);
+  for (const u of HR) await backend.run("UPDATE users SET team = 'HR' WHERE username = ? AND (team IS NULL OR team = '')", [u]);
+
+  // Ha Tran — new HR member for Vietnam.
+  const exists = await backend.get('SELECT id FROM users WHERE username = ?', ['hatran']);
+  if (!exists) {
+    await backend.run(
+      'INSERT INTO users (username, full_name, password_hash, role, country, team) VALUES (?, ?, ?, ?, ?, ?)',
+      ['hatran', 'Ha Tran', hashPassword('hatran123'), 'editor', 'Vietnam', 'HR']
+    );
+    console.log('[seed] Created HR member hatran -> Vietnam');
+  }
+}
+
+// On first boot with empty personnel, load db/personnel-seed.json if present.
+async function seedPersonnel() {
+  const { c } = await backend.get('SELECT COUNT(*) AS c FROM personnel');
+  if (Number(c) > 0) return;
+  const seedPath = path.join(__dirname, 'personnel-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let rows;
+  try { rows = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[seed] personnel-seed.json parse failed:', e.message); return; }
+  for (const r of rows) {
+    await backend.run(
+      `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [r.country || 'Vietnam', r.display_name || '', r.email || '', r.user_type || '',
+       r.status || 'Active', r.company_name || '', r.position || '', r.leaving_date || '']
+    );
+  }
+  console.log(`[seed] Loaded ${rows.length} personnel records`);
 }
 
 // Idempotently ensure the regional managers exist (runs on every start).
