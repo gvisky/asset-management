@@ -197,8 +197,9 @@ router.put('/:id', wrap(async (req, res) => {
     }
   }
 
-  // IT: Status (with timestamp for the auto-transition)
+  // IT: Status — only allowed once HR has set the User Type.
   if (isIT(req) && 'status' in req.body) {
+    if (!row.user_type) return res.status(400).json({ error: 'HR must set the User Type before Status can be changed' });
     const st = req.body.status;
     if (!STATUSES.includes(st)) return res.status(400).json({ error: 'Invalid status' });
     sets.push('status = ?'); params.push(st);

@@ -77,10 +77,10 @@ function renderTable(rows) {
     return;
   }
   tbody.innerHTML = rows.map(p => {
-    const utDisabled = canEditUserType ? '' : 'disabled';
-    const stDisabled = canEditStatus ? '' : 'disabled';
     // Leaving date editable by HR only once a User Type is set.
     const ldDisabled = (canEditUserType && p.user_type) ? '' : 'disabled';
+    // Status editable by IT only after HR has set the User Type.
+    const stLocked = canEditStatus && !p.user_type;
     return `
       <tr>
         <td><strong>${esc(p.display_name) || '—'}</strong></td>
@@ -93,7 +93,7 @@ function renderTable(rows) {
         </td>
         <td>
           ${canEditStatus
-            ? `<select class="form-control" style="min-width:140px;padding:5px 8px" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status)}</select>`
+            ? `<select class="form-control" style="min-width:140px;padding:5px 8px" ${stLocked ? 'disabled' : ''} title="${stLocked ? 'HR must set the User Type first' : ''}" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status)}</select>${stLocked ? '<div class="text-muted text-sm" style="margin-top:2px">awaiting HR</div>' : ''}`
             : statusPill(p.status)}
         </td>
         <td class="text-muted text-sm">${esc(p.company_name) || '—'}</td>
