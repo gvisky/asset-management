@@ -11,6 +11,9 @@ async function loadStats() {
     document.getElementById('s-factory').textContent = stats.byLocation.Factory || 0;
     document.getElementById('s-office').textContent  = stats.byLocation.Office  || 0;
 
+    // By-country cards (Vietnam / Thailand / Malaysia) — appended to the stat grid.
+    renderCountryCards(stats.byCountry || {});
+
     // Brand bars
     const brandEl = document.getElementById('brand-bars');
     const maxCount = stats.byBrand[0]?.cnt || 1;
@@ -47,6 +50,36 @@ async function loadStats() {
     console.error(err);
     showToast('Failed to load dashboard stats', 'error');
   }
+}
+
+// Render one clickable card per country, appended to the stat grid.
+function renderCountryCards(byCountry) {
+  const grid = document.getElementById('stat-grid');
+  if (!grid) return;
+  // Remove any previously-rendered country cards (avoid duplicates on reload).
+  grid.querySelectorAll('.country-card').forEach(el => el.remove());
+
+  const colors = {
+    Vietnam:  ['#fef2f2', '#dc2626'],
+    Thailand: ['#eff6ff', '#2563eb'],
+    Malaysia: ['#fefce8', '#ca8a04'],
+  };
+  // Always show the three countries (0 if none), unless the user is scoped to one.
+  const scoped = window.CURRENT_USER && window.CURRENT_USER.country;
+  const list = scoped ? [scoped] : ['Vietnam', 'Thailand', 'Malaysia'];
+
+  list.forEach(country => {
+    const [bg, fg] = colors[country] || ['#f3f4f6', '#374151'];
+    const a = document.createElement('a');
+    a.className = 'stat-card country-card';
+    a.href = `/inventory.html?country=${encodeURIComponent(country)}`;
+    a.innerHTML = `
+      <div class="stat-icon" style="background:${bg}">
+        <svg width="22" height="22" fill="none" stroke="${fg}" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </div>
+      <div><div class="stat-label">${country}</div><div class="stat-value">${byCountry[country] || 0}</div></div>`;
+    grid.appendChild(a);
+  });
 }
 
 // ── Missing-info alerts table ─────────────────────────────────────────────────

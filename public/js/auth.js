@@ -97,6 +97,13 @@ async function changePassword() {
 
 // Hide create/edit/delete affordances for viewers.
 function applyRoleGates() {
+  // Regional managers: lock the Country field in the asset form to their country.
+  const myCountry = window.CURRENT_USER && window.CURRENT_USER.country;
+  if (myCountry) {
+    const fc = document.getElementById('f-country');
+    if (fc) { fc.value = myCountry; fc.disabled = true; }
+  }
+
   if (canEdit()) return;
   // Viewers: hide all "add asset" buttons
   document.querySelectorAll('#btn-add-top, #nav-add').forEach(el => el.style.display = 'none');

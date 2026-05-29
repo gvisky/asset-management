@@ -10,13 +10,25 @@ let incompleteMode = false;   // "Needs Attention" filter toggle
 // Populate the Brand Model and Department dropdowns with distinct values.
 async function loadFilters() {
   try {
-    const { brands, departments } = await apiGet('/api/assets/filters');
-    const brandSel = document.getElementById('filter-brand');
-    const deptSel  = document.getElementById('filter-department');
+    const { brands, departments, countries } = await apiGet('/api/assets/filters');
+    const brandSel   = document.getElementById('filter-brand');
+    const deptSel     = document.getElementById('filter-department');
+    const countrySel = document.getElementById('filter-country');
     brandSel.innerHTML = '<option value="">All Models</option>' +
       brands.map(b => `<option value="${b.replace(/"/g,'&quot;')}">${b}</option>`).join('');
     deptSel.innerHTML = '<option value="">All Departments</option>' +
-      departments.map(d => `<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
+      (departments || []).map(d => `<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
+    countrySel.innerHTML = '<option value="">All Countries</option>' +
+      (countries || []).map(c => `<option value="${c}">${c}</option>`).join('');
+
+    // Regional managers (scoped to one country) don't need the country filter
+    // and their add/edit form is locked to their country.
+    const myCountry = window.CURRENT_USER && window.CURRENT_USER.country;
+    if (myCountry) {
+      countrySel.style.display = 'none';
+      const fc = document.getElementById('f-country');
+      if (fc) { fc.value = myCountry; fc.disabled = true; }
+    }
   } catch (err) {
     console.error('Failed to load filter options', err);
   }
@@ -26,6 +38,7 @@ async function loadFilters() {
 async function loadAssets(page = 1) {
   currentPage = page;
   const search     = document.getElementById('search-input').value.trim();
+  const country    = document.getElementById('filter-country').value;
   const location   = document.getElementById('filter-location').value;
   const status     = document.getElementById('filter-status').value;
   const brand      = document.getElementById('filter-brand').value;
@@ -33,6 +46,7 @@ async function loadAssets(page = 1) {
 
   const params = new URLSearchParams({ page, limit: PAGE_SIZE });
   if (search)        params.set('search',     search);
+  if (country)       params.set('country',    country);
   if (location)      params.set('location',   location);
   if (status)        params.set('status',     status);
   if (brand)         params.set('brand',      brand);
@@ -54,7 +68,7 @@ async function loadAssets(page = 1) {
 function renderTable(rows) {
   const tbody = document.getElementById('assets-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state">
       <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
       <p>No assets found.</p>
     </div></td></tr>`;
@@ -67,6 +81,7 @@ function renderTable(rows) {
       <td><code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code></td>
       <td>${a.brand_model || '—'}</td>
       <td class="text-muted text-sm">${a.computer_no || '—'}</td>
+      <td><span class="badge badge-factory">${a.country || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
       <td class="truncate" title="${esc(a.department) }">${a.department || '—'}</td>
       <td>${a.user_name || '—'}</td>
@@ -137,6 +152,7 @@ async function onView(id) {
     const fields = [
       ['Asset Code',    a.asset_code],
       ['Brand / Model', a.brand_model],
+      ['Country',       a.country],
       ['Location',      locationBadge(a.location)],
       ['Status',        statusBadge(a.status)],
       ['Department',    a.department],
@@ -195,11 +211,13 @@ function applyUrlFilters() {
   const search = p.get('search') || '';
   const brand = p.get('brand') || '';
   const department = p.get('department') || '';
+  const country = p.get('country') || '';
   if (status)     document.getElementById('filter-status').value = status;
   if (location)   document.getElementById('filter-location').value = location;
   if (search)     document.getElementById('search-input').value = search;
   if (brand)      document.getElementById('filter-brand').value = brand;
   if (department) document.getElementById('filter-department').value = department;
+  if (country)    document.getElementById('filter-country').value = country;
   if (p.get('incomplete')) { incompleteMode = true; setIncompleteButton(true); }
 }
 
@@ -226,6 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => loadAssets(1), 320);
   });
+  document.getElementById('filter-country').addEventListener('change',    () => loadAssets(1));
   document.getElementById('filter-location').addEventListener('change',   () => loadAssets(1));
   document.getElementById('filter-status').addEventListener('change',     () => loadAssets(1));
   document.getElementById('filter-brand').addEventListener('change',      () => loadAssets(1));
@@ -241,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Reset
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
+    document.getElementById('filter-country').value = '';
     document.getElementById('filter-location').value = '';
     document.getElementById('filter-status').value = '';
     document.getElementById('filter-brand').value = '';

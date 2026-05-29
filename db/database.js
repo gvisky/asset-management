@@ -75,6 +75,7 @@ async function setup() {
   await initSchema();
   await migrate();
   await seedUsers();
+  await ensureRegionalUsers();
   await seedAssets();
 }
 
@@ -83,6 +84,7 @@ async function initSchema() {
     CREATE TABLE IF NOT EXISTS assets (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
       location        TEXT    NOT NULL DEFAULT '',
+      country         TEXT    NOT NULL DEFAULT 'Vietnam',
       department      TEXT    DEFAULT '',
       computer_no     TEXT    DEFAULT '',
       brand_model     TEXT    DEFAULT '',
@@ -113,6 +115,7 @@ async function initSchema() {
       password_hash TEXT    NOT NULL,
       role          TEXT    NOT NULL DEFAULT 'viewer'
                             CHECK(role IN ('admin','editor','viewer')),
+      country       TEXT    DEFAULT NULL,   -- NULL = sees all countries; else limited to that country
       created_at    TEXT    DEFAULT (datetime('now'))
     );
 
@@ -135,11 +138,35 @@ async function initSchema() {
   `);
 }
 
-// Add soft-delete columns to existing databases without losing data.
+// Add new columns to existing databases without losing data.
 async function migrate() {
   const cols = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!cols.includes('deleted_at')) await backend.run('ALTER TABLE assets ADD COLUMN deleted_at TEXT DEFAULT NULL');
   if (!cols.includes('deleted_by')) await backend.run('ALTER TABLE assets ADD COLUMN deleted_by TEXT DEFAULT NULL');
+  // Country dimension — existing rows become 'Vietnam'.
+  if (!cols.includes('country'))    await backend.run("ALTER TABLE assets ADD COLUMN country TEXT NOT NULL DEFAULT 'Vietnam'");
+
+  const ucols = (await backend.all('PRAGMA table_info(users)')).map(c => c.name);
+  if (!ucols.includes('country'))   await backend.run('ALTER TABLE users ADD COLUMN country TEXT DEFAULT NULL');
+}
+
+// Idempotently ensure the regional managers exist (runs on every start).
+// Somrutai → Thailand, Izzati → Malaysia. Both are editors limited to their country.
+async function ensureRegionalUsers() {
+  const managers = [
+    { username: 'somrutai', full_name: 'Somrutai', role: 'editor', country: 'Thailand', password: 'somrutai123' },
+    { username: 'izzati',   full_name: 'Izzati',   role: 'editor', country: 'Malaysia', password: 'izzati123' },
+  ];
+  for (const m of managers) {
+    const exists = await backend.get('SELECT id FROM users WHERE username = ?', [m.username]);
+    if (!exists) {
+      await backend.run(
+        'INSERT INTO users (username, full_name, password_hash, role, country) VALUES (?, ?, ?, ?, ?)',
+        [m.username, m.full_name, hashPassword(m.password), m.role, m.country]
+      );
+      console.log(`[seed] Created regional manager ${m.username} -> ${m.country}`);
+    }
+  }
 }
 
 // Seed the team's accounts on first run (only if no users exist).

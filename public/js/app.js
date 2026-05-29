@@ -29,7 +29,7 @@ function locationBadge(loc) {
 
 // ── Modal helpers (shared form fields) ────────────────────────────────────────
 const FIELDS = [
-  'location','status','department','computer_no','brand_model',
+  'location','country','status','department','computer_no','brand_model',
   'serial_no','asset_code','user_name','ad_name','mk','date_assigned',
   'history_usage','remark'
 ];

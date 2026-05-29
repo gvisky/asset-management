@@ -3,11 +3,25 @@ const router = express.Router();
 const { get, all, run, audit } = require('../db/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
+const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+
 // Every asset route requires a logged-in user.
 router.use(requireAuth);
 
 // Small wrapper so async handler errors become 500s instead of hanging.
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
+
+// The country a user is restricted to (null = sees all countries).
+const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
+
+// Build a country filter: scoped users are forced to their country; global users
+// may optionally filter via ?country=. Returns { clause, params }.
+function countryFilter(req) {
+  const scope = scopeOf(req);
+  if (scope) return { clause: 'country = ?', params: [scope] };
+  if (req.query.country) return { clause: 'country = ?', params: [req.query.country] };
+  return { clause: null, params: [] };
+}
 
 // ── GET /api/assets — list (excludes soft-deleted) with search & filter ───────
 router.get('/', wrap(async (req, res) => {
@@ -16,6 +30,9 @@ router.get('/', wrap(async (req, res) => {
 
   const conditions = ['deleted_at IS NULL'];
   const params = [];
+
+  const cf = countryFilter(req);
+  if (cf.clause) { conditions.push(cf.clause); params.push(...cf.params); }
 
   if (search) {
     conditions.push(`(
@@ -52,63 +69,82 @@ router.get('/', wrap(async (req, res) => {
 
 // ── GET /api/assets/stats — dashboard metrics (excludes soft-deleted) ─────────
 router.get('/stats', wrap(async (req, res) => {
-  const live = 'WHERE deleted_at IS NULL';
+  const cf = countryFilter(req);
+  const liveCond = ['deleted_at IS NULL'];
+  const lp = [];
+  if (cf.clause) { liveCond.push(cf.clause); lp.push(...cf.params); }
+  const live = 'WHERE ' + liveCond.join(' AND ');
 
-  const total = Number((await get(`SELECT COUNT(*) as cnt FROM assets ${live}`)).cnt);
+  const total = Number((await get(`SELECT COUNT(*) as cnt FROM assets ${live}`, lp)).cnt);
 
-  const byStatus = (await all(`SELECT status, COUNT(*) as cnt FROM assets ${live} GROUP BY status`))
+  const byStatus = (await all(`SELECT status, COUNT(*) as cnt FROM assets ${live} GROUP BY status`, lp))
     .reduce((acc, r) => { acc[r.status] = Number(r.cnt); return acc; }, {});
 
-  const byLocation = (await all(`SELECT location, COUNT(*) as cnt FROM assets ${live} GROUP BY location`))
+  const byLocation = (await all(`SELECT location, COUNT(*) as cnt FROM assets ${live} GROUP BY location`, lp))
     .reduce((acc, r) => { acc[r.location] = Number(r.cnt); return acc; }, {});
 
+  const byCountry = (await all(`SELECT country, COUNT(*) as cnt FROM assets ${live} GROUP BY country ORDER BY cnt DESC`, lp))
+    .reduce((acc, r) => { acc[r.country] = Number(r.cnt); return acc; }, {});
+
   const byBrand = await all(
-    `SELECT brand_model, COUNT(*) as cnt FROM assets ${live} GROUP BY brand_model ORDER BY cnt DESC LIMIT 8`
+    `SELECT brand_model, COUNT(*) as cnt FROM assets ${live} GROUP BY brand_model ORDER BY cnt DESC LIMIT 8`, lp
   );
 
-  const recentlyAdded = await all(`SELECT * FROM assets ${live} ORDER BY id DESC LIMIT 5`);
-  const deletedCount = Number((await get('SELECT COUNT(*) as cnt FROM assets WHERE deleted_at IS NOT NULL')).cnt);
+  const recentlyAdded = await all(`SELECT * FROM assets ${live} ORDER BY id DESC LIMIT 5`, lp);
 
-  // Assets missing any of the key identifiers (serial / asset code / computer no).
-  const incompleteCount = Number((await get(`
-    SELECT COUNT(*) as cnt FROM assets
-    WHERE deleted_at IS NULL AND (
+  // Deleted + incomplete counts respect the same country scope.
+  const delCond = ['deleted_at IS NOT NULL']; const dp = [];
+  if (cf.clause) { delCond.push(cf.clause); dp.push(...cf.params); }
+  const deletedCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${delCond.join(' AND ')}`, dp)).cnt);
+
+  const incCond = [...liveCond, `(
       serial_no   IS NULL OR serial_no   = '' OR
       asset_code  IS NULL OR asset_code  = '' OR
       computer_no IS NULL OR computer_no = ''
-    )`)).cnt);
+    )`];
+  const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, lp)).cnt);
 
-  res.json({ total, byStatus, byLocation, byBrand, recentlyAdded, deletedCount, incompleteCount });
+  res.json({ total, byStatus, byLocation, byCountry, byBrand, recentlyAdded, deletedCount, incompleteCount,
+             scope: scopeOf(req) });
 }));
 
 // ── GET /api/assets/filters — distinct values for the filter dropdowns ────────
 router.get('/filters', wrap(async (req, res) => {
+  const cf = countryFilter(req);
+  const extra = cf.clause ? ` AND ${cf.clause}` : '';
   const brands = (await all(
-    "SELECT DISTINCT brand_model AS v FROM assets WHERE deleted_at IS NULL AND brand_model <> '' ORDER BY brand_model COLLATE NOCASE"
+    `SELECT DISTINCT brand_model AS v FROM assets WHERE deleted_at IS NULL AND brand_model <> ''${extra} ORDER BY brand_model COLLATE NOCASE`,
+    cf.params
   )).map(r => r.v);
   const departments = (await all(
-    "SELECT DISTINCT department AS v FROM assets WHERE deleted_at IS NULL AND department <> '' ORDER BY department COLLATE NOCASE"
+    `SELECT DISTINCT department AS v FROM assets WHERE deleted_at IS NULL AND department <> ''${extra} ORDER BY department COLLATE NOCASE`,
+    cf.params
   )).map(r => r.v);
-  res.json({ brands, departments });
+  // Global users get the full country list; scoped users get only their own.
+  const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
+  res.json({ brands, departments, countries });
 }));
 
 // ── GET /api/assets/incomplete — assets missing key identifiers ───────────────
-// Flags missing Serial #, Asset Code, or Computer No (the most important fields).
 router.get('/incomplete', wrap(async (req, res) => {
-  const rows = await all(`
-    SELECT * FROM assets
-    WHERE deleted_at IS NULL AND (
+  const cf = countryFilter(req);
+  const cond = ['deleted_at IS NULL', `(
       serial_no   IS NULL OR serial_no   = '' OR
       asset_code  IS NULL OR asset_code  = '' OR
       computer_no IS NULL OR computer_no = ''
-    )
-    ORDER BY location, id`);
+    )`];
+  if (cf.clause) cond.push(cf.clause);
+  const rows = await all(
+    `SELECT * FROM assets WHERE ${cond.join(' AND ')} ORDER BY country, location, id`, cf.params);
   res.json(rows);
 }));
 
 // ── GET /api/assets/deleted — recycle bin (admin only) ────────────────────────
 router.get('/deleted', requireRole('admin'), wrap(async (req, res) => {
-  const rows = await all('SELECT * FROM assets WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC');
+  const cf = countryFilter(req);
+  const cond = ['deleted_at IS NOT NULL'];
+  if (cf.clause) cond.push(cf.clause);
+  const rows = await all(`SELECT * FROM assets WHERE ${cond.join(' AND ')} ORDER BY deleted_at DESC`, cf.params);
   res.json(rows);
 }));
 
@@ -116,49 +152,69 @@ router.get('/deleted', requireRole('admin'), wrap(async (req, res) => {
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Asset not found' });
+  const scope = scopeOf(req);
+  if (scope && row.country !== scope) return res.status(403).json({ error: 'Not in your region' });
   res.json(row);
 }));
+
+// Resolve the country to store for a create/update, honouring the user's scope.
+function resolveCountry(req, requested) {
+  const scope = scopeOf(req);
+  if (scope) return scope;                                   // scoped users can only use their own
+  if (requested && VALID_COUNTRIES.includes(requested)) return requested;
+  return 'Vietnam';                                          // sensible default for global users
+}
 
 // ── POST /api/assets — create (admin/editor only) ─────────────────────────────
 router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const {
-    location = '', department = '', computer_no = '', brand_model = '',
+    location = '', country = '', department = '', computer_no = '', brand_model = '',
     date_assigned = '', serial_no = '', mk = '', asset_code = '',
     user_name = '', ad_name = '', history_usage = '', remark = '',
     status = 'Active'
   } = req.body;
 
+  const finalCountry = resolveCountry(req, country);
+
   const result = await run(`
     INSERT INTO assets
-      (location, department, computer_no, brand_model, date_assigned,
+      (location, country, department, computer_no, brand_model, date_assigned,
        serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [location, department, computer_no, brand_model, date_assigned,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status]);
 
   const created = await get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
-  await audit(req.user, 'CREATE', created.id, `Created asset "${created.asset_code || created.brand_model || 'untitled'}"`);
+  await audit(req.user, 'CREATE', created.id, `Created asset "${created.asset_code || created.brand_model || 'untitled'}" (${finalCountry})`);
   res.status(201).json(created);
 }));
 
 // ── PUT /api/assets/:id — update (admin/editor only) ──────────────────────────
 router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'Asset not found' });
+
+  const scope = scopeOf(req);
+  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+
   const {
-    location, department, computer_no, brand_model, date_assigned,
+    location, country, department, computer_no, brand_model, date_assigned,
     serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status
   } = req.body;
 
-  const result = await run(`
+  // Scoped users can't move an asset out of their country.
+  const finalCountry = scope ? scope : resolveCountry(req, country !== undefined ? country : existing.country);
+
+  await run(`
     UPDATE assets SET
-      location = ?, department = ?, computer_no = ?, brand_model = ?,
+      location = ?, country = ?, department = ?, computer_no = ?, brand_model = ?,
       date_assigned = ?, serial_no = ?, mk = ?, asset_code = ?,
       user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?
     WHERE id = ? AND deleted_at IS NULL`,
-    [location, department, computer_no, brand_model, date_assigned,
+    [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
      req.params.id]);
 
-  if (result.changes === 0) return res.status(404).json({ error: 'Asset not found' });
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
   await audit(req.user, 'UPDATE', updated.id, `Updated asset "${updated.asset_code || updated.brand_model || 'untitled'}"`);
   res.json(updated);
@@ -168,6 +224,9 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Asset not found' });
+
+  const scope = scopeOf(req);
+  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
 
   await run("UPDATE assets SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?",
             [req.user.username, req.params.id]);
