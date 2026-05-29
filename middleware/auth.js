@@ -62,4 +62,20 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { getUserFromRequest, requireAuth, requireRole, parseCookies };
+// Require a GLOBAL admin (role 'admin' with no country restriction).
+// Regional admins (admin + a country) are NOT allowed past this.
+function requireGlobalAdmin(req, res, next) {
+  return (async () => {
+    try {
+      const user = await getUserFromRequest(req);
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      if (user.role !== 'admin' || user.country) {
+        return res.status(403).json({ error: 'Global administrator only' });
+      }
+      req.user = user;
+      next();
+    } catch (e) { next(e); }
+  })();
+}
+
+module.exports = { getUserFromRequest, requireAuth, requireRole, requireGlobalAdmin, parseCookies };

@@ -241,6 +241,10 @@ router.post('/:id/restore', requireRole('admin'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NOT NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Deleted asset not found' });
 
+  // Regional admins can only restore assets in their own country.
+  const scope = scopeOf(req);
+  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+
   await run('UPDATE assets SET deleted_at = NULL, deleted_by = NULL WHERE id = ?', [req.params.id]);
 
   await audit(req.user, 'RESTORE', Number(req.params.id),

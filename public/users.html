@@ -41,9 +41,9 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>Username</th><th>Full Name</th><th>Role</th><th>Created</th><th>Actions</th></tr>
+            <tr><th>#</th><th>Username</th><th>Full Name</th><th>Role</th><th>Region</th><th>Created</th><th>Actions</th></tr>
           </thead>
-          <tbody id="users-tbody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
+          <tbody id="users-tbody"><tr><td colspan="7" class="empty-state">Loading…</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -91,8 +91,18 @@
           <select class="form-control" id="u-role">
             <option value="viewer">Viewer — read only</option>
             <option value="editor">Editor — add / edit / delete assets</option>
-            <option value="admin">Admin — full access + manage users</option>
+            <option value="admin">Admin — full access (+ restore)</option>
           </select>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Region (country)</label>
+          <select class="form-control" id="u-country">
+            <option value="">All countries (global)</option>
+            <option value="Vietnam">Vietnam</option>
+            <option value="Thailand">Thailand</option>
+            <option value="Malaysia">Malaysia</option>
+          </select>
+          <span class="text-muted text-sm">Limits this user to one country. A global Admin manages users; an Admin + a region can restore that region only.</span>
         </div>
         <div class="form-group">
           <label class="form-label" id="u-pass-label">Password *</label>

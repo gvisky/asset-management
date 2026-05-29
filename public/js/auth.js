@@ -18,8 +18,13 @@ async function ensureAuth() {
   }
 }
 
-function isAdmin()  { return window.CURRENT_USER && window.CURRENT_USER.role === 'admin'; }
-function canEdit()  { return window.CURRENT_USER && ['admin','editor'].includes(window.CURRENT_USER.role); }
+function isAdmin()       { return window.CURRENT_USER && window.CURRENT_USER.role === 'admin'; }
+function isGlobalAdmin() { return isAdmin() && !window.CURRENT_USER.country; }   // admin with no country
+function canEdit()       { return window.CURRENT_USER && ['admin','editor'].includes(window.CURRENT_USER.role); }
+function roleLabel(u)    {
+  const r = (u.role || '').charAt(0).toUpperCase() + (u.role || '').slice(1);
+  return u.country ? `${u.country} ${r}` : r;
+}
 
 // Render the username + logout into the topbar, and the Users/Audit nav links.
 function renderUserChrome() {
@@ -35,7 +40,7 @@ function renderUserChrome() {
     wrap.innerHTML = `
       <div style="text-align:right;line-height:1.2">
         <div style="font-size:13px;font-weight:600">${u.full_name || u.username}</div>
-        <div style="font-size:11px;color:var(--muted);text-transform:capitalize">${u.role}</div>
+        <div style="font-size:11px;color:var(--muted)">${roleLabel(u)}</div>
       </div>
       <button class="btn btn-ghost btn-sm" id="changepw-btn" title="Change your password">Change password</button>
       <button class="btn btn-ghost btn-sm" id="logout-btn" title="Sign out">Logout</button>
@@ -56,6 +61,7 @@ function renderUserChrome() {
       label.textContent = 'Administration';
       nav.appendChild(label);
 
+      // Recycle Bin — available to all admins (regional admins see only their region).
       const binLink = document.createElement('a');
       binLink.href = '/deleted.html';
       binLink.id = 'nav-bin';
@@ -64,13 +70,16 @@ function renderUserChrome() {
       nav.appendChild(binLink);
       if (window.location.pathname.includes('deleted.html')) binLink.classList.add('active');
 
-      const usersLink = document.createElement('a');
-      usersLink.href = '/users.html';
-      usersLink.id = 'nav-users';
-      usersLink.className = 'nav-link';
-      usersLink.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg> Users & Audit`;
-      nav.appendChild(usersLink);
-      if (window.location.pathname.includes('users.html')) usersLink.classList.add('active');
+      // Users & Audit — GLOBAL admins only.
+      if (isGlobalAdmin()) {
+        const usersLink = document.createElement('a');
+        usersLink.href = '/users.html';
+        usersLink.id = 'nav-users';
+        usersLink.className = 'nav-link';
+        usersLink.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg> Users & Audit`;
+        nav.appendChild(usersLink);
+        if (window.location.pathname.includes('users.html')) usersLink.classList.add('active');
+      }
     }
   }
 }

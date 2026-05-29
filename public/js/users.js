@@ -23,6 +23,7 @@ async function loadUsers() {
         <td><strong>${u.username}</strong>${u.id === (me && me.id) ? ' <span class="text-muted text-sm">(you)</span>' : ''}</td>
         <td>${u.full_name || '—'}</td>
         <td>${roleBadge(u.role)}</td>
+        <td>${u.country ? `<span class="badge badge-factory">${u.country}</span>` : '<span class="text-muted text-sm">Global</span>'}</td>
         <td class="text-muted text-sm">${(u.created_at || '').split(' ')[0]}</td>
         <td>
           <div style="display:flex;gap:6px">
@@ -73,6 +74,7 @@ function editUser(u) {
   document.getElementById('u-username').disabled = true;
   document.getElementById('u-fullname').value = u.full_name || '';
   document.getElementById('u-role').value = u.role;
+  document.getElementById('u-country').value = u.country || '';
   document.getElementById('u-password').value = '';
   document.getElementById('u-pass-label').textContent = 'Reset Password';
   document.getElementById('u-pass-hint').style.display = 'block';
@@ -97,9 +99,9 @@ function parseErr(err) {
 document.addEventListener('DOMContentLoaded', () => {
   // auth.js redirects non-admins away via gating; also guard here
   setTimeout(() => {
-    if (window.CURRENT_USER && window.CURRENT_USER.role !== 'admin') {
-      window.location.href = '/';
-    }
+    // Global admins only (regional admins cannot manage users).
+    const u = window.CURRENT_USER;
+    if (u && !(u.role === 'admin' && !u.country)) window.location.href = '/';
   }, 400);
 
   loadUsers();
@@ -123,19 +125,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const username = document.getElementById('u-username').value.trim();
     const full_name= document.getElementById('u-fullname').value.trim();
     const role     = document.getElementById('u-role').value;
+    const country  = document.getElementById('u-country').value;
     const password = document.getElementById('u-password').value;
 
     if (!username) { showToast('Username is required', 'error'); return; }
 
     try {
       if (userEditMode && id) {
-        const body = { full_name, role };
+        const body = { full_name, role, country };
         if (password) body.password = password;
         await apiPut(`/api/users/${id}`, body);
         showToast('User updated');
       } else {
         if (!password) { showToast('Password is required', 'error'); return; }
-        await apiPost('/api/users', { username, full_name, role, password });
+        await apiPost('/api/users', { username, full_name, role, country, password });
         showToast('User created');
       }
       closeUserModal();
