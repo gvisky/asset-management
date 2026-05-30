@@ -340,16 +340,35 @@ async function onRepairStatus(id, status) {
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
+// History Usage is an append-only audit log: read-only for everyone except admin.
+function applyHistoryLock() {
+  const hu = document.getElementById('f-history_usage');
+  if (!hu) return;
+  const admin = (typeof isAdmin === 'function') && isAdmin();
+  hu.readOnly = !admin;
+  hu.title = admin ? '' : 'Recorded automatically — only an administrator can edit history.';
+  hu.style.background = admin ? '' : '#f3f4f6';
+}
+
 async function onEdit(id) {
   try {
     const a = await apiGet(`${API}/${id}`);
     setFormData(a);
+    applyHistoryLock();
     editMode = true;
     openModal('Edit Asset');
   } catch (err) {
     showToast('Failed to load asset', 'error');
   }
 }
+
+// Lock the history field when opening the Add modal too (runs after app.js).
+document.addEventListener('DOMContentLoaded', () => {
+  ['btn-add-top', 'nav-add'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => setTimeout(applyHistoryLock, 0));
+  });
+});
 
 // ── Delete ────────────────────────────────────────────────────────────────────
 function onDelete(id, label) {

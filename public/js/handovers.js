@@ -42,8 +42,12 @@ async function loadAssignments() {
       return;
     }
     tbody.innerHTML = rows.map(r => {
-      const label = r.asset_code || r.brand_model || `#${r.asset_id}`;
-      const link = `<a href="/inventory.html?search=${encodeURIComponent(r.asset_code || r.brand_model || '')}" style="color:var(--brand)">${hEsc(label)}</a>`;
+      // Show the asset code (or — when missing) with the model beneath, so the
+      // model is never mistaken for the code.
+      const search = encodeURIComponent(r.asset_code || r.brand_model || '');
+      const code = r.asset_code ? hEsc(r.asset_code) : '<span class="text-muted">—</span>';
+      const link = `<a href="/inventory.html?search=${search}" style="color:var(--brand)">${code}</a>`
+                 + `<div class="text-muted text-sm">${hEsc(r.brand_model || '')}</div>`;
       if (view === 'current') {
         return `
         <tr>
