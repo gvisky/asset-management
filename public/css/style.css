@@ -550,6 +550,32 @@ select.filter-select {
   table.responsive td[colspan] { display: block; text-align: center; }
   table.responsive td[colspan]::before { display: none; }
 
+  /* ── Phone summary cards: trim each list to its key fields ─────────────
+     Secondary columns are hidden on phone only (full data still shows on
+     laptop, and full asset detail is one tap away via the View button).
+     Scoped per table so hiding "Country" on assets doesn't touch users. */
+  #assets-tbody td[data-label="#"],
+  #assets-tbody td[data-label="Computer No"],
+  #assets-tbody td[data-label="Country"],
+  #assets-tbody td[data-label="Department"],
+  #assets-tbody td[data-label="Serial #"] { display: none; }
+
+  #people-tbody td[data-label="Email"],
+  #people-tbody td[data-label="Company Name"],
+  #people-tbody td[data-label="Position"] { display: none; }
+
+  /* Make the first visible field read as the card title */
+  #assets-tbody td[data-label="Asset Code"],
+  #people-tbody td[data-label="Display Name"] {
+    background: #f9fafb;
+    font-size: 14px;
+  }
+  #assets-tbody td[data-label="Asset Code"] code { font-size: 14px; }
+
+  /* Inline edit controls fill the row width on the people summary cards */
+  #people-tbody td select.form-control,
+  #people-tbody td input.form-control { min-width: 0; flex: 1; max-width: 60%; }
+
   /* 16px inputs prevent iOS auto-zoom on focus */
   .form-control,
   .search-box input,
