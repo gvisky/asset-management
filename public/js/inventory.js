@@ -341,13 +341,14 @@ async function onRepairStatus(id, status) {
 
 // ── Edit ──────────────────────────────────────────────────────────────────────
 // History Usage is an append-only audit log: read-only for everyone except admin.
+const HISTORY_OWNER = 'viet';   // only this account may edit the history log
 function applyHistoryLock() {
   const hu = document.getElementById('f-history_usage');
   if (!hu) return;
-  const admin = (typeof isAdmin === 'function') && isAdmin();
-  hu.readOnly = !admin;
-  hu.title = admin ? '' : 'Recorded automatically — only an administrator can edit history.';
-  hu.style.background = admin ? '' : '#f3f4f6';
+  const canEdit = window.CURRENT_USER && window.CURRENT_USER.username === HISTORY_OWNER;
+  hu.readOnly = !canEdit;
+  hu.title = canEdit ? '' : 'Recorded automatically — locked.';
+  hu.style.background = canEdit ? '' : '#f3f4f6';
 }
 
 async function onEdit(id) {

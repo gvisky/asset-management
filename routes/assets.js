@@ -5,6 +5,9 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
+// Only this account may edit the History Usage audit log (configurable via env).
+const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
+
 // Every asset route requires a logged-in user.
 router.use(requireAuth);
 
@@ -230,7 +233,9 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   // Compare tracked fields and append a timestamped change line. The history
   // log itself is protected: only admins may edit it directly; an editor's
   // submitted history_usage is ignored (we keep the stored one and append).
-  const isAdmin = req.user.role === 'admin';
+  // Only the owner account may edit the history log directly; everyone else's
+  // submitted history_usage is ignored (the stored log is preserved + appended).
+  const canEditHistory = req.user.username === HISTORY_OWNER;
   const TRACK = {
     location: 'Location', country: 'Country', department: 'Department', computer_no: 'Computer No',
     brand_model: 'Brand/Model', date_assigned: 'Date Assigned', serial_no: 'Serial', mk: 'M&K',
@@ -246,7 +251,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     const before = norm(existing[k]); const after = norm(incoming[k]);
     if (before !== after) changes.push(`${lbl}: "${before || '∅'}"→"${after || '∅'}"`);
   }
-  let newHistory = (isAdmin && history_usage !== undefined) ? history_usage : existing.history_usage;
+  let newHistory = (canEditHistory && history_usage !== undefined) ? history_usage : existing.history_usage;
   if (changes.length) {
     const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const line = `${ts} UTC: edited ${changes.join('; ')} by ${req.user.username}`;
