@@ -193,6 +193,7 @@ a.bar-item:hover .bar-fill { filter: brightness(1.1); }
 .badge-active  { background: #dcfce7; color: #166534; }
 .badge-broken  { background: #fee2e2; color: #991b1b; }
 .badge-retired { background: #fef3c7; color: #92400e; }
+.badge-stock   { background: #fef3c7; color: #92400e; }
 .badge-factory { background: #ede9fe; color: #4c1d95; }
 .badge-office  { background: #e0f2fe; color: #0c4a6e; }
 

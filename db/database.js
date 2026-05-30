@@ -99,7 +99,7 @@ async function initSchema() {
       history_usage   TEXT    DEFAULT '',
       remark          TEXT    DEFAULT '',
       status          TEXT    NOT NULL DEFAULT 'Active'
-                              CHECK(status IN ('Active','Broken','Retired')),
+                              CHECK(status IN ('Active','Broken','Stock')),
       created_at      TEXT    DEFAULT (datetime('now')),
       updated_at      TEXT    DEFAULT (datetime('now'))
     );
@@ -195,6 +195,61 @@ async function migrate() {
 
   const pcols = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
   if (!pcols.includes('touched')) await backend.run('ALTER TABLE personnel ADD COLUMN touched INTEGER NOT NULL DEFAULT 0');
+
+  // Rename asset status 'Retired' -> 'Stock'. SQLite can't alter a CHECK
+  // constraint in place, so rebuild the table (existing rows are remapped).
+  // Guarded on the stored table definition, so it runs at most once.
+  const assetsDef = await backend.get(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='assets'");
+  if (assetsDef && /'Retired'/.test(assetsDef.sql)) {
+    const current = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
+    const target = ['id','location','country','department','computer_no','brand_model',
+      'date_assigned','serial_no','mk','asset_code','user_name','ad_name','history_usage',
+      'remark','status','created_at','updated_at','deleted_at','deleted_by'];
+    const common = target.filter(c => current.includes(c));
+    const colList = common.join(', ');
+    const selectList = common
+      .map(c => c === 'status'
+        ? "CASE WHEN status='Retired' THEN 'Stock' ELSE status END AS status"
+        : c)
+      .join(', ');
+    await backend.script(`
+      PRAGMA foreign_keys=OFF;
+      DROP TRIGGER IF EXISTS assets_updated_at;
+      CREATE TABLE assets_new (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        location        TEXT    NOT NULL DEFAULT '',
+        country         TEXT    NOT NULL DEFAULT 'Vietnam',
+        department      TEXT    DEFAULT '',
+        computer_no     TEXT    DEFAULT '',
+        brand_model     TEXT    DEFAULT '',
+        date_assigned   TEXT    DEFAULT '',
+        serial_no       TEXT    DEFAULT '',
+        mk              TEXT    DEFAULT '',
+        asset_code      TEXT    DEFAULT '',
+        user_name       TEXT    DEFAULT '',
+        ad_name         TEXT    DEFAULT '',
+        history_usage   TEXT    DEFAULT '',
+        remark          TEXT    DEFAULT '',
+        status          TEXT    NOT NULL DEFAULT 'Active'
+                                CHECK(status IN ('Active','Broken','Stock')),
+        created_at      TEXT    DEFAULT (datetime('now')),
+        updated_at      TEXT    DEFAULT (datetime('now')),
+        deleted_at      TEXT    DEFAULT NULL,
+        deleted_by      TEXT    DEFAULT NULL
+      );
+      INSERT INTO assets_new (${colList}) SELECT ${selectList} FROM assets;
+      DROP TABLE assets;
+      ALTER TABLE assets_new RENAME TO assets;
+      CREATE TRIGGER IF NOT EXISTS assets_updated_at
+      AFTER UPDATE ON assets
+      BEGIN
+        UPDATE assets SET updated_at = datetime('now') WHERE id = NEW.id;
+      END;
+      PRAGMA foreign_keys=ON;
+    `);
+    console.log('[db] Migrated asset status: Retired -> Stock');
+  }
 }
 
 // Create a notification for a given audience/country/scope.
