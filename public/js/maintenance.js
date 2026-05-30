@@ -75,6 +75,53 @@ async function onDelete(id) {
   catch (e) { showToast('Delete failed (admin only)', 'error'); }
 }
 
+// ── Log Maintenance modal (pick an asset or server, then record) ───────────────
+function openAdd() {
+  ['m-search', 'm-desc', 'm-vendor', 'm-cost'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('m-item').innerHTML = '<option value="">Type in “Find item” above…</option>';
+  document.getElementById('add-overlay').classList.add('open');
+  searchItems();
+}
+function closeAdd() { document.getElementById('add-overlay').classList.remove('open'); }
+
+async function searchItems() {
+  const type = document.getElementById('m-type').value;
+  const q = document.getElementById('m-search').value.trim();
+  const base = type === 'server' ? '/api/servers' : '/api/assets';
+  try {
+    const res = await apiGet(`${base}?limit=25${q ? '&search=' + encodeURIComponent(q) : ''}`);
+    const items = res.data || [];
+    const sel = document.getElementById('m-item');
+    sel.innerHTML = '<option value="">Select…</option>' + items.map(it => {
+      const label = type === 'server' ? (it.hostname || it.asset_code || ('#' + it.id))
+                                       : (it.asset_code || it.brand_model || ('#' + it.id));
+      const sub = it.brand_model && it.brand_model !== label ? ' — ' + it.brand_model : '';
+      return `<option value="${it.id}">${mEsc(label + sub)}</option>`;
+    }).join('');
+  } catch (e) { /* non-fatal */ }
+}
+
+async function onAddSave() {
+  const asset_type = document.getElementById('m-type').value;
+  const asset_id = document.getElementById('m-item').value;
+  const description = document.getElementById('m-desc').value.trim();
+  if (!asset_id) { showToast('Pick an item', 'error'); return; }
+  if (!description) { showToast('Enter a description', 'error'); return; }
+  try {
+    await apiPost('/api/maintenance', {
+      asset_type, asset_id: Number(asset_id),
+      type: document.getElementById('m-mtype').value,
+      status: document.getElementById('m-status').value,
+      description,
+      vendor: document.getElementById('m-vendor').value.trim(),
+      cost: document.getElementById('m-cost').value.trim(),
+    });
+    showToast('Maintenance logged');
+    closeAdd();
+    loadMaint();
+  } catch (e) { showToast('Failed to log maintenance', 'error'); }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadCountries();
   loadMaint();
@@ -82,4 +129,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filter-status').addEventListener('change', loadMaint);
   document.getElementById('filter-country').addEventListener('change', loadMaint);
   document.getElementById('filter-type').addEventListener('change', loadMaint);
+
+  // Log Maintenance modal
+  document.getElementById('btn-add').addEventListener('click', openAdd);
+  document.getElementById('add-close').addEventListener('click', closeAdd);
+  document.getElementById('add-cancel').addEventListener('click', closeAdd);
+  document.getElementById('add-save').addEventListener('click', onAddSave);
+  document.getElementById('m-type').addEventListener('change', searchItems);
+  let d;
+  document.getElementById('m-search').addEventListener('input', () => { clearTimeout(d); d = setTimeout(searchItems, 300); });
 });
