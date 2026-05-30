@@ -31,19 +31,35 @@ async function loadReclaim() {
 
 async function loadAssignments() {
   const tbody = document.getElementById('asg-tbody');
-  const status = document.getElementById('filter-status').value;
+  const view = document.getElementById('filter-status').value;
   try {
-    const rows = await apiGet('/api/assignments' + (status ? `?status=${status}` : ''));
+    // "current" = live holders from the asset table; otherwise the handover log.
+    const url = view === 'current' ? '/api/assignments/current'
+              : '/api/assignments' + (view ? `?status=${view}` : '');
+    const rows = await apiGet(url);
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No assignments.</td></tr>';
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-state">${view === 'current' ? 'No assets are currently assigned to anyone.' : 'No handover records.'}</td></tr>`;
       return;
     }
     tbody.innerHTML = rows.map(r => {
       const label = r.asset_code || r.brand_model || `#${r.asset_id}`;
+      const link = `<a href="/inventory.html?search=${encodeURIComponent(r.asset_code || r.brand_model || '')}" style="color:var(--brand)">${hEsc(label)}</a>`;
+      if (view === 'current') {
+        return `
+        <tr>
+          <td>${link}</td>
+          <td>${hEsc(r.assignee_name)}${r.assignee_ad ? `<div class="text-muted text-sm">${hEsc(r.assignee_ad)}</div>` : ''}</td>
+          <td class="text-muted text-sm">${hEsc(r.location || '')}</td>
+          <td class="text-muted text-sm">${hEsc(r.assigned_at || r.date_assigned || '')}${r.assignment_id ? '' : '<div class="text-muted text-sm">(from inventory)</div>'}</td>
+          <td class="text-muted text-sm">${hEsc(r.assigned_by || '')}</td>
+          <td>${statusBadge(r.status)}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="onReturnAsset(${r.asset_id})">Check-in</button></td>
+        </tr>`;
+      }
       const isOpen = r.status === 'assigned';
       return `
       <tr>
-        <td><a href="/inventory.html?search=${encodeURIComponent(r.asset_code || r.brand_model || '')}" style="color:var(--brand)">${hEsc(label)}</a></td>
+        <td>${link}</td>
         <td>${hEsc(r.assignee_name)}${r.assignee_ad ? `<div class="text-muted text-sm">${hEsc(r.assignee_ad)}</div>` : ''}</td>
         <td class="text-muted text-sm">${hEsc(r.location || '')}</td>
         <td class="text-muted text-sm">${hEsc(r.assigned_at)}</td>
@@ -63,6 +79,16 @@ async function onReturn(id) {
   if (!confirm('Check this asset back in (moves it to Stock)?')) return;
   try {
     await apiPost(`/api/assignments/${id}/return`, {});
+    showToast('Checked in');
+    loadAssignments();
+    loadReclaim();
+  } catch (e) { showToast('Check-in failed', 'error'); }
+}
+
+async function onReturnAsset(assetId) {
+  if (!confirm('Check this asset back in (clears the user, moves it to Stock)?')) return;
+  try {
+    await apiPost(`/api/assignments/asset/${assetId}/return`, {});
     showToast('Checked in');
     loadAssignments();
     loadReclaim();
