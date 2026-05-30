@@ -193,6 +193,29 @@ async function migrate() {
       country TEXT DEFAULT NULL, scope TEXT NOT NULL DEFAULT 'system', level TEXT NOT NULL DEFAULT 'info',
       message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));`);
 
+  // Software licenses + their seat assignments.
+  await backend.script(`CREATE TABLE IF NOT EXISTS licenses (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      name         TEXT    NOT NULL DEFAULT '',
+      vendor       TEXT    DEFAULT '',
+      type         TEXT    NOT NULL DEFAULT 'subscription',  -- subscription | perpetual
+      total_seats  INTEGER NOT NULL DEFAULT 0,
+      license_key  TEXT    DEFAULT '',
+      notes        TEXT    DEFAULT '',
+      purchase_date TEXT   DEFAULT '',
+      renewal_date TEXT    DEFAULT '',
+      cost         TEXT    DEFAULT '',
+      country      TEXT    NOT NULL DEFAULT 'Global',        -- 'Global' or a country
+      created_at   TEXT    DEFAULT (datetime('now')));`);
+  await backend.script(`CREATE TABLE IF NOT EXISTS license_assignments (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      license_id    INTEGER NOT NULL,
+      assignee_type TEXT    NOT NULL DEFAULT 'user',          -- user | asset | person
+      assignee_ref  TEXT    NOT NULL DEFAULT '',
+      assigned_by   TEXT    DEFAULT '',
+      assigned_at   TEXT    DEFAULT (datetime('now')),
+      released_at   TEXT    DEFAULT NULL);`);
+
   // Asset assignment / handover history (check-out & check-in records).
   await backend.script(`CREATE TABLE IF NOT EXISTS asset_assignments (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
