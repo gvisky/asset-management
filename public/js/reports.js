@@ -2,9 +2,10 @@
 
 const REPORTS = [
   { id: 'assets',      title: 'Asset Inventory',     desc: 'All live assets with full details.' },
+  { id: 'servers',     title: 'Server Inventory',    desc: 'All servers with hostname, IP, OS, specs.' },
   { id: 'summary',     title: 'Asset Summary',       desc: 'Counts by status, location and country.' },
-  { id: 'warranty',    title: 'Warranty Due',        desc: 'Assets expiring/expired within 90 days.' },
-  { id: 'maintenance', title: 'Open Maintenance',    desc: 'Repairs/services not yet completed.' },
+  { id: 'warranty',    title: 'Warranty Due',        desc: 'Assets & servers expiring/expired within 90 days.' },
+  { id: 'maintenance', title: 'Open Maintenance',    desc: 'Open repairs/services across assets and servers.' },
   { id: 'offboarding', title: 'Offboarding Reclaim', desc: 'Leaving personnel and the assets they hold.' },
   { id: 'licenses',    title: 'Licenses',            desc: 'Licenses with seats used and renewal dates.' },
 ];

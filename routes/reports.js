@@ -70,28 +70,52 @@ const REPORTS = {
     return { sheets: [{ name: 'Licenses', rows }] };
   },
 
+  async servers(req) {
+    const sc = scoped(req);
+    const rows = await all(
+      `SELECT asset_code AS "Asset Code", hostname AS "Hostname", brand_model AS "Brand/Model",
+              ip_address AS "IP", os AS "OS", role AS "Role", cpu AS "CPU", ram AS "RAM",
+              storage AS "Storage", country AS "Country", location AS "Location", status AS "Status",
+              vendor AS "Vendor", warranty_expiry AS "Warranty Expiry", purchase_date AS "Purchase Date",
+              cost AS "Cost", po_number AS "PO Number"
+         FROM servers WHERE deleted_at IS NULL${sc.clause} ORDER BY country, id`, sc.params);
+    return { sheets: [{ name: 'Servers', rows }] };
+  },
+
   async maintenance(req) {
     const sc = scoped(req, 'm.country');
     const rows = await all(
-      `SELECT a.asset_code AS "Asset Code", a.brand_model AS "Brand/Model", m.type AS "Type",
-              m.description AS "Description", m.vendor AS "Vendor", m.cost AS "Cost",
+      `SELECT m.asset_type AS "Item Type",
+              CASE WHEN m.asset_type = 'server'
+                   THEN COALESCE(NULLIF(s.asset_code,''), s.hostname, s.brand_model)
+                   ELSE COALESCE(NULLIF(a.asset_code,''), a.brand_model) END AS "Item",
+              m.type AS "Type", m.description AS "Description", m.vendor AS "Vendor", m.cost AS "Cost",
               m.status AS "Status", m.reported_at AS "Reported", m.reported_by AS "By", m.country AS "Country"
-         FROM maintenance_log m LEFT JOIN assets a ON a.id = m.asset_id
+         FROM maintenance_log m
+         LEFT JOIN assets  a ON m.asset_type = 'asset'  AND a.id = m.asset_id
+         LEFT JOIN servers s ON m.asset_type = 'server' AND s.id = m.asset_id
         WHERE m.status <> 'done'${sc.clause} ORDER BY m.reported_at DESC`, sc.params);
     return { sheets: [{ name: 'Open Maintenance', rows }] };
   },
 
   async warranty(req) {
     const sc = scoped(req);
-    const rows = await all(
+    const assets = await all(
       `SELECT asset_code AS "Asset Code", brand_model AS "Brand/Model", country AS "Country",
-              location AS "Location", vendor AS "Vendor", warranty_expiry AS "Warranty Expiry",
-              status AS "Status"
+              location AS "Location", vendor AS "Vendor", warranty_expiry AS "Warranty Expiry", status AS "Status"
          FROM assets
         WHERE deleted_at IS NULL AND warranty_expiry <> ''
           AND date(warranty_expiry) <= date('now','+90 days')${sc.clause}
         ORDER BY warranty_expiry`, sc.params);
-    return { sheets: [{ name: 'Warranty', rows }] };
+    const servers = await all(
+      `SELECT asset_code AS "Asset Code", hostname AS "Hostname", brand_model AS "Brand/Model",
+              country AS "Country", location AS "Location", vendor AS "Vendor",
+              warranty_expiry AS "Warranty Expiry", status AS "Status"
+         FROM servers
+        WHERE deleted_at IS NULL AND warranty_expiry <> ''
+          AND date(warranty_expiry) <= date('now','+90 days')${sc.clause}
+        ORDER BY warranty_expiry`, sc.params);
+    return { sheets: [{ name: 'Assets', rows: assets }, { name: 'Servers', rows: servers }] };
   },
 };
 
