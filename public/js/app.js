@@ -13,11 +13,11 @@ function showToast(message, type = 'success') {
 // Status badge HTML
 function statusBadge(status) {
   const map = {
-    Active:  'badge-active',
-    Broken:  'badge-broken',
-    Retired: 'badge-retired',
+    Active: 'badge-active',
+    Broken: 'badge-broken',
+    Stock:  'badge-stock',
   };
-  const dot = { Active: '●', Broken: '●', Retired: '●' };
+  const dot = { Active: '●', Broken: '●', Stock: '●' };
   return `<span class="badge ${map[status] || ''}">${dot[status] || ''} ${status}</span>`;
 }
 

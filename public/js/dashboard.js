@@ -7,7 +7,7 @@ async function loadStats() {
     document.getElementById('s-total').textContent   = stats.total;
     document.getElementById('s-active').textContent  = stats.byStatus.Active  || 0;
     document.getElementById('s-broken').textContent  = stats.byStatus.Broken  || 0;
-    document.getElementById('s-retired').textContent = stats.byStatus.Retired || 0;
+    document.getElementById('s-stock').textContent   = stats.byStatus.Stock  || 0;
     document.getElementById('s-factory').textContent = stats.byLocation.Factory || 0;
     document.getElementById('s-office').textContent  = stats.byLocation.Office  || 0;
 
