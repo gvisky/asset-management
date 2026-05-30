@@ -424,6 +424,9 @@ select.filter-select {
 .role-viewer button[onclick^="onDelete"],
 .role-viewer button[onclick^="onAddRepair"],
 .role-viewer button[onclick^="onStatus"],
+.role-viewer button[onclick^="onAssign"],
+.role-viewer button[onclick^="onCheckin"],
+.role-viewer button[onclick^="onReturn"],
 .role-viewer .maint-edit,
 .role-viewer #view-edit-btn { display: none !important; }
 

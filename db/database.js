@@ -193,6 +193,25 @@ async function migrate() {
       country TEXT DEFAULT NULL, scope TEXT NOT NULL DEFAULT 'system', level TEXT NOT NULL DEFAULT 'info',
       message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));`);
 
+  // Asset assignment / handover history (check-out & check-in records).
+  await backend.script(`CREATE TABLE IF NOT EXISTS asset_assignments (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id      INTEGER NOT NULL,
+      country       TEXT    DEFAULT '',
+      assignee_name  TEXT   NOT NULL DEFAULT '',
+      assignee_email TEXT   DEFAULT '',
+      assignee_ad    TEXT   DEFAULT '',
+      assigned_by   TEXT    DEFAULT '',
+      assigned_at   TEXT    DEFAULT (datetime('now')),
+      due_return_at TEXT    DEFAULT '',
+      returned_at   TEXT    DEFAULT NULL,
+      returned_by   TEXT    DEFAULT NULL,
+      condition_out TEXT    DEFAULT '',
+      condition_in  TEXT    DEFAULT '',
+      handover_note TEXT    DEFAULT '',
+      status        TEXT    NOT NULL DEFAULT 'assigned'  -- assigned | returned
+    );`);
+
   // Maintenance & repair log (one row per repair/service/upgrade on an asset).
   await backend.script(`CREATE TABLE IF NOT EXISTS maintenance_log (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
