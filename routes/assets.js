@@ -226,6 +226,33 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   // Scoped users can't move an asset out of their country.
   const finalCountry = scope ? scope : resolveCountry(req, country !== undefined ? country : existing.country);
 
+  // ── Edit audit trail baked into history_usage ──────────────────────────────
+  // Compare tracked fields and append a timestamped change line. The history
+  // log itself is protected: only admins may edit it directly; an editor's
+  // submitted history_usage is ignored (we keep the stored one and append).
+  const isAdmin = req.user.role === 'admin';
+  const TRACK = {
+    location: 'Location', country: 'Country', department: 'Department', computer_no: 'Computer No',
+    brand_model: 'Brand/Model', date_assigned: 'Date Assigned', serial_no: 'Serial', mk: 'M&K',
+    asset_code: 'Asset Code', user_name: 'User', ad_name: 'AD Name', status: 'Status', remark: 'Remark',
+    purchase_date: 'Purchase Date', warranty_expiry: 'Warranty', vendor: 'Vendor', cost: 'Cost', po_number: 'PO Number',
+  };
+  const incoming = { location, country: finalCountry, department, computer_no, brand_model, date_assigned,
+    serial_no, mk, asset_code, user_name, ad_name, status, remark, purchase_date, warranty_expiry, vendor, cost, po_number };
+  const norm = (v) => String(v == null ? '' : v).trim();
+  const changes = [];
+  for (const [k, lbl] of Object.entries(TRACK)) {
+    if (incoming[k] === undefined) continue;              // field not submitted → unchanged
+    const before = norm(existing[k]); const after = norm(incoming[k]);
+    if (before !== after) changes.push(`${lbl}: "${before || '∅'}"→"${after || '∅'}"`);
+  }
+  let newHistory = (isAdmin && history_usage !== undefined) ? history_usage : existing.history_usage;
+  if (changes.length) {
+    const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const line = `${ts} UTC: edited ${changes.join('; ')} by ${req.user.username}`;
+    newHistory = newHistory ? `${newHistory}\n${line}` : line;
+  }
+
   await run(`
     UPDATE assets SET
       location = ?, country = ?, department = ?, computer_no = ?, brand_model = ?,
@@ -234,7 +261,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
       purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?
     WHERE id = ? AND deleted_at IS NULL`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
-     serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
+     serial_no, mk, asset_code, user_name, ad_name, newHistory, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number,
      req.params.id]);
 
