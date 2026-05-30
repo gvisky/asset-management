@@ -176,7 +176,7 @@ async function onView(id) {
         ${fields.map(([label, val]) => `
           <div>
             <div class="form-label" style="margin-bottom:3px">${label}</div>
-            <div style="font-size:13.5px">${val || '<span class="text-muted">—</span>'}</div>
+            <div style="font-size:13.5px;white-space:pre-line">${val || '<span class="text-muted">—</span>'}</div>
           </div>
         `).join('')}
       </div>
@@ -267,8 +267,7 @@ async function onAssign() {
       handover_note: document.getElementById('asg-note').value.trim(),
     });
     showToast('Assigned');
-    ['asg-name', 'asg-ad', 'asg-note'].forEach(id => document.getElementById(id).value = '');
-    loadHandover(viewAsset.id);
+    onView(viewAsset.id);   // refresh holder, location and usage history
   } catch (e) { showToast('Assign failed', 'error'); }
 }
 
@@ -277,7 +276,7 @@ async function onCheckin() {
   try {
     await apiPost(`/api/assignments/${currentAssignmentId}/return`, {});
     showToast('Checked in');
-    loadHandover(viewAsset.id);
+    onView(viewAsset.id);   // refresh holder, location and usage history
   } catch (e) { showToast('Check-in failed', 'error'); }
 }
 

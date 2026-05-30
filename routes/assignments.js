@@ -91,9 +91,13 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
     [asset_id, asset.country, loc, assignee_name.trim(), assignee_email.trim(), assignee_ad.trim(),
      req.user.username, due_return_at, condition_out, handover_note]);
 
-  // Reflect the current holder AND location on the asset itself.
-  await run("UPDATE assets SET user_name = ?, ad_name = ?, location = ?, date_assigned = date('now'), status = 'Active' WHERE id = ?",
-    [assignee_name.trim(), assignee_ad.trim() || asset.ad_name, loc || asset.location, asset_id]);
+  // Reflect the current holder AND location on the asset, and append the
+  // handover to the asset's usage history (merging the two views).
+  const today = new Date().toISOString().slice(0, 10);
+  const usageLine = `${today}: → ${assignee_name.trim()}${loc ? ' @ ' + loc : ''}`;
+  const newHistory = asset.history_usage ? `${asset.history_usage}\n${usageLine}` : usageLine;
+  await run("UPDATE assets SET user_name = ?, ad_name = ?, location = ?, history_usage = ?, date_assigned = date('now'), status = 'Active' WHERE id = ?",
+    [assignee_name.trim(), assignee_ad.trim() || asset.ad_name, loc || asset.location, newHistory, asset_id]);
 
   const created = await get('SELECT * FROM asset_assignments WHERE id = ?', [result.lastInsertRowid]);
   await audit(req.user, 'ASSIGN', Number(asset_id), `Assigned "${label(asset)}" to ${assignee_name.trim()}${loc ? ' @ ' + loc : ''}`);
@@ -114,16 +118,20 @@ router.post('/:id/return', requireRole('admin', 'editor'), wrap(async (req, res)
   await run("UPDATE asset_assignments SET status = 'returned', returned_at = datetime('now'), returned_by = ?, condition_in = ? WHERE id = ?",
     [req.user.username, condition_in, req.params.id]);
 
-  // Clear the holder; optionally move the asset into Stock.
+  // Clear the holder; optionally move the asset into Stock. Append the return
+  // to the asset's usage history too.
+  const asset = await get('SELECT * FROM assets WHERE id = ?', [asg.asset_id]);
   const newStatus = to_stock ? 'Stock' : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const usageLine = `${today}: ↩ returned from ${asg.assignee_name}${newStatus ? ' (→ ' + newStatus + ')' : ''}`;
+  const newHistory = asset && asset.history_usage ? `${asset.history_usage}\n${usageLine}` : usageLine;
   if (newStatus) {
-    await run("UPDATE assets SET user_name = '', date_assigned = '', status = ? WHERE id = ?", [newStatus, asg.asset_id]);
+    await run("UPDATE assets SET user_name = '', date_assigned = '', history_usage = ?, status = ? WHERE id = ?", [newHistory, newStatus, asg.asset_id]);
   } else {
-    await run("UPDATE assets SET user_name = '', date_assigned = '' WHERE id = ?", [asg.asset_id]);
+    await run("UPDATE assets SET user_name = '', date_assigned = '', history_usage = ? WHERE id = ?", [newHistory, asg.asset_id]);
   }
 
-  const asset = await get('SELECT * FROM assets WHERE id = ?', [asg.asset_id]);
-  await audit(req.user, 'RETURN', asg.asset_id, `Checked in "${label(asset)}" from ${asg.assignee_name}`);
+  await audit(req.user, 'RETURN', asg.asset_id, `Checked in "${label(asset || {})}" from ${asg.assignee_name}`);
   res.json({ message: 'Checked in', assignment_id: Number(req.params.id) });
 }));
 
