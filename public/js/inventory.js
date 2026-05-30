@@ -218,7 +218,7 @@ async function loadMaintenance(assetId) {
   const box = document.getElementById('maint-list');
   if (!box) return;
   try {
-    const rows = await apiGet(`/api/maintenance/asset/${assetId}`);
+    const rows = await apiGet(`/api/maintenance/by/asset/${assetId}`);
     const cnt = document.getElementById('maint-count');
     if (cnt) cnt.textContent = rows.length ? `${rows.length} record(s)` : '';
     if (!rows.length) { box.innerHTML = '<span class="text-muted text-sm">No maintenance recorded.</span>'; return; }

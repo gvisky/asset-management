@@ -13,6 +13,7 @@ app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 // API routes
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/assets',    require('./routes/assets'));
+app.use('/api/servers',   require('./routes/servers'));
 app.use('/api/users',     require('./routes/users'));
 app.use('/api/personnel', require('./routes/personnel'));
 app.use('/api/maintenance', require('./routes/maintenance'));

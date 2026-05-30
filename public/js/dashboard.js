@@ -23,6 +23,14 @@ async function loadStats() {
         .catch(() => { licEl.textContent = '0'; });
     }
 
+    // Server count from the server-inventory module.
+    const srvEl = document.getElementById('s-servers');
+    if (srvEl) {
+      apiGet('/api/servers/stats')
+        .then(ss => { srvEl.textContent = ss.total || 0; })
+        .catch(() => { srvEl.textContent = '0'; });
+    }
+
     // By-country cards (Vietnam / Thailand / Malaysia) — appended to the stat grid.
     renderCountryCards(stats.byCountry || {});
 
