@@ -35,6 +35,29 @@ router.get('/', wrap(async (req, res) => {
   res.json(rows);
 }));
 
+// ── GET /api/assignments/current — who currently holds each asset ─────────────
+// Driven by the asset table (asset.user_name), so assets assigned via import
+// — not just the new handover button — show up. Joined to any open handover
+// record for the out-date / assigned-by metadata.
+router.get('/current', wrap(async (req, res) => {
+  const cond = ['a.deleted_at IS NULL', "a.user_name <> ''"];
+  const params = [];
+  const scope = scopeOf(req);
+  if (scope)                  { cond.push('a.country = ?'); params.push(scope); }
+  else if (req.query.country) { cond.push('a.country = ?'); params.push(req.query.country); }
+
+  const rows = await all(
+    `SELECT a.id AS asset_id, a.asset_code, a.brand_model, a.location, a.country, a.status,
+            a.user_name AS assignee_name, a.ad_name AS assignee_ad, a.date_assigned,
+            (SELECT asg.id          FROM asset_assignments asg WHERE asg.asset_id = a.id AND asg.status = 'assigned' ORDER BY asg.assigned_at DESC LIMIT 1) AS assignment_id,
+            (SELECT asg.assigned_at FROM asset_assignments asg WHERE asg.asset_id = a.id AND asg.status = 'assigned' ORDER BY asg.assigned_at DESC LIMIT 1) AS assigned_at,
+            (SELECT asg.assigned_by FROM asset_assignments asg WHERE asg.asset_id = a.id AND asg.status = 'assigned' ORDER BY asg.assigned_at DESC LIMIT 1) AS assigned_by
+       FROM assets a
+      WHERE ${cond.join(' AND ')}
+      ORDER BY a.user_name COLLATE NOCASE, a.id`, params);
+  res.json(rows);
+}));
+
 // ── GET /api/assignments/reclaim — gear still held by leaving personnel ────────
 router.get('/reclaim', wrap(async (req, res) => {
   const scope = scopeOf(req);
@@ -133,6 +156,29 @@ router.post('/:id/return', requireRole('admin', 'editor'), wrap(async (req, res)
 
   await audit(req.user, 'RETURN', asg.asset_id, `Checked in "${label(asset || {})}" from ${asg.assignee_name}`);
   res.json({ message: 'Checked in', assignment_id: Number(req.params.id) });
+}));
+
+// ── POST /api/assignments/asset/:assetId/return — check in by asset ───────────
+// Works whether or not a formal handover record exists (covers imported assets).
+router.post('/asset/:assetId/return', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  const asset = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.assetId]);
+  if (!asset) return res.status(404).json({ error: 'Asset not found' });
+  const scope = scopeOf(req);
+  if (scope && asset.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+
+  const holder = asset.user_name || '(unknown)';
+  // Close any open handover record for this asset.
+  await run("UPDATE asset_assignments SET status = 'returned', returned_at = datetime('now'), returned_by = ? WHERE asset_id = ? AND status = 'assigned'",
+    [req.user.username, req.params.assetId]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const usageLine = `${today}: ↩ returned from ${holder} (→ Stock)`;
+  const newHistory = asset.history_usage ? `${asset.history_usage}\n${usageLine}` : usageLine;
+  await run("UPDATE assets SET user_name = '', date_assigned = '', history_usage = ?, status = 'Stock' WHERE id = ?",
+    [newHistory, req.params.assetId]);
+
+  await audit(req.user, 'RETURN', Number(req.params.assetId), `Checked in "${label(asset)}" from ${holder}`);
+  res.json({ message: 'Checked in' });
 }));
 
 module.exports = router;

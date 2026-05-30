@@ -427,6 +427,7 @@ select.filter-select {
 .role-viewer button[onclick^="onAssign"],
 .role-viewer button[onclick^="onCheckin"],
 .role-viewer button[onclick^="onReturn"],
+.role-viewer button[onclick^="onReturnAsset"],
 .role-viewer button[onclick^="onAssignSeat"],
 .role-viewer button[onclick^="onRelease"],
 .role-viewer .maint-edit,
