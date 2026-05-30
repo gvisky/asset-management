@@ -30,7 +30,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Sidebar ───────────────────────────────────────────────────────────── */
 .sidebar {
-  width: var(--sidebar-w);
+  width: calc(var(--sidebar-w) + env(safe-area-inset-left));
   background: #1e2433;
   display: flex;
   flex-direction: column;
@@ -39,6 +39,9 @@ a { color: inherit; text-decoration: none; }
   height: 100vh;
   z-index: 100;
   transition: transform .25s ease;
+  /* Keep nav clear of the notch (landscape) and home indicator */
+  padding-left: env(safe-area-inset-left);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .sidebar-logo {
@@ -88,7 +91,7 @@ a { color: inherit; text-decoration: none; }
 
 /* ── Main layout ───────────────────────────────────────────────────────── */
 .main-wrap {
-  margin-left: var(--sidebar-w);
+  margin-left: calc(var(--sidebar-w) + env(safe-area-inset-left));
   flex: 1;
   min-width: 0;            /* allow shrinking so wide tables scroll instead of widening the page */
   display: flex;
@@ -97,12 +100,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 .topbar {
-  height: var(--header-h);
+  height: calc(var(--header-h) + env(safe-area-inset-top));
   background: #fff;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 28px;
+  padding: env(safe-area-inset-top) 28px 0;
   gap: 12px;
   position: sticky;
   top: 0;
@@ -110,7 +113,12 @@ a { color: inherit; text-decoration: none; }
 }
 .topbar-title { font-size: 16px; font-weight: 600; flex: 1; }
 
-.content { padding: 28px; flex: 1; }
+.content {
+  padding: 28px;
+  padding-right: max(28px, env(safe-area-inset-right));
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+  flex: 1;
+}
 
 /* ── Stat cards ────────────────────────────────────────────────────────── */
 .stat-grid {
@@ -457,10 +465,18 @@ select.filter-select {
   .main-wrap { margin-left: 0; }
   .menu-toggle { display: inline-flex; }
 
-  /* Tighter chrome */
-  .topbar { padding: 0 14px; gap: 8px; }
+  /* Tighter chrome (sidebar is hidden, so honor the left inset too) */
+  .topbar {
+    padding: env(safe-area-inset-top) max(14px, env(safe-area-inset-right)) 0 max(14px, env(safe-area-inset-left));
+    gap: 8px;
+  }
   .topbar-title { font-size: 15px; }
-  .content { padding: 16px; }
+  .content {
+    padding: 16px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
 
   /* Stat cards two-up */
   .stat-grid { grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
@@ -479,7 +495,7 @@ select.filter-select {
 
   /* Pagination + toasts */
   .pagination { justify-content: center; flex-wrap: wrap; }
-  .toast-container { top: 64px; right: 12px; left: 12px; }
+  .toast-container { top: calc(64px + env(safe-area-inset-top)); right: 12px; left: 12px; }
   .toast { max-width: none; }
 
   /* Bigger touch targets */
@@ -495,8 +511,9 @@ select.filter-select {
   select.filter-select { font-size: 16px; }
 }
 
-/* ── Small phone ────────────────────────────────────────────────────── */
-@media (max-width: 430px) {
+/* ── Small phone (single column only on truly narrow devices; the
+      iPhone 12 Pro Max at 428px keeps the comfortable 2-up grid) ─────── */
+@media (max-width: 380px) {
   .stat-grid { grid-template-columns: 1fr; }
   .topbar-title { font-size: 14px; }
 }
