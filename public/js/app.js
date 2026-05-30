@@ -127,7 +127,34 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnAdd) btnAdd.addEventListener('click', handleAdd);
 
   initMobileNav();
+  initResponsiveTables();
 });
+
+// ── Responsive tables: tag each cell with its column header (phone card view) ──
+// Adds data-label/"responsive" used only by the <=768px CSS; zero effect on desktop.
+function labelizeTable(tbody) {
+  const table = tbody.closest('table');
+  const thead = table && table.querySelector('thead');
+  if (!thead) return;
+  const headers = [...thead.querySelectorAll('th')].map(th => th.textContent.trim());
+  table.classList.add('responsive');
+  tbody.querySelectorAll('tr').forEach(tr => {
+    [...tr.children].forEach((td, i) => {
+      if (td.hasAttribute('colspan')) return;   // empty/loading rows
+      td.setAttribute('data-label', headers[i] || '');
+    });
+  });
+}
+
+function initResponsiveTables() {
+  document.querySelectorAll('table > tbody').forEach(tbody => {
+    labelizeTable(tbody);
+    // Re-tag when rows are (re)rendered by fetch/pagination/filtering.
+    // Only watches childList, so the attribute writes above won't re-trigger it.
+    new MutationObserver(() => labelizeTable(tbody))
+      .observe(tbody, { childList: true });
+  });
+}
 
 // ── Mobile off-canvas sidebar (hamburger toggle + backdrop) ───────────────────
 function initMobileNav() {
