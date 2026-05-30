@@ -31,8 +31,20 @@ function locationBadge(loc) {
 const FIELDS = [
   'location','country','status','department','computer_no','brand_model',
   'serial_no','asset_code','user_name','ad_name','mk','date_assigned',
-  'history_usage','remark'
+  'history_usage','remark',
+  'purchase_date','warranty_expiry','vendor','cost','po_number'
 ];
+
+// Warranty status badge from an ISO date string ('' → nothing).
+function warrantyBadge(dateStr) {
+  if (!dateStr) return '';
+  const exp = new Date(dateStr + 'T00:00:00');
+  if (isNaN(exp)) return '';
+  const days = Math.ceil((exp - new Date()) / 86400000);
+  if (days < 0)  return `<span class="badge badge-broken">Expired ${dateStr}</span>`;
+  if (days <= 90) return `<span class="badge badge-retired">Expires ${dateStr} (${days}d)</span>`;
+  return `<span class="badge badge-active">Until ${dateStr}</span>`;
+}
 
 function getFormData() {
   const data = {};

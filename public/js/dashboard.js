@@ -10,6 +10,10 @@ async function loadStats() {
     document.getElementById('s-stock').textContent   = stats.byStatus.Stock  || 0;
     document.getElementById('s-factory').textContent = stats.byLocation.Factory || 0;
     document.getElementById('s-office').textContent  = stats.byLocation.Office  || 0;
+    const warrEl = document.getElementById('s-warranty');
+    const repEl  = document.getElementById('s-repairs');
+    if (warrEl) warrEl.textContent = stats.warrantyExpiring || 0;
+    if (repEl)  repEl.textContent  = stats.openRepairs || 0;
 
     // By-country cards (Vietnam / Thailand / Malaysia) — appended to the stat grid.
     renderCountryCards(stats.byCountry || {});

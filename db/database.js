@@ -193,6 +193,20 @@ async function migrate() {
       country TEXT DEFAULT NULL, scope TEXT NOT NULL DEFAULT 'system', level TEXT NOT NULL DEFAULT 'info',
       message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0, created_at TEXT DEFAULT (datetime('now')));`);
 
+  // Maintenance & repair log (one row per repair/service/upgrade on an asset).
+  await backend.script(`CREATE TABLE IF NOT EXISTS maintenance_log (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id    INTEGER NOT NULL,
+      country     TEXT    DEFAULT '',
+      type        TEXT    NOT NULL DEFAULT 'repair',   -- repair | service | upgrade
+      description TEXT    NOT NULL DEFAULT '',
+      vendor      TEXT    DEFAULT '',
+      cost        TEXT    DEFAULT '',
+      status      TEXT    NOT NULL DEFAULT 'open',      -- open | in_progress | done
+      reported_by TEXT    DEFAULT '',
+      reported_at TEXT    DEFAULT (datetime('now')),
+      resolved_at TEXT    DEFAULT NULL);`);
+
   const pcols = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
   if (!pcols.includes('touched')) await backend.run('ALTER TABLE personnel ADD COLUMN touched INTEGER NOT NULL DEFAULT 0');
 
@@ -250,6 +264,15 @@ async function migrate() {
     `);
     console.log('[db] Migrated asset status: Retired -> Stock');
   }
+
+  // Warranty & purchase fields on assets (additive). Re-read columns because
+  // the Retired->Stock rebuild above may have just recreated the table.
+  const acols = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
+  if (!acols.includes('purchase_date'))   await backend.run("ALTER TABLE assets ADD COLUMN purchase_date TEXT DEFAULT ''");
+  if (!acols.includes('warranty_expiry')) await backend.run("ALTER TABLE assets ADD COLUMN warranty_expiry TEXT DEFAULT ''");
+  if (!acols.includes('vendor'))          await backend.run("ALTER TABLE assets ADD COLUMN vendor TEXT DEFAULT ''");
+  if (!acols.includes('cost'))            await backend.run("ALTER TABLE assets ADD COLUMN cost TEXT DEFAULT ''");
+  if (!acols.includes('po_number'))       await backend.run("ALTER TABLE assets ADD COLUMN po_number TEXT DEFAULT ''");
 }
 
 // Create a notification for a given audience/country/scope.

@@ -162,6 +162,11 @@ async function onView(id) {
       ['User Name',     a.user_name],
       ['AD Name',       a.ad_name],
       ['Date Assigned', a.date_assigned],
+      ['Purchase Date', a.purchase_date],
+      ['Warranty',      warrantyBadge(a.warranty_expiry) || a.warranty_expiry],
+      ['Vendor',        a.vendor],
+      ['Cost',          a.cost],
+      ['PO Number',     a.po_number],
       ['History Usage', a.history_usage],
       ['Remark',        a.remark],
     ];
@@ -175,11 +180,91 @@ async function onView(id) {
           </div>
         `).join('')}
       </div>
+      <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <strong style="font-size:13.5px">🔧 Maintenance &amp; Repairs</strong>
+          <span class="text-muted text-sm" id="maint-count"></span>
+        </div>
+        <div class="maint-edit" style="margin-bottom:12px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select class="form-control" id="maint-type" style="max-width:120px">
+              <option value="repair">Repair</option>
+              <option value="service">Service</option>
+              <option value="upgrade">Upgrade</option>
+            </select>
+            <input class="form-control" id="maint-desc" placeholder="What happened / what was done" style="flex:1;min-width:160px">
+            <input class="form-control" id="maint-vendor" placeholder="Vendor" style="max-width:120px">
+            <input class="form-control" id="maint-cost" placeholder="Cost" style="max-width:90px">
+            <button class="btn btn-primary btn-sm" onclick="onAddRepair()">Add</button>
+          </div>
+        </div>
+        <div id="maint-list" class="text-muted text-sm">Loading…</div>
+      </div>
     `;
     document.getElementById('view-overlay').classList.add('open');
+    loadMaintenance(id);
   } catch (err) {
     showToast('Failed to load asset', 'error');
   }
+}
+
+// ── Maintenance history (inside the asset detail modal) ─────────────────────────
+const MAINT_BADGE = { open: 'badge-broken', in_progress: 'badge-retired', done: 'badge-active' };
+const maintLabel = (s) => ({ open: 'Open', in_progress: 'In progress', done: 'Done' }[s] || s);
+const escHtml = (s) => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+async function loadMaintenance(assetId) {
+  const box = document.getElementById('maint-list');
+  if (!box) return;
+  try {
+    const rows = await apiGet(`/api/maintenance/asset/${assetId}`);
+    const cnt = document.getElementById('maint-count');
+    if (cnt) cnt.textContent = rows.length ? `${rows.length} record(s)` : '';
+    if (!rows.length) { box.innerHTML = '<span class="text-muted text-sm">No maintenance recorded.</span>'; return; }
+    box.innerHTML = rows.map(m => `
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1">
+          <div style="font-size:13px"><strong>${maintLabel(m.status)}</strong> · ${escHtml(m.type)} — ${escHtml(m.description)}</div>
+          <div class="text-muted text-sm">${escHtml(m.reported_at)}${m.vendor ? ' · ' + escHtml(m.vendor) : ''}${m.cost ? ' · ' + escHtml(m.cost) : ''}${m.reported_by ? ' · by ' + escHtml(m.reported_by) : ''}</div>
+        </div>
+        <span class="badge ${MAINT_BADGE[m.status] || ''}">${maintLabel(m.status)}</span>
+        <select class="form-control maint-edit" style="max-width:130px;padding:4px 8px" onchange="onRepairStatus(${m.id}, this.value)">
+          ${['open','in_progress','done'].map(s => `<option value="${s}" ${s === m.status ? 'selected' : ''}>${maintLabel(s)}</option>`).join('')}
+        </select>
+      </div>
+    `).join('');
+  } catch (e) {
+    box.innerHTML = '<span class="text-muted text-sm">Failed to load maintenance.</span>';
+  }
+}
+
+async function onAddRepair() {
+  if (!viewAsset) return;
+  const description = document.getElementById('maint-desc').value.trim();
+  if (!description) { showToast('Enter a description', 'error'); return; }
+  try {
+    await apiPost('/api/maintenance', {
+      asset_id:    viewAsset.id,
+      type:        document.getElementById('maint-type').value,
+      description,
+      vendor:      document.getElementById('maint-vendor').value.trim(),
+      cost:        document.getElementById('maint-cost').value.trim(),
+    });
+    showToast('Maintenance logged');
+    document.getElementById('maint-desc').value = '';
+    document.getElementById('maint-vendor').value = '';
+    document.getElementById('maint-cost').value = '';
+    loadMaintenance(viewAsset.id);
+  } catch (e) { showToast('Failed to log maintenance', 'error'); }
+}
+
+async function onRepairStatus(id, status) {
+  try {
+    await apiPut(`/api/maintenance/${id}`, { status });
+    showToast('Updated');
+    loadMaintenance(viewAsset.id);
+  } catch (e) { showToast('Update failed', 'error'); }
 }
 
 // ── Edit ──────────────────────────────────────────────────────────────────────

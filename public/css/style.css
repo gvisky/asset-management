@@ -422,6 +422,9 @@ select.filter-select {
 /* ── Role gating: viewers can't edit/delete ───────────────────────────── */
 .role-viewer button[onclick^="onEdit"],
 .role-viewer button[onclick^="onDelete"],
+.role-viewer button[onclick^="onAddRepair"],
+.role-viewer button[onclick^="onStatus"],
+.role-viewer .maint-edit,
 .role-viewer #view-edit-btn { display: none !important; }
 
 /* ── Mobile menu toggle + backdrop (injected by app.js) ───────────────── */

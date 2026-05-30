@@ -112,8 +112,17 @@ router.get('/stats', wrap(async (req, res) => {
     )`];
   const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, lp)).cnt);
 
+  // Warranty expiring/expired within 90 days (live assets that have a date set).
+  const warCond = [...liveCond, "warranty_expiry <> ''", "date(warranty_expiry) <= date('now','+90 days')"];
+  const warrantyExpiring = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${warCond.join(' AND ')}`, lp)).cnt);
+
+  // Open maintenance/repairs (respect the same country scope via maintenance_log.country).
+  const repCond = ["status <> 'done'"]; const rp = [];
+  if (cf.clause) { repCond.push(cf.clause); rp.push(...cf.params); }
+  const openRepairs = Number((await get(`SELECT COUNT(*) as cnt FROM maintenance_log WHERE ${repCond.join(' AND ')}`, rp)).cnt);
+
   res.json({ total, byStatus, byLocation, byCountry, byBrand, recentlyAdded, deletedCount, incompleteCount,
-             scope: scopeOf(req) });
+             warrantyExpiring, openRepairs, scope: scopeOf(req) });
 }));
 
 // ── GET /api/assets/filters — distinct values for the filter dropdowns ────────
@@ -179,7 +188,8 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
     location = '', country = '', department = '', computer_no = '', brand_model = '',
     date_assigned = '', serial_no = '', mk = '', asset_code = '',
     user_name = '', ad_name = '', history_usage = '', remark = '',
-    status = 'Active'
+    status = 'Active',
+    purchase_date = '', warranty_expiry = '', vendor = '', cost = '', po_number = ''
   } = req.body;
 
   const finalCountry = resolveCountry(req, country);
@@ -187,10 +197,12 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const result = await run(`
     INSERT INTO assets
       (location, country, department, computer_no, brand_model, date_assigned,
-       serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
+       purchase_date, warranty_expiry, vendor, cost, po_number)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
-     serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status]);
+     serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
+     purchase_date, warranty_expiry, vendor, cost, po_number]);
 
   const created = await get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
   await audit(req.user, 'CREATE', created.id, `Created asset "${created.asset_code || created.brand_model || 'untitled'}" (${finalCountry})`);
@@ -207,7 +219,8 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 
   const {
     location, country, department, computer_no, brand_model, date_assigned,
-    serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status
+    serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
+    purchase_date, warranty_expiry, vendor, cost, po_number
   } = req.body;
 
   // Scoped users can't move an asset out of their country.
@@ -217,10 +230,12 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     UPDATE assets SET
       location = ?, country = ?, department = ?, computer_no = ?, brand_model = ?,
       date_assigned = ?, serial_no = ?, mk = ?, asset_code = ?,
-      user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?
+      user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?,
+      purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?
     WHERE id = ? AND deleted_at IS NULL`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
+     purchase_date, warranty_expiry, vendor, cost, po_number,
      req.params.id]);
 
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
