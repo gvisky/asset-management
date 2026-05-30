@@ -18,9 +18,11 @@ async function loadMaint() {
   const tbody = document.getElementById('maint-tbody');
   const status  = document.getElementById('filter-status').value;
   const country = document.getElementById('filter-country').value;
+  const type    = document.getElementById('filter-type').value;
   const qs = new URLSearchParams();
   if (status)  qs.set('status', status);
   if (country) qs.set('country', country);
+  if (type)    qs.set('asset_type', type);
 
   try {
     const rows = await apiGet('/api/maintenance' + (qs.toString() ? `?${qs}` : ''));
@@ -33,10 +35,13 @@ async function loadMaint() {
     }
 
     tbody.innerHTML = rows.map(m => {
-      const label = m.asset_code || m.brand_model || `#${m.asset_id}`;
+      const isServer = m.asset_type === 'server';
+      const label = m.item_label || `#${m.asset_id}`;
+      const href = (isServer ? '/server-inventory.html' : '/inventory.html') + `?search=${encodeURIComponent(label)}`;
+      const typeBadge = `<span class="badge ${isServer ? 'badge-office' : 'badge-factory'}">${isServer ? 'Server' : 'Asset'}</span>`;
       return `
       <tr>
-        <td><a href="/inventory.html?search=${encodeURIComponent(m.asset_code || m.brand_model || '')}" style="color:var(--brand)">${mEsc(label)}</a>
+        <td>${typeBadge} <a href="${href}" style="color:var(--brand)">${mEsc(label)}</a>
             <div class="text-muted text-sm">${mEsc(m.location || '')}</div></td>
         <td>${mEsc(m.type)}</td>
         <td>${mEsc(m.description)}</td>
@@ -76,4 +81,5 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'asset');
   document.getElementById('filter-status').addEventListener('change', loadMaint);
   document.getElementById('filter-country').addEventListener('change', loadMaint);
+  document.getElementById('filter-type').addEventListener('change', loadMaint);
 });

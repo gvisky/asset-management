@@ -216,10 +216,12 @@ async function migrate() {
       assigned_at   TEXT    DEFAULT (datetime('now')),
       released_at   TEXT    DEFAULT NULL);`);
 
-  // Maintenance & repair log (one row per repair/service/upgrade on an asset).
+  // Maintenance & repair log (one row per repair/service/upgrade). Links to an
+  // asset OR a server via (asset_type, asset_id).
   await backend.script(`CREATE TABLE IF NOT EXISTS maintenance_log (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       asset_id    INTEGER NOT NULL,
+      asset_type  TEXT    NOT NULL DEFAULT 'asset',   -- asset | server
       country     TEXT    DEFAULT '',
       type        TEXT    NOT NULL DEFAULT 'repair',   -- repair | service | upgrade
       description TEXT    NOT NULL DEFAULT '',
@@ -229,6 +231,46 @@ async function migrate() {
       reported_by TEXT    DEFAULT '',
       reported_at TEXT    DEFAULT (datetime('now')),
       resolved_at TEXT    DEFAULT NULL);`);
+  // Add asset_type to already-deployed maintenance tables.
+  const mcols = (await backend.all('PRAGMA table_info(maintenance_log)')).map(c => c.name);
+  if (!mcols.includes('asset_type')) await backend.run("ALTER TABLE maintenance_log ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'asset'");
+
+  // Server Asset Inventory — parallel to assets, with server-specific fields.
+  await backend.script(`
+    CREATE TABLE IF NOT EXISTS servers (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      country         TEXT    NOT NULL DEFAULT 'Vietnam',
+      location        TEXT    DEFAULT '',
+      hostname        TEXT    DEFAULT '',
+      brand_model     TEXT    DEFAULT '',
+      serial_no       TEXT    DEFAULT '',
+      asset_code      TEXT    DEFAULT '',
+      ip_address      TEXT    DEFAULT '',
+      os              TEXT    DEFAULT '',
+      cpu             TEXT    DEFAULT '',
+      ram             TEXT    DEFAULT '',
+      storage         TEXT    DEFAULT '',
+      role            TEXT    DEFAULT '',
+      status          TEXT    NOT NULL DEFAULT 'Active'
+                              CHECK(status IN ('Active','Broken','Stock')),
+      purchase_date   TEXT    DEFAULT '',
+      warranty_expiry TEXT    DEFAULT '',
+      vendor          TEXT    DEFAULT '',
+      cost            TEXT    DEFAULT '',
+      po_number       TEXT    DEFAULT '',
+      history_usage   TEXT    DEFAULT '',
+      remark          TEXT    DEFAULT '',
+      created_at      TEXT    DEFAULT (datetime('now')),
+      updated_at      TEXT    DEFAULT (datetime('now')),
+      deleted_at      TEXT    DEFAULT NULL,
+      deleted_by      TEXT    DEFAULT NULL
+    );
+    CREATE TRIGGER IF NOT EXISTS servers_updated_at
+    AFTER UPDATE ON servers
+    BEGIN
+      UPDATE servers SET updated_at = datetime('now') WHERE id = NEW.id;
+    END;
+  `);
 
   const pcols = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
   if (!pcols.includes('touched')) await backend.run('ALTER TABLE personnel ADD COLUMN touched INTEGER NOT NULL DEFAULT 0');
