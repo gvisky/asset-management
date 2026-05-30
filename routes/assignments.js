@@ -68,7 +68,7 @@ router.get('/asset/:assetId', wrap(async (req, res) => {
 // ── POST /api/assignments — check out an asset to a person (admin/editor) ─────
 router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const { asset_id, assignee_name = '', assignee_email = '', assignee_ad = '',
-          due_return_at = '', condition_out = '', handover_note = '' } = req.body;
+          location = '', due_return_at = '', condition_out = '', handover_note = '' } = req.body;
 
   const asset = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [asset_id]);
   if (!asset) return res.status(404).json({ error: 'Asset not found' });
@@ -76,26 +76,29 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   if (scope && asset.country !== scope) return res.status(403).json({ error: 'Not in your region' });
   if (!assignee_name.trim()) return res.status(400).json({ error: 'Assignee name is required' });
 
+  // Default to the asset's current location if none was supplied.
+  const loc = (location || asset.location || '').trim();
+
   // Close any still-open assignment for this asset first (single active holder).
   await run("UPDATE asset_assignments SET status = 'returned', returned_at = datetime('now'), returned_by = ? WHERE asset_id = ? AND status = 'assigned'",
     [req.user.username, asset_id]);
 
   const result = await run(
     `INSERT INTO asset_assignments
-       (asset_id, country, assignee_name, assignee_email, assignee_ad, assigned_by,
+       (asset_id, country, location, assignee_name, assignee_email, assignee_ad, assigned_by,
         due_return_at, condition_out, handover_note, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'assigned')`,
-    [asset_id, asset.country, assignee_name.trim(), assignee_email.trim(), assignee_ad.trim(),
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'assigned')`,
+    [asset_id, asset.country, loc, assignee_name.trim(), assignee_email.trim(), assignee_ad.trim(),
      req.user.username, due_return_at, condition_out, handover_note]);
 
-  // Reflect the current holder on the asset itself.
-  await run("UPDATE assets SET user_name = ?, ad_name = ?, date_assigned = date('now'), status = 'Active' WHERE id = ?",
-    [assignee_name.trim(), assignee_ad.trim() || asset.ad_name, asset_id]);
+  // Reflect the current holder AND location on the asset itself.
+  await run("UPDATE assets SET user_name = ?, ad_name = ?, location = ?, date_assigned = date('now'), status = 'Active' WHERE id = ?",
+    [assignee_name.trim(), assignee_ad.trim() || asset.ad_name, loc || asset.location, asset_id]);
 
   const created = await get('SELECT * FROM asset_assignments WHERE id = ?', [result.lastInsertRowid]);
-  await audit(req.user, 'ASSIGN', Number(asset_id), `Assigned "${label(asset)}" to ${assignee_name.trim()}`);
+  await audit(req.user, 'ASSIGN', Number(asset_id), `Assigned "${label(asset)}" to ${assignee_name.trim()}${loc ? ' @ ' + loc : ''}`);
   await notify({ audience: 'all', country: asset.country, scope: 'asset', level: 'info',
-    message: `${req.user.full_name} assigned "${label(asset)}" [${asset.country}] to ${assignee_name.trim()}.` });
+    message: `${req.user.full_name} assigned "${label(asset)}" [${asset.country}] to ${assignee_name.trim()}${loc ? ' @ ' + loc : ''}.` });
   res.status(201).json(created);
 }));
 

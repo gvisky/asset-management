@@ -35,7 +35,7 @@ async function loadAssignments() {
   try {
     const rows = await apiGet('/api/assignments' + (status ? `?status=${status}` : ''));
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No assignments.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No assignments.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -43,9 +43,9 @@ async function loadAssignments() {
       const isOpen = r.status === 'assigned';
       return `
       <tr>
-        <td><a href="/inventory.html?search=${encodeURIComponent(r.asset_code || r.brand_model || '')}" style="color:var(--brand)">${hEsc(label)}</a>
-            <div class="text-muted text-sm">${hEsc(r.location || '')}</div></td>
+        <td><a href="/inventory.html?search=${encodeURIComponent(r.asset_code || r.brand_model || '')}" style="color:var(--brand)">${hEsc(label)}</a></td>
         <td>${hEsc(r.assignee_name)}${r.assignee_ad ? `<div class="text-muted text-sm">${hEsc(r.assignee_ad)}</div>` : ''}</td>
+        <td class="text-muted text-sm">${hEsc(r.location || '')}</td>
         <td class="text-muted text-sm">${hEsc(r.assigned_at)}</td>
         <td class="text-muted text-sm">${hEsc(r.assigned_by)}</td>
         <td><span class="badge ${isOpen ? 'badge-active' : 'badge-retired'}">${isOpen ? 'Holding' : 'Returned'}</span></td>
@@ -55,7 +55,7 @@ async function loadAssignments() {
       </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load.</td></tr>';
   }
 }
 

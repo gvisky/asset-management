@@ -221,6 +221,7 @@ async function migrate() {
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       asset_id      INTEGER NOT NULL,
       country       TEXT    DEFAULT '',
+      location      TEXT    DEFAULT '',
       assignee_name  TEXT   NOT NULL DEFAULT '',
       assignee_email TEXT   DEFAULT '',
       assignee_ad    TEXT   DEFAULT '',
@@ -234,6 +235,9 @@ async function migrate() {
       handover_note TEXT    DEFAULT '',
       status        TEXT    NOT NULL DEFAULT 'assigned'  -- assigned | returned
     );`);
+  // Backfill `location` for already-deployed assignment tables.
+  const aacols = (await backend.all('PRAGMA table_info(asset_assignments)')).map(c => c.name);
+  if (!aacols.includes('location')) await backend.run("ALTER TABLE asset_assignments ADD COLUMN location TEXT DEFAULT ''");
 
   // Maintenance & repair log (one row per repair/service/upgrade on an asset).
   await backend.script(`CREATE TABLE IF NOT EXISTS maintenance_log (
