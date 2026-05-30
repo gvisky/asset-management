@@ -424,7 +424,13 @@ select.filter-select {
 .role-viewer button[onclick^="onDelete"],
 .role-viewer button[onclick^="onAddRepair"],
 .role-viewer button[onclick^="onStatus"],
+.role-viewer button[onclick^="onAssign"],
+.role-viewer button[onclick^="onCheckin"],
+.role-viewer button[onclick^="onReturn"],
+.role-viewer button[onclick^="onAssignSeat"],
+.role-viewer button[onclick^="onRelease"],
 .role-viewer .maint-edit,
+.role-viewer #btn-add,
 .role-viewer #view-edit-btn { display: none !important; }
 
 /* ── Mobile menu toggle + backdrop (injected by app.js) ───────────────── */

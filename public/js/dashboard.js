@@ -15,6 +15,14 @@ async function loadStats() {
     if (warrEl) warrEl.textContent = stats.warrantyExpiring || 0;
     if (repEl)  repEl.textContent  = stats.openRepairs || 0;
 
+    // Licenses metric comes from its own endpoint (separate module).
+    const licEl = document.getElementById('s-licenses');
+    if (licEl) {
+      apiGet('/api/licenses/stats')
+        .then(ls => { licEl.textContent = ls.expiring || 0; })
+        .catch(() => { licEl.textContent = '0'; });
+    }
+
     // By-country cards (Vietnam / Thailand / Malaysia) — appended to the stat grid.
     renderCountryCards(stats.byCountry || {});
 

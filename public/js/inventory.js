@@ -182,6 +182,22 @@ async function onView(id) {
       </div>
       <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <strong style="font-size:13.5px">👤 Assignment / Handover</strong>
+          <span class="text-muted text-sm" id="asg-current"></span>
+        </div>
+        <div class="maint-edit" style="margin-bottom:12px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <input class="form-control" id="asg-name" placeholder="Assign to (name)" style="flex:1;min-width:150px">
+            <input class="form-control" id="asg-ad" placeholder="AD name" style="max-width:130px">
+            <input class="form-control" id="asg-note" placeholder="Note" style="flex:1;min-width:120px">
+            <button class="btn btn-primary btn-sm" onclick="onAssign()">Assign</button>
+            <button class="btn btn-ghost btn-sm" id="asg-checkin" onclick="onCheckin()" style="display:none">Check-in</button>
+          </div>
+        </div>
+        <div id="asg-list" class="text-muted text-sm">Loading…</div>
+      </div>
+      <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <strong style="font-size:13.5px">🔧 Maintenance &amp; Repairs</strong>
           <span class="text-muted text-sm" id="maint-count"></span>
         </div>
@@ -202,10 +218,61 @@ async function onView(id) {
       </div>
     `;
     document.getElementById('view-overlay').classList.add('open');
+    loadHandover(id);
     loadMaintenance(id);
   } catch (err) {
     showToast('Failed to load asset', 'error');
   }
+}
+
+// ── Assignment / handover (inside the asset detail modal) ───────────────────────
+let currentAssignmentId = null;
+
+async function loadHandover(assetId) {
+  const box = document.getElementById('asg-list');
+  if (!box) return;
+  try {
+    const rows = await apiGet(`/api/assignments/asset/${assetId}`);
+    const open = rows.find(r => r.status === 'assigned');
+    currentAssignmentId = open ? open.id : null;
+    const cur = document.getElementById('asg-current');
+    const checkin = document.getElementById('asg-checkin');
+    if (cur) cur.textContent = open ? `Currently with ${open.assignee_name}` : 'Available / unassigned';
+    if (checkin) checkin.style.display = open ? '' : 'none';
+    if (!rows.length) { box.innerHTML = '<span class="text-muted text-sm">No handover history.</span>'; return; }
+    box.innerHTML = rows.map(r => `
+      <div style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <strong>${escHtml(r.assignee_name)}</strong>
+        <span class="badge ${r.status === 'assigned' ? 'badge-active' : 'badge-retired'}">${r.status === 'assigned' ? 'Holding' : 'Returned'}</span>
+        <div class="text-muted text-sm">Out: ${escHtml(r.assigned_at)} by ${escHtml(r.assigned_by)}${r.returned_at ? ` · In: ${escHtml(r.returned_at)} by ${escHtml(r.returned_by || '')}` : ''}${r.handover_note ? ` · ${escHtml(r.handover_note)}` : ''}</div>
+      </div>`).join('');
+  } catch (e) { box.innerHTML = '<span class="text-muted text-sm">Failed to load handover.</span>'; }
+}
+
+async function onAssign() {
+  if (!viewAsset) return;
+  const name = document.getElementById('asg-name').value.trim();
+  if (!name) { showToast('Enter a name', 'error'); return; }
+  try {
+    await apiPost('/api/assignments', {
+      asset_id:      viewAsset.id,
+      assignee_name: name,
+      assignee_ad:   document.getElementById('asg-ad').value.trim(),
+      handover_note: document.getElementById('asg-note').value.trim(),
+    });
+    showToast('Assigned');
+    ['asg-name', 'asg-ad', 'asg-note'].forEach(id => document.getElementById(id).value = '');
+    loadHandover(viewAsset.id);
+  } catch (e) { showToast('Assign failed', 'error'); }
+}
+
+async function onCheckin() {
+  if (!currentAssignmentId) return;
+  try {
+    await apiPost(`/api/assignments/${currentAssignmentId}/return`, {});
+    showToast('Checked in');
+    loadHandover(viewAsset.id);
+  } catch (e) { showToast('Check-in failed', 'error'); }
 }
 
 // ── Maintenance history (inside the asset detail modal) ─────────────────────────
