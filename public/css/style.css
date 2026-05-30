@@ -414,3 +414,89 @@ select.filter-select {
 .role-viewer button[onclick^="onEdit"],
 .role-viewer button[onclick^="onDelete"],
 .role-viewer #view-edit-btn { display: none !important; }
+
+/* ── Mobile menu toggle + backdrop (injected by app.js) ───────────────── */
+.menu-toggle {
+  display: none;                 /* shown only on small screens */
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 6px;
+  margin-left: -4px;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+}
+.menu-toggle:hover { background: #f3f4f6; }
+
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  z-index: 99;                   /* below sidebar (100), above content */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s ease;
+}
+.sidebar-backdrop.show { opacity: 1; pointer-events: auto; }
+
+/* Smoother momentum scrolling for wide tables on touch devices */
+.table-wrap { -webkit-overflow-scrolling: touch; }
+
+/* ── Tablet ─────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .grid-3 { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Phone ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Off-canvas sidebar */
+  .sidebar { transform: translateX(-100%); box-shadow: 0 0 40px rgba(0,0,0,.35); }
+  .sidebar.open { transform: translateX(0); }
+  .main-wrap { margin-left: 0; }
+  .menu-toggle { display: inline-flex; }
+
+  /* Tighter chrome */
+  .topbar { padding: 0 14px; gap: 8px; }
+  .topbar-title { font-size: 15px; }
+  .content { padding: 16px; }
+
+  /* Stat cards two-up */
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .stat-card { padding: 16px; gap: 12px; }
+  .stat-icon { width: 40px; height: 40px; }
+  .stat-value { font-size: 22px; }
+
+  /* Toolbar: search takes its own row, filters share the next */
+  .search-box { flex-basis: 100%; min-width: 0; }
+  select.filter-select { flex: 1; min-width: 0; }
+
+  /* Modal nearly full-width */
+  .modal { max-width: none; width: calc(100% - 24px); }
+  .modal-header, .modal-footer { padding-left: 18px; padding-right: 18px; }
+  .modal-body { padding: 18px; }
+
+  /* Pagination + toasts */
+  .pagination { justify-content: center; flex-wrap: wrap; }
+  .toast-container { top: 64px; right: 12px; left: 12px; }
+  .toast { max-width: none; }
+
+  /* Bigger touch targets */
+  .nav-link { padding: 12px 20px; font-size: 14.5px; }
+
+  /* Denser tables so more fits before horizontal scroll */
+  table { font-size: 12.5px; }
+  thead th, tbody td { padding: 9px 10px; }
+
+  /* 16px inputs prevent iOS auto-zoom on focus */
+  .form-control,
+  .search-box input,
+  select.filter-select { font-size: 16px; }
+}
+
+/* ── Small phone ────────────────────────────────────────────────────── */
+@media (max-width: 430px) {
+  .stat-grid { grid-template-columns: 1fr; }
+  .topbar-title { font-size: 14px; }
+}
