@@ -216,29 +216,6 @@ async function migrate() {
       assigned_at   TEXT    DEFAULT (datetime('now')),
       released_at   TEXT    DEFAULT NULL);`);
 
-  // Asset assignment / handover history (check-out & check-in records).
-  await backend.script(`CREATE TABLE IF NOT EXISTS asset_assignments (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      asset_id      INTEGER NOT NULL,
-      country       TEXT    DEFAULT '',
-      location      TEXT    DEFAULT '',
-      assignee_name  TEXT   NOT NULL DEFAULT '',
-      assignee_email TEXT   DEFAULT '',
-      assignee_ad    TEXT   DEFAULT '',
-      assigned_by   TEXT    DEFAULT '',
-      assigned_at   TEXT    DEFAULT (datetime('now')),
-      due_return_at TEXT    DEFAULT '',
-      returned_at   TEXT    DEFAULT NULL,
-      returned_by   TEXT    DEFAULT NULL,
-      condition_out TEXT    DEFAULT '',
-      condition_in  TEXT    DEFAULT '',
-      handover_note TEXT    DEFAULT '',
-      status        TEXT    NOT NULL DEFAULT 'assigned'  -- assigned | returned
-    );`);
-  // Backfill `location` for already-deployed assignment tables.
-  const aacols = (await backend.all('PRAGMA table_info(asset_assignments)')).map(c => c.name);
-  if (!aacols.includes('location')) await backend.run("ALTER TABLE asset_assignments ADD COLUMN location TEXT DEFAULT ''");
-
   // Maintenance & repair log (one row per repair/service/upgrade on an asset).
   await backend.script(`CREATE TABLE IF NOT EXISTS maintenance_log (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
