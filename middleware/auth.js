@@ -78,4 +78,25 @@ function requireGlobalAdmin(req, res, next) {
   })();
 }
 
-module.exports = { getUserFromRequest, requireAuth, requireRole, requireGlobalAdmin, parseCookies };
+// True for an IT-team administrator (team 'IT' + role 'admin') — e.g. Viet.
+// These are the only people allowed to unlock protected asset/server fields.
+function isITAdmin(user) {
+  return !!user && user.team === 'IT' && user.role === 'admin';
+}
+
+// Require an IT administrator (team IT + admin role).
+function requireITAdmin(req, res, next) {
+  return (async () => {
+    try {
+      const user = await getUserFromRequest(req);
+      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      if (!isITAdmin(user)) {
+        return res.status(403).json({ error: 'IT administrator only' });
+      }
+      req.user = user;
+      next();
+    } catch (e) { next(e); }
+  })();
+}
+
+module.exports = { getUserFromRequest, requireAuth, requireRole, requireGlobalAdmin, requireITAdmin, isITAdmin, parseCookies };

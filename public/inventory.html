@@ -156,6 +156,7 @@
     <div class="modal-body">
       <form id="asset-form">
         <input type="hidden" id="asset-id">
+        <div class="lock-banner" id="lock-banner" style="display:none"></div>
         <div class="form-grid">
           <div class="form-group">
             <label class="form-label">Country *</label>
@@ -250,6 +251,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button class="btn btn-ghost" id="modal-unlock" style="display:none">🔓 Unlock fields</button>
       <button class="btn btn-ghost" id="modal-print" style="display:none">🖨️ Print Delivery Form</button>
       <button class="btn btn-primary" id="modal-save">Save Asset</button>
     </div>

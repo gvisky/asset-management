@@ -225,6 +225,18 @@ tbody td {
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f9fafb; }
 
+/* Locked records (IT edited a protected field: Serial / Brand-Model / Asset Code) */
+tbody tr.row-locked > td { background: #fff7ed; }
+tbody tr.row-locked:hover > td { background: #ffedd5; }
+tbody tr.row-locked > td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+.lock-banner {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 10px 12px; margin-bottom: 14px; border-radius: 8px;
+  font-size: 13px; line-height: 1.4;
+  background: #fff7ed; border: 1px solid #fed7aa; color: #92400e;
+}
+.lock-banner.is-open { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+
 /* ── Toolbar ───────────────────────────────────────────────────────────── */
 .toolbar {
   display: flex;

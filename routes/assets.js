@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const { get, all, run, audit, notify } = require('../db/database');
-const { requireAuth, requireRole, requireGlobalAdmin } = require('../middleware/auth');
+const { requireAuth, requireRole, requireGlobalAdmin, requireITAdmin } = require('../middleware/auth');
 const { buildDeliveryForm } = require('../lib/delivery-form');
+
+// Identity fields that only IT may edit; editing one locks the record until an
+// IT admin unlocks it. Same set is used on the Server Inventory.
+const PROTECTED_FIELDS = { serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' };
 
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
@@ -251,6 +255,23 @@ router.post('/:id/sap-confirm', wrap(async (req, res) => {
   res.json({ message: 'ok', sap_confirmed: confirmed });
 }));
 
+// ── POST /api/assets/:id/unlock — IT admin re-opens the protected fields ──────
+router.post('/:id/unlock', requireITAdmin, wrap(async (req, res) => {
+  const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'Asset not found' });
+  const scope = scopeOf(req);
+  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!existing.fields_locked) return res.json({ message: 'already unlocked', fields_locked: 0 });
+
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const line = `${ts} UTC: 🔓 unlocked Serial/Brand-Model/Asset Code by ${req.user.username}`;
+  const newHistory = existing.history_usage ? `${existing.history_usage}\n${line}` : line;
+  await run('UPDATE assets SET fields_locked = 0, history_usage = ? WHERE id = ?', [newHistory, req.params.id]);
+  await audit(req.user, 'UNLOCK', Number(req.params.id),
+    `Unlocked protected fields for "${existing.asset_code || existing.brand_model || 'untitled'}"`);
+  res.json({ message: 'unlocked', fields_locked: 0 });
+}));
+
 // ── GET /api/assets/:id/delivery-form — export the signed Delivery-Acceptance
 // form (.xlsx) pre-filled with this asset, for printing & user signature. ─────
 router.get('/:id/delivery-form', wrap(async (req, res) => {
@@ -366,11 +387,32 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     const before = norm(existing[k]); const after = norm(incoming[k]);
     if (before !== after) changes.push(`${lbl}: "${before || '∅'}"→"${after || '∅'}"`);
   }
+  // ── Protected-field lock (Serial / Brand-Model / Asset Code) ───────────────
+  const protectedChanged = Object.keys(PROTECTED_FIELDS).filter(
+    (k) => incoming[k] !== undefined && norm(existing[k]) !== norm(incoming[k]));
+  if (protectedChanged.length) {
+    if (existing.fields_locked) {
+      return res.status(403).json({ error: 'Serial, Brand/Model and Asset Code are locked. An IT admin must unlock this record first.' });
+    }
+    if (req.user.team !== 'IT') {
+      return res.status(403).json({ error: 'Only IT members can edit Serial, Brand/Model or Asset Code.' });
+    }
+  }
+
   let newHistory = (canEditHistory && history_usage !== undefined) ? history_usage : existing.history_usage;
   if (changes.length) {
     const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const line = `${ts} UTC: edited ${changes.join('; ')} by ${req.user.username}`;
     newHistory = newHistory ? `${newHistory}\n${line}` : line;
+  }
+
+  // Editing a protected field locks the record and records the action.
+  let lockNow = existing.fields_locked;
+  if (protectedChanged.length) {
+    lockNow = 1;
+    const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const lockLine = `${ts} UTC: 🔒 locked ${protectedChanged.map((k) => PROTECTED_FIELDS[k]).join(', ')} after edit by ${req.user.username}`;
+    newHistory = newHistory ? `${newHistory}\n${lockLine}` : lockLine;
   }
 
   // A real change means accounting must re-sync SAP → reset the confirmation flag.
@@ -381,11 +423,11 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
       location = ?, country = ?, department = ?, computer_no = ?, brand_model = ?,
       date_assigned = ?, serial_no = ?, mk = ?, asset_code = ?,
       user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?,
-      purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?
+      purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?, fields_locked = ?
     WHERE id = ? AND deleted_at IS NULL`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, newHistory, remark, status,
-     purchase_date, warranty_expiry, vendor, cost, po_number, sapConfirmed,
+     purchase_date, warranty_expiry, vendor, cost, po_number, sapConfirmed, lockNow,
      req.params.id]);
 
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);

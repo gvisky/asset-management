@@ -305,6 +305,8 @@ async function migrate() {
   const scols = (await backend.all('PRAGMA table_info(servers)')).map(c => c.name);
   if (!scols.includes('producer')) await backend.run("ALTER TABLE servers ADD COLUMN producer TEXT DEFAULT ''");
   if (!scols.includes('category')) await backend.run("ALTER TABLE servers ADD COLUMN category TEXT DEFAULT ''");
+  // fields_locked = 1 once an IT member has edited a protected field (Serial / Brand-Model / Asset Code).
+  if (!scols.includes('fields_locked')) await backend.run("ALTER TABLE servers ADD COLUMN fields_locked INTEGER NOT NULL DEFAULT 0");
   // Backfill producer/category onto already-imported servers from the seed (by serial). Runs once.
   const backfilled = await backend.get("SELECT value FROM app_meta WHERE key = 'servers_pc_backfill'");
   if (!backfilled) {
@@ -391,6 +393,8 @@ async function migrate() {
   if (!acols.includes('po_number'))       await backend.run("ALTER TABLE assets ADD COLUMN po_number TEXT DEFAULT ''");
   // sap_confirmed = 1 once IT has sent the change to accounting for SAP update.
   if (!acols.includes('sap_confirmed'))   await backend.run("ALTER TABLE assets ADD COLUMN sap_confirmed INTEGER NOT NULL DEFAULT 0");
+  // fields_locked = 1 once an IT member has edited a protected field (Serial / Brand-Model / Asset Code).
+  if (!acols.includes('fields_locked'))   await backend.run("ALTER TABLE assets ADD COLUMN fields_locked INTEGER NOT NULL DEFAULT 0");
 }
 
 // Create a notification for a given audience/country/scope.

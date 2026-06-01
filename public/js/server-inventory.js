@@ -78,9 +78,9 @@ function renderTable(rows) {
   const tbody = document.getElementById('servers-tbody');
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty-state">No servers found.</td></tr>'; return; }
   tbody.innerHTML = rows.map(s => `
-    <tr>
+    <tr class="${s.fields_locked ? 'row-locked' : ''}">
       <td class="text-muted text-sm">${s.id}</td>
-      <td><code style="font-size:12px;color:var(--brand)">${sEsc(s.asset_code) || '—'}</code></td>
+      <td>${s.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}<code style="font-size:12px;color:var(--brand)">${sEsc(s.asset_code) || '—'}</code></td>
       <td><strong>${sEsc(s.hostname) || '—'}</strong></td>
       <td>${sEsc(s.brand_model) || '—'}</td>
       <td class="text-muted text-sm">${sEsc(s.producer) || '—'}</td>
@@ -203,10 +203,53 @@ async function onRepairStatus(id, status) {
 }
 
 // ── Add / Edit ──────────────────────────────────────────────────────────────────
-function onAdd() { sFillForm(null); sOpenModal('Add Server'); }
+function onAdd() { sFillForm(null); applyFieldLock(null); sOpenModal('Add Server'); }
 async function onEdit(id) {
-  try { const s = await apiGet(`${SAPI}/${id}`); sFillForm(s); sOpenModal('Edit Server'); }
+  try { const s = await apiGet(`${SAPI}/${id}`); sFillForm(s); applyFieldLock(s); sOpenModal('Edit Server'); }
   catch (e) { showToast('Failed to load server', 'error'); }
+}
+
+// Serial / Brand-Model / Asset Code are protected: only IT can edit them, and once
+// edited the record locks until an IT admin unlocks. Gate the form accordingly.
+const SPROTECTED_FIELDS = ['serial_no', 'brand_model', 'asset_code'];
+function applyFieldLock(s) {
+  const banner = document.getElementById('lock-banner');
+  const unlockBtn = document.getElementById('modal-unlock');
+  const it = isIT();
+  const itAdmin = isITAdmin();
+  const isNew = !s || !s.id;
+  const locked = !isNew && !!s.fields_locked;
+
+  SPROTECTED_FIELDS.forEach((f) => {
+    const el = document.getElementById('f-' + f);
+    if (!el) return;
+    let ro = false, title = '';
+    if (isNew) { ro = false; }
+    else if (!it) { ro = true; title = 'Only IT members can edit this field.'; }
+    else if (locked) { ro = true; title = 'Locked — an IT admin must unlock before editing.'; }
+    el.readOnly = ro;
+    el.style.background = ro ? '#f3f4f6' : '';
+    el.title = title;
+  });
+
+  if (banner) {
+    if (locked) {
+      banner.className = 'lock-banner';
+      banner.style.display = '';
+      banner.innerHTML = '🔒 <span><strong>Serial, Brand/Model and Asset Code are locked.</strong> '
+        + (itAdmin ? 'Use “🔓 Unlock fields” below to edit them.' : 'Ask an IT admin to unlock.') + '</span>';
+    } else if (it && !isNew) {
+      banner.className = 'lock-banner is-open';
+      banner.style.display = '';
+      banner.innerHTML = '🔓 <span>Editing Serial, Brand/Model or Asset Code will <strong>lock this record</strong> (an IT admin can unlock it later).</span>';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+  if (unlockBtn) {
+    if (locked && itAdmin) { unlockBtn.style.display = ''; unlockBtn.dataset.id = s.id; }
+    else { unlockBtn.style.display = 'none'; delete unlockBtn.dataset.id; }
+  }
 }
 async function onSave() {
   const data = sReadForm();
@@ -250,6 +293,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-add').addEventListener('click', onAdd);
   document.getElementById('modal-save').addEventListener('click', onSave);
+  const unlockBtn = document.getElementById('modal-unlock');
+  if (unlockBtn) unlockBtn.addEventListener('click', async () => {
+    const id = unlockBtn.dataset.id;
+    if (!id) return;
+    try {
+      await apiPost(`${SAPI}/${id}/unlock`, {});
+      showToast('Fields unlocked');
+      const s = await apiGet(`${SAPI}/${id}`);
+      sFillForm(s); applyFieldLock(s);
+      loadServers(sCurrentPage);
+    } catch (e) {
+      showToast('Unlock failed — IT admin only', 'error');
+    }
+  });
   document.getElementById('modal-close').addEventListener('click', sCloseModal);
   document.getElementById('modal-cancel').addEventListener('click', sCloseModal);
   document.getElementById('view-close').addEventListener('click', () => document.getElementById('view-overlay').classList.remove('open'));

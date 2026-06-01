@@ -111,6 +111,7 @@
     <div class="modal-body">
       <form id="server-form">
         <input type="hidden" id="f-id">
+        <div class="lock-banner" id="lock-banner" style="display:none"></div>
         <div class="form-grid">
           <div class="form-group"><label class="form-label">Country *</label><select class="form-control" id="f-country" required><option>Vietnam</option><option>Thailand</option><option>Malaysia</option></select></div>
           <div class="form-group"><label class="form-label">Location</label><input class="form-control" id="f-location" type="text" placeholder="e.g. Server Room / DC"></div>
@@ -139,6 +140,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" id="modal-cancel">Cancel</button>
+      <button class="btn btn-ghost" id="modal-unlock" style="display:none">🔓 Unlock fields</button>
       <button class="btn btn-primary" id="modal-save">Save Server</button>
     </div>
   </div>

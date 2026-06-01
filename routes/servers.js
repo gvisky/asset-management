@@ -1,10 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { get, all, run, audit, notify } = require('../db/database');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireRole, requireITAdmin } = require('../middleware/auth');
 
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
+
+// Identity fields that only IT may edit; editing one locks the record until an IT admin unlocks it.
+const PROTECTED_FIELDS = { serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' };
 
 router.use(requireAuth);
 router.use((req, res, next) => {
@@ -136,6 +139,18 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     if (incoming[k] === undefined) continue;
     if (norm(existing[k]) !== norm(incoming[k])) changes.push(`${lbl}: "${norm(existing[k]) || '∅'}"→"${norm(incoming[k]) || '∅'}"`);
   }
+  // ── Protected-field lock (Serial / Brand-Model / Asset Code) ───────────────
+  const protectedChanged = Object.keys(PROTECTED_FIELDS).filter(
+    (k) => incoming[k] !== undefined && norm(existing[k]) !== norm(incoming[k]));
+  if (protectedChanged.length) {
+    if (existing.fields_locked) {
+      return res.status(403).json({ error: 'Serial, Brand/Model and Asset Code are locked. An IT admin must unlock this record first.' });
+    }
+    if (req.user.team !== 'IT') {
+      return res.status(403).json({ error: 'Only IT members can edit Serial, Brand/Model or Asset Code.' });
+    }
+  }
+
   const canEditHistory = req.user.username === HISTORY_OWNER;
   let newHistory = (canEditHistory && req.body.history_usage !== undefined) ? req.body.history_usage : existing.history_usage;
   if (changes.length) {
@@ -144,8 +159,17 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     newHistory = newHistory ? `${newHistory}\n${line}` : line;
   }
 
-  const setFields = ['country', ...FIELDS, 'history_usage'];
-  const setVals = [finalCountry, ...FIELDS.map(f => (req.body[f] !== undefined ? req.body[f] : existing[f])), newHistory];
+  // Editing a protected field locks the record and records the action.
+  let lockNow = existing.fields_locked;
+  if (protectedChanged.length) {
+    lockNow = 1;
+    const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const lockLine = `${ts} UTC: 🔒 locked ${protectedChanged.map((k) => PROTECTED_FIELDS[k]).join(', ')} after edit by ${req.user.username}`;
+    newHistory = newHistory ? `${newHistory}\n${lockLine}` : lockLine;
+  }
+
+  const setFields = ['country', ...FIELDS, 'history_usage', 'fields_locked'];
+  const setVals = [finalCountry, ...FIELDS.map(f => (req.body[f] !== undefined ? req.body[f] : existing[f])), newHistory, lockNow];
   await run(
     `UPDATE servers SET ${setFields.map(c => c + ' = ?').join(', ')} WHERE id = ? AND deleted_at IS NULL`,
     [...setVals, req.params.id]);
@@ -166,6 +190,23 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   await notify({ audience: 'all', country: existing.country, scope: 'asset', level: 'warning',
     message: `${req.user.full_name} deleted server "${label}" [${existing.country}].` });
   res.json({ message: 'Deleted' });
+}));
+
+// ── POST /api/servers/:id/unlock — IT admin re-opens the protected fields ─────
+router.post('/:id/unlock', requireITAdmin, wrap(async (req, res) => {
+  const existing = await get('SELECT * FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'Server not found' });
+  const scope = scopeOf(req);
+  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!existing.fields_locked) return res.json({ message: 'already unlocked', fields_locked: 0 });
+
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const line = `${ts} UTC: 🔓 unlocked Serial/Brand-Model/Asset Code by ${req.user.username}`;
+  const newHistory = existing.history_usage ? `${existing.history_usage}\n${line}` : line;
+  await run('UPDATE servers SET fields_locked = 0, history_usage = ? WHERE id = ?', [newHistory, req.params.id]);
+  await audit(req.user, 'UNLOCK', Number(req.params.id),
+    `Unlocked protected fields for "${existing.hostname || existing.asset_code || 'untitled'}"`);
+  res.json({ message: 'unlocked', fields_locked: 0 });
 }));
 
 module.exports = router;

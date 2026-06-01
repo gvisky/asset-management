@@ -144,9 +144,9 @@ function renderTable(rows) {
   }
 
   tbody.innerHTML = rows.map((a, i) => `
-    <tr>
+    <tr class="${a.fields_locked ? 'row-locked' : ''}">
       <td class="text-muted text-sm">${a.id}</td>
-      <td><code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code></td>
+      <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code></td>
       <td>${a.brand_model || '—'}</td>
       <td class="text-muted text-sm">${a.computer_no || '—'}</td>
       <td><span class="badge badge-factory">${a.country || '—'}</span></td>
@@ -353,6 +353,7 @@ async function onEdit(id) {
     const a = await apiGet(`${API}/${id}`);
     setFormData(a);
     applyHistoryLock();
+    applyFieldLock(a);
     editMode = true;
     // Show the "Print Delivery Form" button (edit mode only — needs a saved asset).
     const pb = document.getElementById('modal-print');
@@ -360,6 +361,49 @@ async function onEdit(id) {
     openModal('Edit Asset');
   } catch (err) {
     showToast('Failed to load asset', 'error');
+  }
+}
+
+// Serial / Brand-Model / Asset Code are protected: only IT can edit them, and once
+// edited the record locks until an IT admin unlocks. Gate the form accordingly.
+const PROTECTED_FIELDS = ['serial_no', 'brand_model', 'asset_code'];
+function applyFieldLock(a) {
+  const banner = document.getElementById('lock-banner');
+  const unlockBtn = document.getElementById('modal-unlock');
+  const it = isIT();
+  const itAdmin = isITAdmin();
+  const isNew = !a || !a.id;
+  const locked = !isNew && !!a.fields_locked;
+
+  PROTECTED_FIELDS.forEach((f) => {
+    const el = document.getElementById('f-' + f);
+    if (!el) return;
+    let ro = false, title = '';
+    if (isNew) { ro = false; }                       // creating a new asset — fields open
+    else if (!it) { ro = true; title = 'Only IT members can edit this field.'; }
+    else if (locked) { ro = true; title = 'Locked — an IT admin must unlock before editing.'; }
+    el.readOnly = ro;
+    el.style.background = ro ? '#f3f4f6' : '';
+    el.title = title;
+  });
+
+  if (banner) {
+    if (locked) {
+      banner.className = 'lock-banner';
+      banner.style.display = '';
+      banner.innerHTML = '🔒 <span><strong>Serial, Brand/Model and Asset Code are locked.</strong> '
+        + (itAdmin ? 'Use “🔓 Unlock fields” below to edit them.' : 'Ask an IT admin to unlock.') + '</span>';
+    } else if (it && !isNew) {
+      banner.className = 'lock-banner is-open';
+      banner.style.display = '';
+      banner.innerHTML = '🔓 <span>Editing Serial, Brand/Model or Asset Code will <strong>lock this record</strong> (an IT admin can unlock it later).</span>';
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+  if (unlockBtn) {
+    if (locked && itAdmin) { unlockBtn.style.display = ''; unlockBtn.dataset.id = a.id; }
+    else { unlockBtn.style.display = 'none'; delete unlockBtn.dataset.id; }
   }
 }
 
@@ -496,6 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clearForm();
       const pb = document.getElementById('modal-print');
       if (pb) pb.style.display = 'none';   // can't print an unsaved asset
+      applyFieldLock(null);                // new asset — protected fields open, no lock UI
       openModal('Add Asset');
     });
   });
@@ -503,6 +548,22 @@ document.addEventListener('DOMContentLoaded', () => {
   // Print Delivery Form (edit modal)
   const printBtn = document.getElementById('modal-print');
   if (printBtn) printBtn.addEventListener('click', () => printDeliveryForm(printBtn.dataset.id));
+
+  // Unlock protected fields (IT admin only)
+  const unlockBtn = document.getElementById('modal-unlock');
+  if (unlockBtn) unlockBtn.addEventListener('click', async () => {
+    const id = unlockBtn.dataset.id;
+    if (!id) return;
+    try {
+      await apiPost(`${API}/${id}/unlock`, {});
+      showToast('Fields unlocked');
+      const a = await apiGet(`${API}/${id}`);
+      setFormData(a); applyHistoryLock(); applyFieldLock(a);
+      loadAssets(currentPage);
+    } catch (e) {
+      showToast('Unlock failed — IT admin only', 'error');
+    }
+  });
 
   // View modal
   document.getElementById('view-close').addEventListener('click', () => document.getElementById('view-overlay').classList.remove('open'));

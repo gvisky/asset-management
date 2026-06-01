@@ -22,6 +22,8 @@ async function ensureAuth() {
 function isAdmin()       { return window.CURRENT_USER && window.CURRENT_USER.role === 'admin'; }
 function isGlobalAdmin() { return isAdmin() && !window.CURRENT_USER.country; }   // admin with no country
 function canEdit()       { return window.CURRENT_USER && ['admin','editor'].includes(window.CURRENT_USER.role); }
+function isIT()          { return window.CURRENT_USER && window.CURRENT_USER.team === 'IT'; }
+function isITAdmin()     { return isIT() && window.CURRENT_USER.role === 'admin'; }   // e.g. Viet
 function roleLabel(u)    {
   const r = (u.role || '').charAt(0).toUpperCase() + (u.role || '').slice(1);
   return u.country ? `${u.country} ${r}` : r;
