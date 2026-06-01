@@ -11,7 +11,7 @@ const sEsc = (s) => String(s == null ? '' : s)
 const sAttr = (s) => String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 
 const SFIELDS = ['country', 'location', 'status', 'hostname', 'asset_code', 'brand_model',
-  'serial_no', 'ip_address', 'role', 'os', 'cpu', 'ram', 'storage',
+  'producer', 'category', 'serial_no', 'ip_address', 'role', 'os', 'cpu', 'ram', 'storage',
   'purchase_date', 'warranty_expiry', 'vendor', 'cost', 'po_number', 'history_usage', 'remark'];
 
 function sReadForm() {
@@ -40,11 +40,13 @@ function sCloseModal() { document.getElementById('modal-overlay').classList.remo
 
 async function loadFilters() {
   try {
-    const { roles, countries } = await apiGet(`${SAPI}/filters`);
+    const { categories, producers, countries } = await apiGet(`${SAPI}/filters`);
     document.getElementById('filter-country').innerHTML =
       '<option value="">All Countries</option>' + countries.map(c => `<option>${sEsc(c)}</option>`).join('');
-    document.getElementById('filter-role').innerHTML =
-      '<option value="">All Roles</option>' + roles.map(r => `<option>${sEsc(r)}</option>`).join('');
+    document.getElementById('filter-producer').innerHTML =
+      '<option value="">All Producers</option>' + (producers || []).map(p => `<option>${sEsc(p)}</option>`).join('');
+    document.getElementById('filter-category').innerHTML =
+      '<option value="">All Categories</option>' + (categories || []).map(c => `<option>${sEsc(c)}</option>`).join('');
   } catch (e) { /* non-fatal */ }
 }
 
@@ -55,33 +57,36 @@ async function loadServers(page = 1) {
   const s = document.getElementById('search-input').value.trim();
   const c = document.getElementById('filter-country').value;
   const st = document.getElementById('filter-status').value;
-  const r = document.getElementById('filter-role').value;
+  const cat = document.getElementById('filter-category').value;
+  const prod = document.getElementById('filter-producer').value;
   if (s) qs.set('search', s);
   if (c) qs.set('country', c);
   if (st) qs.set('status', st);
-  if (r) qs.set('role', r);
+  if (cat) qs.set('category', cat);
+  if (prod) qs.set('producer', prod);
   try {
     const result = await apiGet(`${SAPI}?${qs}`);
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
     document.getElementById('total-label').textContent = `${result.total} server(s)`;
   } catch (e) {
-    document.getElementById('servers-tbody').innerHTML = '<tr><td colspan="11" class="empty-state">Failed to load.</td></tr>';
+    document.getElementById('servers-tbody').innerHTML = '<tr><td colspan="12" class="empty-state">Failed to load.</td></tr>';
   }
 }
 
 function renderTable(rows) {
   const tbody = document.getElementById('servers-tbody');
-  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="11" class="empty-state">No servers found.</td></tr>'; return; }
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty-state">No servers found.</td></tr>'; return; }
   tbody.innerHTML = rows.map(s => `
     <tr>
       <td class="text-muted text-sm">${s.id}</td>
       <td><code style="font-size:12px;color:var(--brand)">${sEsc(s.asset_code) || '—'}</code></td>
       <td><strong>${sEsc(s.hostname) || '—'}</strong></td>
       <td>${sEsc(s.brand_model) || '—'}</td>
+      <td class="text-muted text-sm">${sEsc(s.producer) || '—'}</td>
+      <td>${s.category ? `<span class="badge badge-office">${sEsc(s.category)}</span>` : '—'}</td>
       <td class="text-muted text-sm">${sEsc(s.ip_address) || '—'}</td>
       <td class="text-muted text-sm">${sEsc(s.os) || '—'}</td>
-      <td>${sEsc(s.role) || '—'}</td>
       <td><span class="badge badge-factory">${sEsc(s.country) || '—'}</span></td>
       <td class="text-muted text-sm">${sEsc(s.location) || '—'}</td>
       <td>${statusBadge(s.status)}</td>
@@ -119,6 +124,7 @@ async function onView(id) {
     viewServer = s;
     const fields = [
       ['Asset Code', s.asset_code], ['Hostname', s.hostname], ['Brand / Model', s.brand_model],
+      ['Producer', s.producer], ['Category', s.category],
       ['Country', s.country], ['Location', s.location], ['Status', statusBadge(s.status)],
       ['IP Address', s.ip_address], ['OS', s.os], ['Role', s.role],
       ['CPU', s.cpu], ['RAM', s.ram], ['Storage', s.storage], ['Serial #', s.serial_no],
@@ -235,10 +241,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadServers(1), 320); });
-  ['filter-country', 'filter-status', 'filter-role'].forEach(id => document.getElementById(id).addEventListener('change', () => loadServers(1)));
+  ['filter-country', 'filter-status', 'filter-category', 'filter-producer'].forEach(id => document.getElementById(id).addEventListener('change', () => loadServers(1)));
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
-    ['filter-country', 'filter-status', 'filter-role'].forEach(id => document.getElementById(id).value = '');
+    ['filter-country', 'filter-status', 'filter-category', 'filter-producer'].forEach(id => document.getElementById(id).value = '');
     loadServers(1);
   });
 

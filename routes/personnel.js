@@ -65,8 +65,15 @@ router.get('/', wrap(async (req, res) => {
   const offset = (Number(page) - 1) * Number(limit);
 
   const total = Number((await get(`SELECT COUNT(*) AS c FROM personnel ${where}`, params)).c);
+  // asset_count links a person to the Asset Inventory by AD Name:
+  // asset.ad_name == the local-part of the person's email (before @hayat.com.tr).
   const data = await all(
-    `SELECT * FROM personnel ${where} ORDER BY display_name COLLATE NOCASE LIMIT ? OFFSET ?`,
+    `SELECT p.*, (
+        SELECT COUNT(*) FROM assets a
+        WHERE a.deleted_at IS NULL AND a.ad_name <> '' AND instr(p.email,'@') > 0
+          AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1))
+      ) AS asset_count
+     FROM personnel p ${where} ORDER BY display_name COLLATE NOCASE LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );
   res.json({ total, page: Number(page), limit: Number(limit), data,

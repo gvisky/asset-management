@@ -93,11 +93,11 @@ async function seedServers() {
   catch (e) { console.error('[seed] servers-seed.json parse failed:', e.message); return; }
   for (const r of rows) {
     await backend.run(
-      `INSERT INTO servers (country, location, hostname, brand_model, serial_no, asset_code,
+      `INSERT INTO servers (country, location, hostname, brand_model, producer, category, serial_no, asset_code,
          role, status, purchase_date, vendor, cost, remark)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [r.country || 'Vietnam', r.location || '', r.hostname || '', r.brand_model || '',
-       r.serial_no || '', r.asset_code || '', r.role || '', r.status || 'Active',
+       r.producer || '', r.category || '', r.serial_no || '', r.asset_code || '', r.role || '', r.status || 'Active',
        r.purchase_date || '', r.vendor || '', r.cost || '', r.remark || '']
     );
   }
@@ -270,6 +270,8 @@ async function migrate() {
       location        TEXT    DEFAULT '',
       hostname        TEXT    DEFAULT '',
       brand_model     TEXT    DEFAULT '',
+      producer        TEXT    DEFAULT '',
+      category        TEXT    DEFAULT '',
       serial_no       TEXT    DEFAULT '',
       asset_code      TEXT    DEFAULT '',
       ip_address      TEXT    DEFAULT '',
@@ -298,6 +300,28 @@ async function migrate() {
       UPDATE servers SET updated_at = datetime('now') WHERE id = NEW.id;
     END;
   `);
+
+  // Producer + Category on servers (additive) for easy device-type checking.
+  const scols = (await backend.all('PRAGMA table_info(servers)')).map(c => c.name);
+  if (!scols.includes('producer')) await backend.run("ALTER TABLE servers ADD COLUMN producer TEXT DEFAULT ''");
+  if (!scols.includes('category')) await backend.run("ALTER TABLE servers ADD COLUMN category TEXT DEFAULT ''");
+  // Backfill producer/category onto already-imported servers from the seed (by serial). Runs once.
+  const backfilled = await backend.get("SELECT value FROM app_meta WHERE key = 'servers_pc_backfill'");
+  if (!backfilled) {
+    const seedPath = path.join(__dirname, 'servers-seed.json');
+    if (fs.existsSync(seedPath)) {
+      try {
+        const seed = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+        for (const s of seed) {
+          if (!s.serial_no) continue;
+          await backend.run(
+            "UPDATE servers SET producer = ?, category = ? WHERE serial_no = ? AND (producer IS NULL OR producer = '')",
+            [s.producer || '', s.category || '', s.serial_no]);
+        }
+      } catch (e) { console.error('[seed] server backfill failed:', e.message); }
+    }
+    await backend.run("INSERT INTO app_meta (key, value) VALUES ('servers_pc_backfill', '1') ON CONFLICT(key) DO NOTHING");
+  }
 
   const pcols = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
   if (!pcols.includes('touched')) await backend.run('ALTER TABLE personnel ADD COLUMN touched INTEGER NOT NULL DEFAULT 0');

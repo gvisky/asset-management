@@ -61,17 +61,18 @@
         <select class="filter-select" id="filter-status">
           <option value="">All Statuses</option><option>Active</option><option>Broken</option><option>Stock</option>
         </select>
-        <select class="filter-select" id="filter-role"><option value="">All Roles</option></select>
+        <select class="filter-select" id="filter-producer"><option value="">All Producers</option></select>
+        <select class="filter-select" id="filter-category"><option value="">All Categories</option></select>
         <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
       </div>
 
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>Asset Code</th><th>Hostname</th><th>Brand / Model</th><th>IP Address</th><th>OS</th><th>Role</th><th>Country</th><th>Location</th><th>Status</th><th>Actions</th></tr>
+            <tr><th>#</th><th>Asset Code</th><th>Hostname</th><th>Brand / Model</th><th>Producer</th><th>Category</th><th>IP Address</th><th>OS</th><th>Country</th><th>Location</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody id="servers-tbody">
-            <tr><td colspan="11" class="empty-state">Loading…</td></tr>
+            <tr><td colspan="12" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -117,6 +118,8 @@
           <div class="form-group"><label class="form-label">Hostname</label><input class="form-control" id="f-hostname" type="text" placeholder="e.g. VN-DC01"></div>
           <div class="form-group"><label class="form-label">Asset Code</label><input class="form-control" id="f-asset_code" type="text"></div>
           <div class="form-group"><label class="form-label">Brand / Model</label><input class="form-control" id="f-brand_model" type="text" placeholder="e.g. Dell PowerEdge R740"></div>
+          <div class="form-group"><label class="form-label">Producer</label><input class="form-control" id="f-producer" type="text" placeholder="e.g. Dell"></div>
+          <div class="form-group"><label class="form-label">Category</label><input class="form-control" id="f-category" type="text" placeholder="e.g. Dell Vx-rails"></div>
           <div class="form-group"><label class="form-label">Serial #</label><input class="form-control" id="f-serial_no" type="text"></div>
           <div class="form-group"><label class="form-label">IP Address</label><input class="form-control" id="f-ip_address" type="text" placeholder="e.g. 10.0.0.10"></div>
           <div class="form-group"><label class="form-label">Role / Purpose</label><input class="form-control" id="f-role" type="text" placeholder="e.g. AD / File / DB"></div>

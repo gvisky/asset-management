@@ -201,6 +201,16 @@ router.get('/deleted', requireRole('admin'), wrap(async (req, res) => {
   res.json(rows);
 }));
 
+// ── GET /api/assets/by-user/:adname — assets linked to a person by AD Name ────
+router.get('/by-user/:adname', wrap(async (req, res) => {
+  const cf = countryFilter(req);
+  const cond = ['deleted_at IS NULL', 'LOWER(ad_name) = LOWER(?)'];
+  const params = [req.params.adname];
+  if (cf.clause) { cond.push(cf.clause); params.push(...cf.params); }
+  const rows = await all(`SELECT * FROM assets WHERE ${cond.join(' AND ')} ORDER BY id DESC`, params);
+  res.json(rows);
+}));
+
 // ── GET /api/assets/:id — single asset ───────────────────────────────────────
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);

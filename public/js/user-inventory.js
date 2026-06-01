@@ -81,10 +81,20 @@ function renderTable(rows) {
     const ldDisabled = (canEditUserType && p.user_type) ? '' : 'disabled';
     // Status editable by IT only after HR has set the User Type.
     const stLocked = canEditStatus && !p.user_type;
+    const adName = String(p.email || '').split('@')[0];
+    const canSeeAssets = window.CURRENT_USER && window.CURRENT_USER.asset_access !== 0;
+    const cnt = Number(p.asset_count || 0);
+    let assetsCell = '<span class="text-muted">—</span>';
+    if (cnt > 0) {
+      assetsCell = canSeeAssets
+        ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets('${adName.replace(/'/g, "\\'")}','${esc(p.display_name)}')">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
+        : `<span class="badge badge-active">${cnt}</span>`;
+    }
     return `
       <tr>
         <td><strong>${esc(p.display_name) || '—'}</strong></td>
         <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
+        <td>${assetsCell}</td>
         <td><span class="badge badge-factory">${p.country}</span></td>
         <td>
           ${canEditUserType
@@ -106,6 +116,29 @@ function renderTable(rows) {
         </td>
       </tr>`;
   }).join('');
+}
+
+// Show the assets linked to a person (asset.ad_name == email local-part).
+async function viewAssets(adName, displayName) {
+  const overlay = document.getElementById('assets-overlay');
+  const body = document.getElementById('assets-body');
+  document.getElementById('assets-title').textContent = `Assets of ${displayName} (AD: ${adName})`;
+  body.innerHTML = 'Loading…';
+  overlay.classList.add('open');
+  try {
+    const rows = await apiGet(`/api/assets/by-user/${encodeURIComponent(adName)}`);
+    if (!rows.length) { body.innerHTML = '<div class="text-muted text-sm">No assets linked to this AD name.</div>'; return; }
+    body.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Asset Code</th><th>Brand / Model</th><th>Country</th><th>Location</th><th>Status</th></tr></thead><tbody>${
+      rows.map(a => `<tr>
+        <td><code style="font-size:12px;color:var(--brand)">${esc(a.asset_code) || '—'}</code></td>
+        <td>${esc(a.brand_model) || '—'}</td>
+        <td>${esc(a.country)}</td>
+        <td>${esc(a.location) || '—'}</td>
+        <td>${statusBadge(a.status)}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+  } catch (e) {
+    body.innerHTML = '<div class="text-muted text-sm">Could not load assets.</div>';
+  }
 }
 
 async function savePerson(id, field, value) {
@@ -194,6 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadMeta();
   loadSummary();
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'personnel');
+  document.getElementById('assets-close').addEventListener('click', () => document.getElementById('assets-overlay').classList.remove('open'));
 
   // Upload buttons (top bar + reminder banner)
   document.getElementById('btn-upload').addEventListener('click', handleUpload);

@@ -26,7 +26,7 @@ function countryFilter(req) {
 
 // ── GET /api/servers — list ───────────────────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
-  const { search = '', status = '', location = '', role = '', page = 1, limit = 50 } = req.query;
+  const { search = '', status = '', location = '', role = '', category = '', producer = '', page = 1, limit = 50 } = req.query;
   const conditions = ['deleted_at IS NULL'];
   const params = [];
   const cf = countryFilter(req);
@@ -34,13 +34,15 @@ router.get('/', wrap(async (req, res) => {
 
   if (search) {
     conditions.push(`(hostname LIKE ? OR brand_model LIKE ? OR serial_no LIKE ? OR
-      asset_code LIKE ? OR ip_address LIKE ? OR os LIKE ? OR role LIKE ?)`);
+      asset_code LIKE ? OR ip_address LIKE ? OR os LIKE ? OR role LIKE ? OR producer LIKE ? OR category LIKE ?)`);
     const like = `%${search}%`;
-    params.push(like, like, like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like, like);
   }
   if (status)   { conditions.push('status = ?');   params.push(status); }
   if (location) { conditions.push('location = ?'); params.push(location); }
   if (role)     { conditions.push('role = ?');     params.push(role); }
+  if (category) { conditions.push('category = ?'); params.push(category); }
+  if (producer) { conditions.push('producer = ?'); params.push(producer); }
 
   const where = 'WHERE ' + conditions.join(' AND ');
   const offset = (Number(page) - 1) * Number(limit);
@@ -69,8 +71,10 @@ router.get('/filters', wrap(async (req, res) => {
   const cf = countryFilter(req);
   const extra = cf.clause ? ` AND ${cf.clause}` : '';
   const roles = (await all(`SELECT DISTINCT role AS v FROM servers WHERE deleted_at IS NULL AND role <> ''${extra} ORDER BY role COLLATE NOCASE`, cf.params)).map(r => r.v);
+  const categories = (await all(`SELECT DISTINCT category AS v FROM servers WHERE deleted_at IS NULL AND category <> ''${extra} ORDER BY category COLLATE NOCASE`, cf.params)).map(r => r.v);
+  const producers = (await all(`SELECT DISTINCT producer AS v FROM servers WHERE deleted_at IS NULL AND producer <> ''${extra} ORDER BY producer COLLATE NOCASE`, cf.params)).map(r => r.v);
   const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
-  res.json({ roles, countries });
+  res.json({ roles, categories, producers, countries });
 }));
 
 // ── GET /api/servers/:id ─────────────────────────────────────────────────────
@@ -89,7 +93,7 @@ function resolveCountry(req, requested) {
   return 'Vietnam';
 }
 
-const FIELDS = ['location', 'hostname', 'brand_model', 'serial_no', 'asset_code', 'ip_address',
+const FIELDS = ['location', 'hostname', 'brand_model', 'producer', 'category', 'serial_no', 'asset_code', 'ip_address',
   'os', 'cpu', 'ram', 'storage', 'role', 'status', 'purchase_date', 'warranty_expiry',
   'vendor', 'cost', 'po_number', 'remark'];
 
