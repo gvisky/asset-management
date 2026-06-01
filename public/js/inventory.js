@@ -82,7 +82,7 @@ async function loadAssets(page = 1) {
 function renderTable(rows) {
   const tbody = document.getElementById('assets-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state">
       <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
       <p>No assets found.</p>
     </div></td></tr>`;
@@ -99,6 +99,7 @@ function renderTable(rows) {
       <td>${locationBadge(a.location)}</td>
       <td class="truncate" title="${esc(a.department) }">${a.department || '—'}</td>
       <td>${a.user_name || '—'}</td>
+      <td class="text-muted text-sm">${a.ad_name || '<span style="color:var(--broken)">—</span>'}</td>
       <td class="text-muted text-sm">${a.serial_no || '—'}</td>
       <td>${statusBadge(a.status)}</td>
       <td>

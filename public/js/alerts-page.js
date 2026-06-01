@@ -20,6 +20,7 @@ async function loadNeedsAttention() {
       if (miss(a.serial_no))   tags.push('Serial');
       if (miss(a.asset_code))  tags.push('Code');
       if (miss(a.computer_no)) tags.push('PC No');
+      if (a.status === 'Active' && miss(a.ad_name)) tags.push('AD Name');
       let html = tags.map(t => `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
       if (a.dup_serial) {
         const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');

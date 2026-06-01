@@ -111,7 +111,8 @@ router.get('/stats', wrap(async (req, res) => {
   const incCond = [...liveCond, `(
       serial_no   IS NULL OR serial_no   = '' OR
       asset_code  IS NULL OR asset_code  = '' OR
-      computer_no IS NULL OR computer_no = ''
+      computer_no IS NULL OR computer_no = '' OR
+      (status = 'Active' AND (ad_name IS NULL OR ad_name = ''))
     )`];
   const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, lp)).cnt);
 
@@ -156,8 +157,14 @@ router.get('/incomplete', wrap(async (req, res) => {
      GROUP BY serial_no HAVING COUNT(*) > 1`, cf.params)).map(r => String(r.serial_no));
   const dupSet = new Set(dups);
 
-  // Assets missing a key identifier.
-  const cond = ['deleted_at IS NULL', `(serial_no IS NULL OR serial_no='' OR asset_code IS NULL OR asset_code='' OR computer_no IS NULL OR computer_no='')`];
+  // Assets missing a key identifier, OR an Active asset with no AD Name.
+  // (Broken/Stock assets don't need an AD Name.)
+  const cond = ['deleted_at IS NULL', `(
+      serial_no IS NULL OR serial_no='' OR
+      asset_code IS NULL OR asset_code='' OR
+      computer_no IS NULL OR computer_no='' OR
+      (status = 'Active' AND (ad_name IS NULL OR ad_name=''))
+    )`];
   if (cf.clause) cond.push(cf.clause);
   const incomplete = await all(`SELECT * FROM assets WHERE ${cond.join(' AND ')}`, cf.params);
 
