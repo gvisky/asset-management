@@ -59,11 +59,16 @@ router.get('/', wrap(async (req, res) => {
   if (brand)      { conditions.push('brand_model = ?'); params.push(brand); }
   if (department) { conditions.push('department = ?');  params.push(department); }
   if (incomplete) {
+    // Must mirror GET /incomplete exactly: missing key field, Active-without-AD, or duplicate serial.
+    const dupCountry = cf.clause ? ` AND ${cf.clause}` : '';
     conditions.push(`(
       serial_no   IS NULL OR serial_no   = '' OR
       asset_code  IS NULL OR asset_code  = '' OR
-      computer_no IS NULL OR computer_no = ''
+      computer_no IS NULL OR computer_no = '' OR
+      (status = 'Active' AND (ad_name IS NULL OR ad_name = '')) OR
+      serial_no IN (SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${dupCountry} GROUP BY serial_no HAVING COUNT(*) > 1)
     )`);
+    if (cf.clause) params.push(...cf.params);
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');
