@@ -342,10 +342,25 @@ async function onEdit(id) {
     setFormData(a);
     applyHistoryLock();
     editMode = true;
+    // Show the "Print Delivery Form" button (edit mode only — needs a saved asset).
+    const pb = document.getElementById('modal-print');
+    if (pb) { pb.style.display = ''; pb.dataset.id = id; }
     openModal('Edit Asset');
   } catch (err) {
     showToast('Failed to load asset', 'error');
   }
+}
+
+// Download the pre-filled Delivery-Acceptance form (.xlsx) for printing & signature.
+function printDeliveryForm(id) {
+  if (!id) return;
+  const a = document.createElement('a');
+  a.href = `${API}/${id}/delivery-form`;
+  a.download = '';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast('Downloading delivery form…');
 }
 
 // Lock the history field when opening the Add modal too (runs after app.js).
@@ -467,9 +482,15 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       editMode = false;
       clearForm();
+      const pb = document.getElementById('modal-print');
+      if (pb) pb.style.display = 'none';   // can't print an unsaved asset
       openModal('Add Asset');
     });
   });
+
+  // Print Delivery Form (edit modal)
+  const printBtn = document.getElementById('modal-print');
+  if (printBtn) printBtn.addEventListener('click', () => printDeliveryForm(printBtn.dataset.id));
 
   // View modal
   document.getElementById('view-close').addEventListener('click', () => document.getElementById('view-overlay').classList.remove('open'));

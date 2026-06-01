@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { get, all, run, audit, notify } = require('../db/database');
 const { requireAuth, requireRole, requireGlobalAdmin } = require('../middleware/auth');
+const { buildDeliveryForm } = require('../lib/delivery-form');
 
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
@@ -248,6 +249,33 @@ router.post('/:id/sap-confirm', wrap(async (req, res) => {
   await audit(req.user, 'SAP', Number(req.params.id),
     `${confirmed ? 'Confirmed sent to accounting (SAP)' : 'Unmarked SAP'} for "${existing.asset_code || existing.brand_model || 'untitled'}"`);
   res.json({ message: 'ok', sap_confirmed: confirmed });
+}));
+
+// ── GET /api/assets/:id/delivery-form — export the signed Delivery-Acceptance
+// form (.xlsx) pre-filled with this asset, for printing & user signature. ─────
+router.get('/:id/delivery-form', wrap(async (req, res) => {
+  const a = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
+  if (!a) return res.status(404).json({ error: 'Asset not found' });
+  const scope = scopeOf(req);
+  if (scope && a.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const buf = buildDeliveryForm({
+    brand_model: a.brand_model,
+    asset_code:  a.asset_code,
+    serial_no:   a.serial_no,
+    date_print:  today,
+    department:  a.department,
+    it_member:   req.user.full_name || req.user.username,
+    user_name:   a.user_name || a.ad_name || '',
+  });
+
+  await audit(req.user, 'PRINT', a.id, `Printed delivery form for "${a.asset_code || a.brand_model || 'untitled'}"`);
+
+  const safe = String(a.asset_code || a.brand_model || a.id).replace(/[^\w.-]+/g, '_').slice(0, 40);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="Delivery-Form-${safe}.xlsx"`);
+  res.send(buf);
 }));
 
 // ── GET /api/assets/:id — single asset ───────────────────────────────────────
