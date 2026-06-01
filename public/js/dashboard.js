@@ -164,7 +164,11 @@ async function loadAlerts() {
       if (miss(a.computer_no)) tags.push('PC No');
       let tagHtml = tags.map(t =>
         `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
-      if (a.dup_serial) tagHtml += `<span class="badge" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial</span>`;
+      if (a.dup_serial) {
+        const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');
+        const title = others ? `Same serial "${a.serial_no}" as: ${others}` : `Duplicate serial "${a.serial_no}"`;
+        tagHtml += `<span class="badge" title="${title.replace(/"/g,'&quot;')}" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial: ${a.serial_no || '?'}</span>`;
+      }
       const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
       return `
         <tr>

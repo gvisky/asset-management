@@ -141,16 +141,63 @@ document.addEventListener('DOMContentLoaded', () => {
   initMobileNav();
   initResponsiveTables();
   populateDeptOptions();
+  wireDeptSelect();
 });
 
-// Fill the asset form's Department dropdown from existing departments in the DB.
+// Render a row of small summary cards into a #grid. cards = [[label, value, bg, fg]].
+function renderSummaryCards(gridId, cards) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  grid.innerHTML = cards.map(([l, v, bg, fg]) =>
+    `<div class="stat-card" style="padding:16px 18px">
+       <div class="stat-icon" style="width:38px;height:38px;background:${bg || '#eef2ff'}">
+         <svg width="18" height="18" fill="none" stroke="${fg || '#374151'}" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+       </div>
+       <div><div class="stat-label">${l}</div><div class="stat-value" style="font-size:22px">${v}</div></div>
+     </div>`).join('');
+}
+
+// Fill the Department dropdown(s) from existing departments in the DB.
+// Works for the asset form's <select id="f-department"> and the licenses
+// <datalist id="dept-options"> — whichever is present on the page.
 async function populateDeptOptions() {
-  const dl = document.getElementById('dept-options');
-  if (!dl) return;
+  const sel = document.getElementById('f-department');
+  const dl  = document.getElementById('dept-options');
+  if (!sel && !dl) return;
   try {
     const { departments } = await apiGet('/api/assets/filters');
-    dl.innerHTML = (departments || []).map(d => `<option value="${String(d).replace(/"/g,'&quot;')}"></option>`).join('');
-  } catch (e) { /* no access / no data — leave free-text */ }
+    const depts = departments || [];
+    const optEsc = (d) => String(d).replace(/"/g, '&quot;');
+    if (dl) dl.innerHTML = depts.map(d => `<option value="${optEsc(d)}"></option>`).join('');
+    if (sel && sel.tagName === 'SELECT') {
+      const cur = sel.value;
+      sel.innerHTML = '<option value="">— Select department —</option>'
+        + depts.map(d => `<option value="${optEsc(d)}">${d}</option>`).join('')
+        + '<option value="__new__">➕ New department…</option>';
+      if (cur && cur !== '__new__') sel.value = cur;
+    }
+  } catch (e) { /* no access / no data */ }
+}
+
+// Let users add a department not yet in the list.
+function wireDeptSelect() {
+  const sel = document.getElementById('f-department');
+  if (!sel || sel.tagName !== 'SELECT' || sel.dataset.wired) return;
+  sel.dataset.wired = '1';
+  sel.addEventListener('change', () => {
+    if (sel.value !== '__new__') return;
+    const v = (prompt('New department name:') || '').trim();
+    if (v) {
+      if (![...sel.options].some(o => o.value === v)) {
+        const opt = document.createElement('option');
+        opt.value = v; opt.textContent = v;
+        sel.insertBefore(opt, sel.lastElementChild);   // before the "New…" option
+      }
+      sel.value = v;
+    } else {
+      sel.value = '';
+    }
+  });
 }
 
 // ── Responsive tables: tag each cell with its column header (phone card view) ──

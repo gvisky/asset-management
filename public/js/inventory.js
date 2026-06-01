@@ -7,6 +7,20 @@ let viewAsset = null;
 let editMode = false;
 let incompleteMode = false;   // "Needs Attention" filter toggle
 
+// Summary cards at the top of the Asset Inventory page.
+async function loadSummary() {
+  try {
+    const s = await apiGet('/api/assets/stats');
+    renderSummaryCards('summary-grid', [
+      ['Total Assets', s.total, '#dbeafe', '#1a56db'],
+      ['Active', s.byStatus.Active || 0, '#dcfce7', '#16a34a'],
+      ['Broken', s.byStatus.Broken || 0, '#fee2e2', '#dc2626'],
+      ['Stock', s.byStatus.Stock || 0, '#fef3c7', '#d97706'],
+      ['Needs Info', s.incompleteCount || 0, '#fde68a', '#92400e'],
+    ]);
+  } catch (e) { /* ignore */ }
+}
+
 // Populate the Brand Model and Department dropdowns with distinct values.
 async function loadFilters() {
   try {
@@ -343,6 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (editId) onEdit(editId);
   });
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'asset');
+  loadSummary();
 
   // Search & filter with debounce
   let debounce;

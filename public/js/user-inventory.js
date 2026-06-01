@@ -145,6 +145,20 @@ function pagRange(c, t) {
   return [1,'…',c-1,c,c+1,'…',t];
 }
 
+// Summary cards at the top of the User Inventory page.
+async function loadSummary() {
+  try {
+    const s = await apiGet('/api/personnel/summary');
+    renderSummaryCards('summary-grid', [
+      ['Total People', s.total, '#e0e7ff', '#4338ca'],
+      ['Hayat: No', s.noHayat || 0, '#fee2e2', '#dc2626'],
+      ['To Be Delete', s.byStatus['to be delete'] || 0, '#fef9c3', '#ca8a04'],
+      ['Pending Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c'],
+      ['Deleted', s.byStatus['deleted'] || 0, '#fee2e2', '#b91c1c'],
+    ]);
+  } catch (e) { /* ignore */ }
+}
+
 // Load last-import info; show the upload button (IT) and the monthly reminder.
 async function loadMeta() {
   try {
@@ -178,6 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadCountries().then(() => loadPeople());
   loadMeta();
+  loadSummary();
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'personnel');
 
   // Upload buttons (top bar + reminder banner)

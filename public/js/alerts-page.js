@@ -21,7 +21,11 @@ async function loadNeedsAttention() {
       if (miss(a.asset_code))  tags.push('Code');
       if (miss(a.computer_no)) tags.push('PC No');
       let html = tags.map(t => `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
-      if (a.dup_serial) html += `<span class="badge" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial</span>`;
+      if (a.dup_serial) {
+        const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');
+        const title = others ? `Same serial "${a.serial_no}" as: ${others}` : `Duplicate serial "${a.serial_no}"`;
+        html += `<span class="badge" title="${naEsc(title)}" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial: ${naEsc(a.serial_no) || '?'}${others ? ` (also ${naEsc(others)})` : ''}</span>`;
+      }
       const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
       return `<tr>
         <td><div class="truncate" title="${naEsc(label)}" style="max-width:200px">${label}</div><span class="text-muted text-sm">#${a.id} · ${a.location}</span></td>

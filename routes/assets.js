@@ -170,10 +170,23 @@ router.get('/incomplete', wrap(async (req, res) => {
     dupRows = await all(`SELECT * FROM assets WHERE ${dcond.join(' AND ')}`, [...dups, ...cf.params]);
   }
 
-  // Merge unique by id, tagging which have a duplicate serial.
+  // Map each duplicated serial → the assets that carry it.
+  const holders = new Map();   // serial → [{id, asset_code, computer_no}]
+  for (const r of dupRows) {
+    const key = String(r.serial_no);
+    if (!holders.has(key)) holders.set(key, []);
+    holders.get(key).push({ id: r.id, asset_code: r.asset_code, computer_no: r.computer_no });
+  }
+
+  // Merge unique by id, tagging which have a duplicate serial + who else shares it.
   const byId = new Map();
-  for (const r of incomplete) byId.set(r.id, { ...r, dup_serial: dupSet.has(String(r.serial_no)) });
-  for (const r of dupRows) { const e = byId.get(r.id) || { ...r }; e.dup_serial = true; byId.set(r.id, e); }
+  const tag = (r) => {
+    const isDup = dupSet.has(String(r.serial_no));
+    const others = isDup ? holders.get(String(r.serial_no)).filter(h => h.id !== r.id) : [];
+    return { ...r, dup_serial: isDup, dup_with: others };
+  };
+  for (const r of incomplete) byId.set(r.id, tag(r));
+  for (const r of dupRows) if (!byId.has(r.id)) byId.set(r.id, tag(r));
   const rows = [...byId.values()].sort((a, b) =>
     String(a.country || '').localeCompare(String(b.country || '')) || a.id - b.id);
   res.json(rows);

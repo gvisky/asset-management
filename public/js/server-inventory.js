@@ -216,8 +216,22 @@ function onDelete(id, label) {
   document.getElementById('del-overlay').classList.add('open');
 }
 
+async function loadSummary() {
+  try {
+    const s = await apiGet(`${SAPI}/stats`);
+    renderSummaryCards('summary-grid', [
+      ['Total Servers', s.total, '#dbeafe', '#1a56db'],
+      ['Active', s.byStatus.Active || 0, '#dcfce7', '#16a34a'],
+      ['Broken', s.byStatus.Broken || 0, '#fee2e2', '#dc2626'],
+      ['Stock', s.byStatus.Stock || 0, '#fef3c7', '#d97706'],
+      ['Warranty ≤90d', s.warrantyExpiring || 0, '#fde68a', '#92400e'],
+    ]);
+  } catch (e) { /* ignore */ }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadFilters().then(loadServers);
+  loadSummary();
 
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadServers(1), 320); });
