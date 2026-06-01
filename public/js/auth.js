@@ -105,10 +105,15 @@ function renderUserChrome() {
 function applyAssetGating() {
   const u = window.CURRENT_USER;
   if (!u || u.asset_access !== 0) return;
-  document.querySelectorAll('.sidebar nav a[href="/"], .sidebar nav a[href="/inventory.html"], #nav-add')
-    .forEach(a => a.style.display = 'none');
-  const p = window.location.pathname;
-  if (p === '/' || p === '/index.html' || p === '/inventory.html') {
+  // Hide every asset-related destination for HR-only users.
+  document.querySelectorAll([
+    '.sidebar nav a[href="/"]', '.sidebar nav a[href="/inventory.html"]',
+    '#nav-add', '#nav-servers', '#nav-maintenance', '#nav-licenses', '#nav-reports'
+  ].join(',')).forEach(a => a.style.display = 'none');
+
+  const assetPages = ['/', '/index.html', '/inventory.html',
+    '/server-inventory.html', '/maintenance.html', '/licenses.html', '/reports.html'];
+  if (assetPages.includes(window.location.pathname)) {
     window.location.href = '/user-inventory.html';
   }
 }

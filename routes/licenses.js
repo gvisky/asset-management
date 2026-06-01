@@ -7,6 +7,11 @@ const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 const TYPES = ['subscription', 'perpetual'];
 
 router.use(requireAuth);
+// HR-only users (no Asset Inventory access) can't use license management either.
+router.use((req, res, next) => {
+  if (req.user && req.user.asset_access === 0) return res.status(403).json({ error: 'No access' });
+  next();
+});
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
 
