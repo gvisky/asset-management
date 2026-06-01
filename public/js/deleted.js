@@ -15,7 +15,13 @@ async function loadDeleted() {
       return;
     }
 
-    tbody.innerHTML = rows.map(a => `
+    const isGlobalAdmin = window.CURRENT_USER && window.CURRENT_USER.role === 'admin' && !window.CURRENT_USER.country;
+    tbody.innerHTML = rows.map(a => {
+      const label = (a.asset_code || a.brand_model || '').replace(/'/g, "\\'");
+      const purgeBtn = isGlobalAdmin
+        ? `<button class="btn btn-danger btn-sm" onclick="purgeAsset(${a.id}, '${label}')" title="Delete permanently">🗑 Delete</button>`
+        : '';
+      return `
       <tr>
         <td><code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code></td>
         <td>${a.brand_model || '—'}</td>
@@ -25,12 +31,13 @@ async function loadDeleted() {
         <td><span class="badge badge-broken">${a.deleted_by || 'unknown'}</span></td>
         <td class="text-muted text-sm" style="white-space:nowrap">${a.deleted_at || '—'}</td>
         <td>
-          <button class="btn btn-primary btn-sm" onclick="restoreAsset(${a.id}, '${(a.asset_code || a.brand_model || '').replace(/'/g,"\\'")}')">
-            ↩ Restore
-          </button>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-primary btn-sm" onclick="restoreAsset(${a.id}, '${label}')">↩ Restore</button>
+            ${purgeBtn}
+          </div>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
   } catch (err) {
     showToast('Failed to load recycle bin', 'error');
   }
@@ -47,10 +54,21 @@ async function restoreAsset(id, label) {
   }
 }
 
+async function purgeAsset(id, label) {
+  if (!confirm(`Permanently delete "${label}"? This CANNOT be undone.`)) return;
+  try {
+    await apiDelete(`/api/assets/${id}/purge`);
+    showToast('Permanently deleted');
+    loadDeleted();
+  } catch (err) {
+    showToast('Delete failed (IT admin only)', 'error');
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  // Guard: only admins. auth.js sets CURRENT_USER shortly after load.
+  // Guard + load once CURRENT_USER is known (so the IT-admin Delete button renders).
   setTimeout(() => {
-    if (window.CURRENT_USER && window.CURRENT_USER.role !== 'admin') window.location.href = '/';
+    if (window.CURRENT_USER && window.CURRENT_USER.role !== 'admin') { window.location.href = '/'; return; }
+    loadDeleted();
   }, 400);
-  loadDeleted();
 });

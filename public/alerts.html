@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hayat Communication Tools — Needs Attention</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">🖥️ Hayat Communication Tools</div>
+    <div class="logo-sub">Asset &amp; User Management</div>
+  </div>
+  <nav>
+    <div class="nav-section-label">Menu</div>
+    <a href="/" class="nav-link" id="nav-dashboard"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Dashboard</a>
+    <a href="/inventory.html" class="nav-link"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2"/></svg> Asset Inventory</a>
+    <a href="/server-inventory.html" class="nav-link" id="nav-servers"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg> Server Inventory</a>
+    <a href="/maintenance.html" class="nav-link" id="nav-maintenance"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg> Maintenance</a>
+    <a href="/licenses.html" class="nav-link" id="nav-licenses"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M9 11l3 3L22 4"/></svg> Licenses</a>
+    <a href="/reports.html" class="nav-link" id="nav-reports"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Reports</a>
+  </nav>
+</aside>
+
+<div class="main-wrap">
+  <header class="topbar"><span class="topbar-title">⚠️ Needs Attention</span></header>
+  <main class="content">
+
+    <!-- Missing info / duplicate serials -->
+    <div class="card" style="margin-bottom:18px">
+      <div class="card-header">
+        <span class="card-title">⚠️ Needs Attention — Missing Info &amp; Duplicate Serials</span>
+        <span class="badge badge-broken" id="na-count" style="display:none"></span>
+      </div>
+      <div class="table-wrap" style="max-height:360px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Asset</th><th>Country</th><th>Problem</th><th></th></tr></thead>
+          <tbody id="na-tbody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Changes by HR (separate box) -->
+    <div class="card" style="margin-bottom:18px">
+      <div class="card-header"><span class="card-title">👤 Changes by HR Members</span></div>
+      <div class="card-body" id="hr-box" style="max-height:280px;overflow-y:auto;padding-top:6px;padding-bottom:6px">
+        <div class="text-muted text-sm">Loading…</div>
+      </div>
+    </div>
+
+    <!-- All other alerts -->
+    <div id="alert-box"></div>
+  </main>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<script src="/js/auth.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/alerts.js"></script>
+<script src="/js/alerts-page.js"></script>
+</body>
+</html>

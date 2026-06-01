@@ -79,6 +79,29 @@ async function setup() {
   await ensureTeams();
   await seedAssets();
   await seedPersonnel();
+  await seedServers();
+}
+
+// On first boot with empty servers, load db/servers-seed.json if present.
+async function seedServers() {
+  const { c } = await backend.get('SELECT COUNT(*) AS c FROM servers');
+  if (Number(c) > 0) return;
+  const seedPath = path.join(__dirname, 'servers-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let rows;
+  try { rows = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[seed] servers-seed.json parse failed:', e.message); return; }
+  for (const r of rows) {
+    await backend.run(
+      `INSERT INTO servers (country, location, hostname, brand_model, serial_no, asset_code,
+         role, status, purchase_date, vendor, cost, remark)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [r.country || 'Vietnam', r.location || '', r.hostname || '', r.brand_model || '',
+       r.serial_no || '', r.asset_code || '', r.role || '', r.status || 'Active',
+       r.purchase_date || '', r.vendor || '', r.cost || '', r.remark || '']
+    );
+  }
+  console.log(`[seed] Loaded ${rows.length} servers`);
 }
 
 async function initSchema() {
@@ -234,6 +257,10 @@ async function migrate() {
   // Add asset_type to already-deployed maintenance tables.
   const mcols = (await backend.all('PRAGMA table_info(maintenance_log)')).map(c => c.name);
   if (!mcols.includes('asset_type')) await backend.run("ALTER TABLE maintenance_log ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'asset'");
+
+  // Department on licenses (additive).
+  const lcols = (await backend.all('PRAGMA table_info(licenses)')).map(c => c.name);
+  if (!lcols.includes('department')) await backend.run("ALTER TABLE licenses ADD COLUMN department TEXT DEFAULT ''");
 
   // Server Asset Inventory — parallel to assets, with server-specific fields.
   await backend.script(`

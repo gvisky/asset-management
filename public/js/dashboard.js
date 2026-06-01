@@ -162,8 +162,9 @@ async function loadAlerts() {
       if (miss(a.serial_no))   tags.push('Serial');
       if (miss(a.asset_code))  tags.push('Code');
       if (miss(a.computer_no)) tags.push('PC No');
-      const tagHtml = tags.map(t =>
+      let tagHtml = tags.map(t =>
         `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
+      if (a.dup_serial) tagHtml += `<span class="badge" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial</span>`;
       const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
       return `
         <tr>

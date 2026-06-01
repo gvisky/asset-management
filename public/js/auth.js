@@ -52,6 +52,23 @@ function renderUserChrome() {
     document.getElementById('changepw-btn').addEventListener('click', changePassword);
   }
 
+  // Quick Actions: drop "Add Asset"; add "Needs Attention" (alerts) for asset users.
+  const addLink = document.getElementById('nav-add');
+  if (addLink) addLink.style.display = 'none';
+  if (u.asset_access !== 0) {
+    const nav = document.querySelector('.sidebar nav');
+    if (nav && !document.getElementById('nav-alerts')) {
+      const link = document.createElement('a');
+      link.href = '/alerts.html';
+      link.id = 'nav-alerts';
+      link.className = 'nav-link';
+      link.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> ⚠️ Needs Attention`;
+      if (addLink) addLink.insertAdjacentElement('afterend', link);
+      else nav.appendChild(link);
+      if (window.location.pathname.includes('alerts.html')) link.classList.add('active');
+    }
+  }
+
   // User Inventory link — for HR and IT members (appears on every page).
   if (u.team === 'HR' || u.team === 'IT') {
     const nav = document.querySelector('.sidebar nav');
@@ -112,7 +129,7 @@ function applyAssetGating() {
   ].join(',')).forEach(a => a.style.display = 'none');
 
   const assetPages = ['/', '/index.html', '/inventory.html',
-    '/server-inventory.html', '/maintenance.html', '/licenses.html', '/reports.html'];
+    '/server-inventory.html', '/maintenance.html', '/licenses.html', '/reports.html', '/alerts.html'];
   if (assetPages.includes(window.location.pathname)) {
     window.location.href = '/user-inventory.html';
   }

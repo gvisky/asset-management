@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { get, all, run, audit, notify } = require('../db/database');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireRole, requireGlobalAdmin } = require('../middleware/auth');
 
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
@@ -145,17 +145,37 @@ router.get('/filters', wrap(async (req, res) => {
   res.json({ brands, departments, countries });
 }));
 
-// ── GET /api/assets/incomplete — assets missing key identifiers ───────────────
+// ── GET /api/assets/incomplete — missing key identifiers OR duplicate serial ──
 router.get('/incomplete', wrap(async (req, res) => {
   const cf = countryFilter(req);
-  const cond = ['deleted_at IS NULL', `(
-      serial_no   IS NULL OR serial_no   = '' OR
-      asset_code  IS NULL OR asset_code  = '' OR
-      computer_no IS NULL OR computer_no = ''
-    )`];
+  const base = cf.clause ? ` AND ${cf.clause}` : '';
+
+  // Serial numbers that appear on more than one live asset (in scope).
+  const dups = (await all(
+    `SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${base}
+     GROUP BY serial_no HAVING COUNT(*) > 1`, cf.params)).map(r => String(r.serial_no));
+  const dupSet = new Set(dups);
+
+  // Assets missing a key identifier.
+  const cond = ['deleted_at IS NULL', `(serial_no IS NULL OR serial_no='' OR asset_code IS NULL OR asset_code='' OR computer_no IS NULL OR computer_no='')`];
   if (cf.clause) cond.push(cf.clause);
-  const rows = await all(
-    `SELECT * FROM assets WHERE ${cond.join(' AND ')} ORDER BY country, location, id`, cf.params);
+  const incomplete = await all(`SELECT * FROM assets WHERE ${cond.join(' AND ')}`, cf.params);
+
+  // Assets that share a duplicated serial number.
+  let dupRows = [];
+  if (dups.length) {
+    const ph = dups.map(() => '?').join(',');
+    const dcond = ['deleted_at IS NULL', `serial_no IN (${ph})`];
+    if (cf.clause) dcond.push(cf.clause);
+    dupRows = await all(`SELECT * FROM assets WHERE ${dcond.join(' AND ')}`, [...dups, ...cf.params]);
+  }
+
+  // Merge unique by id, tagging which have a duplicate serial.
+  const byId = new Map();
+  for (const r of incomplete) byId.set(r.id, { ...r, dup_serial: dupSet.has(String(r.serial_no)) });
+  for (const r of dupRows) { const e = byId.get(r.id) || { ...r }; e.dup_serial = true; byId.set(r.id, e); }
+  const rows = [...byId.values()].sort((a, b) =>
+    String(a.country || '').localeCompare(String(b.country || '')) || a.id - b.id);
   res.json(rows);
 }));
 
@@ -309,6 +329,19 @@ router.post('/:id/restore', requireRole('admin'), wrap(async (req, res) => {
   await notify({ audience: 'all', country: existing.country, scope: 'asset', level: 'info',
     message: `${req.user.full_name} restored asset "${rlabel}" [${existing.country}] from the recycle bin.` });
   res.json({ message: 'Asset restored' });
+}));
+
+// ── DELETE /api/assets/:id/purge — permanently delete from recycle bin ────────
+// IT admin (global admin) only. Removes a soft-deleted asset for good.
+router.delete('/:id/purge', requireGlobalAdmin, wrap(async (req, res) => {
+  const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NOT NULL', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'Deleted asset not found' });
+  await run('DELETE FROM assets WHERE id = ?', [req.params.id]);
+  const label = existing.asset_code || existing.brand_model || 'untitled';
+  await audit(req.user, 'PURGE', Number(req.params.id), `Permanently deleted asset "${label}"`);
+  await notify({ audience: 'all', country: existing.country, scope: 'asset', level: 'warning',
+    message: `${req.user.full_name} permanently deleted asset "${label}" [${existing.country}].` });
+  res.json({ message: 'Permanently deleted' });
 }));
 
 module.exports = router;

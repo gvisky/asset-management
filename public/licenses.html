@@ -54,10 +54,10 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>Name</th><th>Vendor</th><th>Type</th><th>Seats</th><th>Renewal</th><th>Scope</th><th>Actions</th></tr>
+            <tr><th>Name</th><th>Vendor</th><th>Department</th><th>Type</th><th>Seats</th><th>Current Users</th><th>Renewal</th><th>Scope</th><th>Actions</th></tr>
           </thead>
           <tbody id="lic-tbody">
-            <tr><td colspan="7" class="empty-state">Loading…</td></tr>
+            <tr><td colspan="9" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -77,6 +77,7 @@
       <div class="form-grid">
         <div class="form-group span-2"><label class="form-label">Name *</label><input class="form-control" id="l-name" placeholder="e.g. Microsoft 365 E3"></div>
         <div class="form-group"><label class="form-label">Vendor</label><input class="form-control" id="l-vendor" placeholder="e.g. Microsoft"></div>
+        <div class="form-group"><label class="form-label">Department</label><input class="form-control" id="l-department" list="dept-options" placeholder="Select or type…"><datalist id="dept-options"></datalist></div>
         <div class="form-group"><label class="form-label">Type</label><select class="form-control" id="l-type"><option value="subscription">Subscription</option><option value="perpetual">Perpetual</option></select></div>
         <div class="form-group"><label class="form-label">Total Seats</label><input class="form-control" id="l-total_seats" type="number" min="0" value="0"></div>
         <div class="form-group"><label class="form-label">Scope</label><select class="form-control" id="l-country"><option value="Global">Global (all countries)</option><option>Vietnam</option><option>Thailand</option><option>Malaysia</option></select></div>

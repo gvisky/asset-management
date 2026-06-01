@@ -29,13 +29,15 @@ async function loadLicenses() {
   try {
     const rows = await apiGet(LIC);
     document.getElementById('total-label').textContent = rows.length ? `${rows.length} license(s)` : '';
-    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No licenses yet.</td></tr>'; return; }
+    if (!rows.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No licenses yet.</td></tr>'; return; }
     tbody.innerHTML = rows.map(l => `
       <tr>
         <td><strong>${lEsc(l.name)}</strong></td>
         <td class="text-muted text-sm">${lEsc(l.vendor) || '—'}</td>
+        <td class="text-muted text-sm">${lEsc(l.department) || '—'}</td>
         <td class="text-muted text-sm">${lEsc(l.type)}</td>
         <td>${seatsBar(l.seats_used, l.total_seats)}</td>
+        <td class="text-sm truncate" title="${lEsc(l.current_users)}" style="max-width:180px">${lEsc(l.current_users) || '<span class="text-muted">—</span>'}</td>
         <td>${renewalBadge(l.renewal_date)}</td>
         <td>${l.country === 'Global' ? '<span class="badge badge-office">Global</span>' : `<span class="badge badge-factory">${lEsc(l.country)}</span>`}</td>
         <td>
@@ -47,11 +49,11 @@ async function loadLicenses() {
         </td>
       </tr>`).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Failed to load.</td></tr>';
   }
 }
 
-const LF = ['name','vendor','type','total_seats','license_key','notes','purchase_date','renewal_date','cost','country'];
+const LF = ['name','vendor','department','type','total_seats','license_key','notes','purchase_date','renewal_date','cost','country'];
 function readForm() {
   const o = {};
   LF.forEach(f => o[f] = document.getElementById('l-' + f).value);

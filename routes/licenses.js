@@ -33,15 +33,17 @@ function canManage(req, lic) {
 }
 
 const SEATS = `(SELECT COUNT(*) FROM license_assignments la WHERE la.license_id = l.id AND la.released_at IS NULL)`;
+// Current seat holders (active assignments), comma-separated.
+const USERS = `(SELECT GROUP_CONCAT(assignee_ref, ', ') FROM license_assignments la WHERE la.license_id = l.id AND la.released_at IS NULL)`;
 
 // ── GET /api/licenses ─────────────────────────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
   const vf = visFilter(req);
   const where = vf.clause ? `WHERE ${vf.clause}` : '';
   const rows = await all(
-    `SELECT l.*, ${SEATS} AS seats_used FROM licenses l ${where} ORDER BY l.name COLLATE NOCASE`,
+    `SELECT l.*, ${SEATS} AS seats_used, ${USERS} AS current_users FROM licenses l ${where} ORDER BY l.name COLLATE NOCASE`,
     vf.params);
-  res.json(rows.map(r => ({ ...r, seats_used: Number(r.seats_used) })));
+  res.json(rows.map(r => ({ ...r, seats_used: Number(r.seats_used), current_users: r.current_users || '' })));
 }));
 
 // ── GET /api/licenses/stats — dashboard metrics ───────────────────────────────
@@ -82,16 +84,16 @@ function resolveCountry(req, requested) {
 router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const { name = '', vendor = '', type = 'subscription', total_seats = 0,
           license_key = '', notes = '', purchase_date = '', renewal_date = '',
-          cost = '', country = 'Global' } = req.body;
+          cost = '', country = 'Global', department = '' } = req.body;
   if (!name.trim()) return res.status(400).json({ error: 'Name is required' });
   if (!TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
 
   const result = await run(
     `INSERT INTO licenses (name, vendor, type, total_seats, license_key, notes,
-       purchase_date, renewal_date, cost, country)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       purchase_date, renewal_date, cost, country, department)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [name.trim(), vendor, type, Number(total_seats) || 0, license_key, notes,
-     purchase_date, renewal_date, cost, resolveCountry(req, country)]);
+     purchase_date, renewal_date, cost, resolveCountry(req, country), department]);
   const created = await get('SELECT * FROM licenses WHERE id = ?', [result.lastInsertRowid]);
   await audit(req.user, 'LICENSE', null, `Created license "${created.name}"`);
   res.status(201).json(created);
@@ -110,11 +112,11 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 
   await run(
     `UPDATE licenses SET name = ?, vendor = ?, type = ?, total_seats = ?, license_key = ?,
-       notes = ?, purchase_date = ?, renewal_date = ?, cost = ?, country = ? WHERE id = ?`,
+       notes = ?, purchase_date = ?, renewal_date = ?, cost = ?, country = ?, department = ? WHERE id = ?`,
     [(b.name ?? lic.name).trim() || lic.name, b.vendor ?? lic.vendor, type,
      Number(b.total_seats ?? lic.total_seats) || 0, b.license_key ?? lic.license_key,
      b.notes ?? lic.notes, b.purchase_date ?? lic.purchase_date, b.renewal_date ?? lic.renewal_date,
-     b.cost ?? lic.cost, country, req.params.id]);
+     b.cost ?? lic.cost, country, b.department ?? lic.department ?? '', req.params.id]);
   const updated = await get('SELECT * FROM licenses WHERE id = ?', [req.params.id]);
   await audit(req.user, 'LICENSE', null, `Updated license "${updated.name}"`);
   res.json(updated);

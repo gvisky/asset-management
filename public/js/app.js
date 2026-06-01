@@ -140,7 +140,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initMobileNav();
   initResponsiveTables();
+  populateDeptOptions();
 });
+
+// Fill the asset form's Department dropdown from existing departments in the DB.
+async function populateDeptOptions() {
+  const dl = document.getElementById('dept-options');
+  if (!dl) return;
+  try {
+    const { departments } = await apiGet('/api/assets/filters');
+    dl.innerHTML = (departments || []).map(d => `<option value="${String(d).replace(/"/g,'&quot;')}"></option>`).join('');
+  } catch (e) { /* no access / no data — leave free-text */ }
+}
 
 // ── Responsive tables: tag each cell with its column header (phone card view) ──
 // Adds data-label/"responsive" used only by the <=768px CSS; zero effect on desktop.
