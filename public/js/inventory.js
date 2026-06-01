@@ -25,9 +25,21 @@ async function loadHistory() {
       <thead><tr><th>Asset</th><th>History Usage (changes)</th><th style="white-space:nowrap">Sent to accounting (SAP)</th></tr></thead>
       <tbody>${rows.map(a => {
         const label = (a.asset_code || a.brand_model || ('#' + a.id));
-        const chk = isIT
-          ? `<input type="checkbox" onchange="confirmSap(${a.id}, this.checked)" title="Tick once forwarded to accounting for SAP update">`
-          : '<span class="text-muted text-sm">IT only</span>';
+        // A reassignment (User Name or Department changed) is handled via the
+        // delivery form, not a quick SAP tick — so lock the checkbox for those.
+        const hist = a.history_usage || '';
+        const userChanged = /(?:^|\s)User: "/.test(hist);
+        const deptChanged = /(?:^|\s)Department: "/.test(hist);
+        const lockedWhat = [userChanged && 'User Name', deptChanged && 'Department'].filter(Boolean).join(' & ');
+        let chk;
+        if (!isIT) {
+          chk = '<span class="text-muted text-sm">IT only</span>';
+        } else if (lockedWhat) {
+          chk = `<input type="checkbox" disabled title="Locked — ${lockedWhat} changed (reassignment). Handle via the delivery form, not a SAP tick.">
+                 <div class="text-muted text-sm" style="margin-top:2px">🔒 ${lockedWhat} changed</div>`;
+        } else {
+          chk = `<input type="checkbox" onchange="confirmSap(${a.id}, this.checked)" title="Tick once forwarded to accounting for SAP update">`;
+        }
         return `<tr>
           <td><strong>${esc(label)}</strong><br><span class="text-muted text-sm">${esc(a.country)} · ${esc(a.location)}</span></td>
           <td><div style="max-height:120px;overflow:auto;white-space:pre-line;font-size:12.5px">${esc(a.history_usage)}</div></td>
