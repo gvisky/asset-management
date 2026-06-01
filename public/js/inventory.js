@@ -7,6 +7,48 @@ let viewAsset = null;
 let editMode = false;
 let incompleteMode = false;   // "Needs Attention" filter toggle
 
+// ── History Usage / pending-SAP modal ─────────────────────────────────────────
+async function openHistory() {
+  document.getElementById('history-overlay').classList.add('open');
+  await loadHistory();
+}
+async function loadHistory() {
+  const box = document.getElementById('history-body');
+  const isIT = window.CURRENT_USER && window.CURRENT_USER.team === 'IT';
+  try {
+    const rows = await apiGet('/api/assets/history-pending');
+    if (!rows.length) {
+      box.innerHTML = `<div class="empty-state"><p>✅ Nothing pending — all recorded changes have been sent to accounting.</p></div>`;
+      return;
+    }
+    box.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>Asset</th><th>History Usage (changes)</th><th style="white-space:nowrap">Sent to accounting (SAP)</th></tr></thead>
+      <tbody>${rows.map(a => {
+        const label = (a.asset_code || a.brand_model || ('#' + a.id));
+        const chk = isIT
+          ? `<input type="checkbox" onchange="confirmSap(${a.id}, this.checked)" title="Tick once forwarded to accounting for SAP update">`
+          : '<span class="text-muted text-sm">IT only</span>';
+        return `<tr>
+          <td><strong>${esc(label)}</strong><br><span class="text-muted text-sm">${esc(a.country)} · ${esc(a.location)}</span></td>
+          <td><div style="max-height:120px;overflow:auto;white-space:pre-line;font-size:12.5px">${esc(a.history_usage)}</div></td>
+          <td style="text-align:center">${chk}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+  } catch (e) {
+    box.innerHTML = '<div class="text-muted text-sm">Could not load history.</div>';
+  }
+}
+async function confirmSap(id, checked) {
+  try {
+    await apiPost(`/api/assets/${id}/sap-confirm`, { confirmed: !!checked });
+    showToast(checked ? 'Marked as sent to accounting' : 'Unmarked');
+    if (checked) loadHistory();   // refresh so confirmed rows drop off
+  } catch (e) {
+    showToast('Only IT members can confirm', 'error');
+    loadHistory();
+  }
+}
+
 // Summary cards at the top of the Asset Inventory page.
 async function loadSummary() {
   try {
@@ -378,6 +420,11 @@ document.addEventListener('DOMContentLoaded', () => {
     setIncompleteButton(incompleteMode);
     loadAssets(1);
   });
+
+  // "History Usage" — opens pending-SAP modal
+  document.getElementById('btn-history').addEventListener('click', openHistory);
+  document.getElementById('history-close').addEventListener('click', () =>
+    document.getElementById('history-overlay').classList.remove('open'));
 
   // Reset
   document.getElementById('btn-reset').addEventListener('click', () => {

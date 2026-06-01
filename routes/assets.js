@@ -223,6 +223,33 @@ router.get('/by-user/:adname', wrap(async (req, res) => {
   res.json(rows);
 }));
 
+// ── GET /api/assets/history-pending — assets with history changes not yet
+// confirmed-sent to accounting for SAP update (country-scoped). ───────────────
+router.get('/history-pending', wrap(async (req, res) => {
+  const cf = countryFilter(req);
+  // Only in-system changes (our log lines contain "UTC:"), not legacy imported notes.
+  const cond = ['deleted_at IS NULL', "history_usage LIKE '%UTC:%'", 'sap_confirmed = 0'];
+  if (cf.clause) cond.push(cf.clause);
+  const rows = await all(
+    `SELECT * FROM assets WHERE ${cond.join(' AND ')} ORDER BY updated_at DESC, id DESC`, cf.params);
+  res.json(rows);
+}));
+
+// ── POST /api/assets/:id/sap-confirm — IT confirms the change was sent to SAP ─
+router.post('/:id/sap-confirm', wrap(async (req, res) => {
+  if (req.user.team !== 'IT') return res.status(403).json({ error: 'Only IT members can confirm SAP updates' });
+  const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'Asset not found' });
+  const scope = scopeOf(req);
+  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+
+  const confirmed = (req.body && req.body.confirmed === false) ? 0 : 1;
+  await run('UPDATE assets SET sap_confirmed = ? WHERE id = ?', [confirmed, req.params.id]);
+  await audit(req.user, 'SAP', Number(req.params.id),
+    `${confirmed ? 'Confirmed sent to accounting (SAP)' : 'Unmarked SAP'} for "${existing.asset_code || existing.brand_model || 'untitled'}"`);
+  res.json({ message: 'ok', sap_confirmed: confirmed });
+}));
+
 // ── GET /api/assets/:id — single asset ───────────────────────────────────────
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
@@ -252,14 +279,19 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
 
   const finalCountry = resolveCountry(req, country);
 
+  // Record creation in the history log so the new asset shows up as a pending SAP update.
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const createLine = `${ts} UTC: created by ${req.user.username}`;
+  const hist = history_usage ? `${history_usage}\n${createLine}` : createLine;
+
   const result = await run(`
     INSERT INTO assets
       (location, country, department, computer_no, brand_model, date_assigned,
        serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
-       purchase_date, warranty_expiry, vendor, cost, po_number)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       purchase_date, warranty_expiry, vendor, cost, po_number, sap_confirmed)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
-     serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
+     serial_no, mk, asset_code, user_name, ad_name, hist, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number]);
 
   const created = await get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
@@ -313,16 +345,19 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     newHistory = newHistory ? `${newHistory}\n${line}` : line;
   }
 
+  // A real change means accounting must re-sync SAP → reset the confirmation flag.
+  const sapConfirmed = changes.length ? 0 : existing.sap_confirmed;
+
   await run(`
     UPDATE assets SET
       location = ?, country = ?, department = ?, computer_no = ?, brand_model = ?,
       date_assigned = ?, serial_no = ?, mk = ?, asset_code = ?,
       user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?,
-      purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?
+      purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?
     WHERE id = ? AND deleted_at IS NULL`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, newHistory, remark, status,
-     purchase_date, warranty_expiry, vendor, cost, po_number,
+     purchase_date, warranty_expiry, vendor, cost, po_number, sapConfirmed,
      req.params.id]);
 
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);

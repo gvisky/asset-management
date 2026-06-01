@@ -389,6 +389,8 @@ async function migrate() {
   if (!acols.includes('vendor'))          await backend.run("ALTER TABLE assets ADD COLUMN vendor TEXT DEFAULT ''");
   if (!acols.includes('cost'))            await backend.run("ALTER TABLE assets ADD COLUMN cost TEXT DEFAULT ''");
   if (!acols.includes('po_number'))       await backend.run("ALTER TABLE assets ADD COLUMN po_number TEXT DEFAULT ''");
+  // sap_confirmed = 1 once IT has sent the change to accounting for SAP update.
+  if (!acols.includes('sap_confirmed'))   await backend.run("ALTER TABLE assets ADD COLUMN sap_confirmed INTEGER NOT NULL DEFAULT 0");
 }
 
 // Create a notification for a given audience/country/scope.
