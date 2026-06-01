@@ -9,7 +9,8 @@
   "scripts": {
     "start": "node server.js",
     "import": "node db/import.js",
-    "backup": "node db/backup.js"
+    "backup": "node db/backup.js",
+    "restore": "node db/restore.js"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
