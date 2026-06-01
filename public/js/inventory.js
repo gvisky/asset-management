@@ -499,6 +499,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('view-overlay').classList.remove('open');
     if (viewAsset) onEdit(viewAsset.id);
   });
+  document.getElementById('view-print-btn').addEventListener('click', () => {
+    if (viewAsset) printDeliveryForm(viewAsset.id);
+  });
 
   // Delete modal
   document.getElementById('del-close').addEventListener('click',  () => document.getElementById('del-overlay').classList.remove('open'));
