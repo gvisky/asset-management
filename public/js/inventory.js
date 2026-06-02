@@ -7,56 +7,46 @@ let viewAsset = null;
 let editMode = false;
 let incompleteMode = false;   // "Needs Attention" filter toggle
 
-// ── History Usage / pending-SAP modal ─────────────────────────────────────────
+// ── History Usage modal — records locked by a User Name / AD Name change ───────
 async function openHistory() {
   document.getElementById('history-overlay').classList.add('open');
   await loadHistory();
 }
 async function loadHistory() {
   const box = document.getElementById('history-body');
-  const isIT = window.CURRENT_USER && window.CURRENT_USER.team === 'IT';
+  const itAdmin = isITAdmin();
   try {
-    const rows = await apiGet('/api/assets/history-pending');
+    const rows = await apiGet('/api/assets/user-locked');
     if (!rows.length) {
-      box.innerHTML = `<div class="empty-state"><p>✅ Nothing pending — all recorded changes have been sent to accounting.</p></div>`;
+      box.innerHTML = `<div class="empty-state"><p>✅ No locked records — no User Name / AD Name changes pending review.</p></div>`;
       return;
     }
     box.innerHTML = `<div class="table-wrap"><table>
-      <thead><tr><th>Asset</th><th>History Usage (changes)</th><th style="white-space:nowrap">Sent to accounting (SAP)</th></tr></thead>
+      <thead><tr><th>Asset</th><th>User Name / AD Name</th><th>History Usage (change)</th><th style="white-space:nowrap">Unlock</th></tr></thead>
       <tbody>${rows.map(a => {
-        const label = (a.asset_code || a.brand_model || ('#' + a.id));
-        // A reassignment (User Name or Department changed) is handled via the
-        // delivery form, not a quick SAP tick — so lock the checkbox for those.
-        const hist = a.history_usage || '';
-        const userChanged = /(?:^|\s)User: "/.test(hist);
-        const deptChanged = /(?:^|\s)Department: "/.test(hist);
-        const lockedWhat = [userChanged && 'User Name', deptChanged && 'Department'].filter(Boolean).join(' & ');
-        let chk;
-        if (!isIT) {
-          chk = '<span class="text-muted text-sm">IT only</span>';
-        } else if (lockedWhat) {
-          chk = `<input type="checkbox" disabled title="Locked — ${lockedWhat} changed (reassignment). Handle via the delivery form, not a SAP tick.">
-                 <div class="text-muted text-sm" style="margin-top:2px">🔒 ${lockedWhat} changed</div>`;
-        } else {
-          chk = `<input type="checkbox" onchange="confirmSap(${a.id}, this.checked)" title="Tick once forwarded to accounting for SAP update">`;
-        }
+        const label = (a.asset_code || a.asset_s4 || a.brand_model || ('#' + a.id));
+        const act = itAdmin
+          ? `<button class="btn btn-ghost btn-sm" onclick="unlockUser(${a.id})" title="Unlock User Name / AD Name (IT admin)">🔓 Unlock</button>`
+          : '<span class="text-muted text-sm">🔒 IT admin</span>';
         return `<tr>
           <td><strong>${esc(label)}</strong><br><span class="text-muted text-sm">${esc(a.country)} · ${esc(a.location)}</span></td>
+          <td>${esc(a.user_name) || '—'}<br><span class="text-muted text-sm">${esc(a.ad_name) || '—'}</span></td>
           <td><div style="max-height:120px;overflow:auto;white-space:pre-line;font-size:12.5px">${esc(a.history_usage)}</div></td>
-          <td style="text-align:center">${chk}</td>
+          <td style="text-align:center">${act}</td>
         </tr>`;
       }).join('')}</tbody></table></div>`;
   } catch (e) {
-    box.innerHTML = '<div class="text-muted text-sm">Could not load history.</div>';
+    box.innerHTML = '<div class="text-muted text-sm">Could not load locked records.</div>';
   }
 }
-async function confirmSap(id, checked) {
+async function unlockUser(id) {
   try {
-    await apiPost(`/api/assets/${id}/sap-confirm`, { confirmed: !!checked });
-    showToast(checked ? 'Marked as sent to accounting' : 'Unmarked');
-    if (checked) loadHistory();   // refresh so confirmed rows drop off
+    await apiPost(`/api/assets/${id}/user-unlock`, {});
+    showToast('Record unlocked');
+    loadHistory();      // refresh so the unlocked row drops off
+    loadAssets(currentPage);
   } catch (e) {
-    showToast('Only IT members can confirm', 'error');
+    showToast('Only an IT admin can unlock', 'error');
     loadHistory();
   }
 }
@@ -159,7 +149,7 @@ function renderTable(rows) {
   }
 
   tbody.innerHTML = rows.map((a, i) => `
-    <tr class="${a.fields_locked ? 'row-locked' : ''}">
+    <tr class="${(a.fields_locked || a.user_locked) ? 'row-locked' : ''}">
       <td class="text-muted text-sm">${a.id}</td>
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
@@ -169,7 +159,7 @@ function renderTable(rows) {
       <td><span class="badge badge-factory">${a.country || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
       <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${a.department || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
-      <td>${a.user_name || '—'}</td>
+      <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${a.user_name || '—'}</td>
       <td class="text-muted text-sm">${a.ad_name || '<span style="color:var(--broken)">—</span>'}</td>
       <td class="text-muted text-sm">${a.serial_no || '—'}</td>
       <td>${statusBadge(a.status)}</td>
@@ -428,6 +418,26 @@ function applyFieldLock(a) {
   if (unlockBtn) {
     if (locked && itAdmin) { unlockBtn.style.display = ''; unlockBtn.dataset.id = a.id; }
     else { unlockBtn.style.display = 'none'; delete unlockBtn.dataset.id; }
+  }
+
+  // Holder lock — User Name / AD Name freeze after a reassignment; unlocked by an
+  // IT admin via the 🕓 History Usage button (not from this form).
+  const userLocked = !isNew && !!a.user_locked;
+  ['user_name', 'ad_name'].forEach((f) => {
+    const el = document.getElementById('f-' + f);
+    if (!el) return;
+    el.readOnly = userLocked;
+    el.style.background = userLocked ? '#f3f4f6' : '';
+    el.title = userLocked ? 'Locked — User Name / AD Name changed. An IT admin unlocks via 🕓 History Usage.' : '';
+  });
+  if (banner && userLocked) {
+    const note = '🔒 <span><strong>User Name / AD Name are locked</strong> (holder changed). '
+      + (itAdmin ? 'Unlock via the 🕓 History Usage button.' : 'An IT admin can unlock via 🕓 History Usage.') + '</span>';
+    if (banner.style.display === 'none') {
+      banner.className = 'lock-banner'; banner.style.display = ''; banner.innerHTML = note;
+    } else {
+      banner.innerHTML += '<br>' + note;
+    }
   }
 }
 

@@ -463,6 +463,9 @@ async function migrate() {
   if (!acols.includes('cost_center_desc'))  await backend.run("ALTER TABLE assets ADD COLUMN cost_center_desc TEXT DEFAULT ''");
   // Asset Type (Laptop, Screen, IP phone, …) — for grouping/filtering the inventory.
   if (!acols.includes('asset_type'))        await backend.run("ALTER TABLE assets ADD COLUMN asset_type TEXT DEFAULT ''");
+  // user_locked = 1 once any member changed User Name / AD Name (a holder change);
+  // surfaced via the History Usage button. Only an IT admin can unlock.
+  if (!acols.includes('user_locked'))       await backend.run("ALTER TABLE assets ADD COLUMN user_locked INTEGER NOT NULL DEFAULT 0");
 }
 
 // Create a notification for a given audience/country/scope.

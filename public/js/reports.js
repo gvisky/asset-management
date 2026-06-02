@@ -3,7 +3,7 @@
 const REPORTS = [
   { id: 'assets',      title: 'Asset Inventory',     desc: 'Every field we hold, keyed by ID — edit & re-upload below to sync.' },
   { id: 'servers',     title: 'Server Inventory',    desc: 'All servers with hostname, IP, OS, specs.' },
-  { id: 'locked',      title: 'Locked Items',        desc: 'Locked assets with cost center, dept, model, serial, codes & user.' },
+  { id: 'locked',      title: 'Locked Items',        desc: 'Records locked by a User Name / AD Name change, with cost center, dept, model, serial, codes & user.' },
   { id: 'summary',     title: 'Asset Summary',       desc: 'Counts by status, location, country, cost center & asset type.' },
   { id: 'warranty',    title: 'Warranty Due',        desc: 'Assets & servers expiring/expired within 90 days.' },
   { id: 'maintenance', title: 'Open Maintenance',    desc: 'Open repairs/services across assets and servers.' },

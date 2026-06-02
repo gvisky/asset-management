@@ -10,6 +10,10 @@ const { ASSET_COLUMNS, normalizeAssetType } = require('../lib/asset-columns');
 // IT admin unlocks it. Same set is used on the Server Inventory.
 const PROTECTED_FIELDS = { serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' };
 
+// Holder fields — changing either (a reassignment) locks the record (user_locked).
+// Any member may make the change; only an IT admin can unlock (via History Usage).
+const HOLDER_FIELDS = { user_name: 'User Name', ad_name: 'AD Name' };
+
 // Asset types that never need the "missing info" identifiers (no serial /
 // computer no / AD name), so they're never flagged in Needs Attention.
 const NO_FLAG_TYPES = ['camera', 'data center', 'ip phone', 'license', 'live stream', 'screen'];
@@ -280,6 +284,34 @@ router.post('/:id/sap-confirm', wrap(async (req, res) => {
   res.json({ message: 'ok', sap_confirmed: confirmed });
 }));
 
+// ── GET /api/assets/user-locked — records locked by a User Name / AD Name change
+// (a reassignment), surfaced by the 🕓 History Usage button. Country-scoped. ──
+router.get('/user-locked', wrap(async (req, res) => {
+  const cf = countryFilter(req);
+  const cond = ['deleted_at IS NULL', 'user_locked = 1'];
+  if (cf.clause) cond.push(cf.clause);
+  const rows = await all(
+    `SELECT * FROM assets WHERE ${cond.join(' AND ')} ORDER BY updated_at DESC, id DESC`, cf.params);
+  res.json(rows);
+}));
+
+// ── POST /api/assets/:id/user-unlock — IT admin clears the holder (User/AD) lock
+router.post('/:id/user-unlock', requireITAdmin, wrap(async (req, res) => {
+  const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+  if (!existing) return res.status(404).json({ error: 'Asset not found' });
+  const scope = scopeOf(req);
+  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!existing.user_locked) return res.json({ message: 'already unlocked', user_locked: 0 });
+
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const line = `${ts} UTC: 🔓 unlocked User Name / AD Name by ${req.user.username}`;
+  const newHistory = existing.history_usage ? `${existing.history_usage}\n${line}` : line;
+  await run('UPDATE assets SET user_locked = 0, history_usage = ? WHERE id = ?', [newHistory, req.params.id]);
+  await audit(req.user, 'UNLOCK', Number(req.params.id),
+    `Unlocked User Name / AD Name for "${existing.asset_code || existing.brand_model || 'untitled'}"`);
+  res.json({ message: 'unlocked', user_locked: 0 });
+}));
+
 // ── POST /api/assets/:id/unlock — IT admin re-opens the protected fields ──────
 router.post('/:id/unlock', requireITAdmin, wrap(async (req, res) => {
   const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
@@ -504,11 +536,31 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     }
   }
 
+  // ── Holder lock (User Name / AD Name) ──────────────────────────────────────
+  // A reassignment locks the record; while locked those fields can't change
+  // until an IT admin unlocks it (via the History Usage button).
+  // Only a real reassignment locks: the field had a value and it changed.
+  // (Filling a blank holder for the first time does not lock.)
+  const holderChanged = Object.keys(HOLDER_FIELDS).filter(
+    (k) => incoming[k] !== undefined && norm(existing[k]) !== '' && norm(existing[k]) !== norm(incoming[k]));
+  if (holderChanged.length && existing.user_locked) {
+    return res.status(403).json({ error: 'User Name / AD Name are locked (holder change). An IT admin must unlock this record first via 🕓 History Usage.' });
+  }
+
   let newHistory = (canEditHistory && history_usage !== undefined) ? history_usage : existing.history_usage;
   if (changes.length) {
     const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
     const line = `${ts} UTC: edited ${changes.join('; ')} by ${req.user.username}`;
     newHistory = newHistory ? `${newHistory}\n${line}` : line;
+  }
+
+  // Changing User Name / AD Name locks the record and records the action.
+  let userLockNow = existing.user_locked;
+  if (holderChanged.length) {
+    userLockNow = 1;
+    const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const lockLine = `${ts} UTC: 🔒 locked — ${holderChanged.map((k) => HOLDER_FIELDS[k]).join(' & ')} changed by ${req.user.username} (IT admin to unlock)`;
+    newHistory = newHistory ? `${newHistory}\n${lockLine}` : lockLine;
   }
 
   // Editing a protected field locks the record and records the action.
@@ -531,14 +583,14 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
       date_assigned = ?, serial_no = ?, mk = ?, asset_code = ?,
       user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?,
       purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?, fields_locked = ?,
-      cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?, asset_type = ?
+      cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?, asset_type = ?, user_locked = ?
     WHERE id = ? AND deleted_at IS NULL`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, newHistory, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number, sapConfirmed, lockNow,
      keep(cost_center, existing.cost_center), keep(ecc_cc, existing.ecc_cc), keep(asset_s4, existing.asset_s4),
      keep(asset_description, existing.asset_description), keep(cost_center_desc, existing.cost_center_desc),
-     keep(incoming.asset_type, existing.asset_type),
+     keep(incoming.asset_type, existing.asset_type), userLockNow,
      req.params.id]);
 
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
