@@ -241,7 +241,9 @@ function applyFieldLock(s) {
     } else if (it && !isNew) {
       banner.className = 'lock-banner is-open';
       banner.style.display = '';
-      banner.innerHTML = '🔓 <span>Editing Serial, Brand/Model or Asset Code will <strong>lock this record</strong> (an IT admin can unlock it later).</span>';
+      banner.innerHTML = itAdmin
+        ? '🔓 <span>Editing Serial, Brand/Model or Asset Code will <strong>lock this record</strong> — this applies to you too. As an IT admin you can unlock it again afterwards.</span>'
+        : '🔓 <span>Editing Serial, Brand/Model or Asset Code will <strong>lock this record</strong> (an IT admin can unlock it later).</span>';
     } else {
       banner.style.display = 'none';
     }
