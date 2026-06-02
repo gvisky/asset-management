@@ -42,7 +42,7 @@ function countryFilter(req) {
 // ── GET /api/assets — list (excludes soft-deleted) with search & filter ───────
 router.get('/', wrap(async (req, res) => {
   const { search = '', status = '', location = '', brand = '', department = '',
-          incomplete = '', page = 1, limit = 50 } = req.query;
+          cost_center = '', incomplete = '', page = 1, limit = 50 } = req.query;
 
   const conditions = ['deleted_at IS NULL'];
   const params = [];
@@ -64,6 +64,7 @@ router.get('/', wrap(async (req, res) => {
   if (location)   { conditions.push('location = ?');    params.push(location); }
   if (brand)      { conditions.push('brand_model = ?'); params.push(brand); }
   if (department) { conditions.push('department = ?');  params.push(department); }
+  if (cost_center){ conditions.push('cost_center = ?'); params.push(cost_center); }
   if (incomplete) {
     // Must mirror GET /incomplete exactly: missing key field, Active-without-AD, or duplicate serial.
     const dupCountry = cf.clause ? ` AND ${cf.clause}` : '';
@@ -152,9 +153,15 @@ router.get('/filters', wrap(async (req, res) => {
     `SELECT DISTINCT department AS v FROM assets WHERE deleted_at IS NULL AND department <> ''${extra} ORDER BY department COLLATE NOCASE`,
     cf.params
   )).map(r => r.v);
+  // Cost centers (grouped) with their description and asset count.
+  const costCenters = (await all(
+    `SELECT cost_center AS code, MAX(cost_center_desc) AS descr, COUNT(*) AS cnt
+       FROM assets WHERE deleted_at IS NULL AND cost_center <> ''${extra}
+       GROUP BY cost_center ORDER BY cost_center COLLATE NOCASE`, cf.params
+  )).map(r => ({ code: r.code, descr: r.descr || '', count: Number(r.cnt) }));
   // Global users get the full country list; scoped users get only their own.
   const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
-  res.json({ brands, departments, countries });
+  res.json({ brands, departments, countries, costCenters });
 }));
 
 // ── GET /api/assets/incomplete — missing key identifiers OR duplicate serial ──

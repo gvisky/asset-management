@@ -78,16 +78,22 @@ async function loadSummary() {
 // Populate the Brand Model and Department dropdowns with distinct values.
 async function loadFilters() {
   try {
-    const { brands, departments, countries } = await apiGet('/api/assets/filters');
+    const { brands, departments, countries, costCenters } = await apiGet('/api/assets/filters');
     const brandSel   = document.getElementById('filter-brand');
     const deptSel     = document.getElementById('filter-department');
     const countrySel = document.getElementById('filter-country');
+    const ccSel       = document.getElementById('filter-cost-center');
     brandSel.innerHTML = '<option value="">All Models</option>' +
       brands.map(b => `<option value="${b.replace(/"/g,'&quot;')}">${b}</option>`).join('');
     deptSel.innerHTML = '<option value="">All Departments</option>' +
       (departments || []).map(d => `<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
     countrySel.innerHTML = '<option value="">All Countries</option>' +
       (countries || []).map(c => `<option value="${c}">${c}</option>`).join('');
+    if (ccSel) ccSel.innerHTML = '<option value="">All Cost Centers</option>' +
+      (costCenters || []).map(cc => {
+        const lbl = cc.descr ? `${cc.code} — ${cc.descr} (${cc.count})` : `${cc.code} (${cc.count})`;
+        return `<option value="${String(cc.code).replace(/"/g,'&quot;')}">${lbl}</option>`;
+      }).join('');
 
     // Regional managers (scoped to one country) don't need the country filter
     // and their add/edit form is locked to their country.
@@ -111,6 +117,7 @@ async function loadAssets(page = 1) {
   const status     = document.getElementById('filter-status').value;
   const brand      = document.getElementById('filter-brand').value;
   const department = document.getElementById('filter-department').value;
+  const costCenter = (document.getElementById('filter-cost-center') || {}).value || '';
 
   const params = new URLSearchParams({ page, limit: PAGE_SIZE });
   if (search)        params.set('search',     search);
@@ -119,6 +126,7 @@ async function loadAssets(page = 1) {
   if (status)        params.set('status',     status);
   if (brand)         params.set('brand',      brand);
   if (department)    params.set('department', department);
+  if (costCenter)    params.set('cost_center', costCenter);
   if (incompleteMode) params.set('incomplete', '1');
 
   try {
@@ -451,12 +459,14 @@ function applyUrlFilters() {
   const brand = p.get('brand') || '';
   const department = p.get('department') || '';
   const country = p.get('country') || '';
+  const costCenter = p.get('cost_center') || '';
   if (status)     document.getElementById('filter-status').value = status;
   if (location)   document.getElementById('filter-location').value = location;
   if (search)     document.getElementById('search-input').value = search;
   if (brand)      document.getElementById('filter-brand').value = brand;
   if (department) document.getElementById('filter-department').value = department;
   if (country)    document.getElementById('filter-country').value = country;
+  if (costCenter) { const el = document.getElementById('filter-cost-center'); if (el) el.value = costCenter; }
   if (p.get('incomplete')) { incompleteMode = true; setIncompleteButton(true); }
 }
 
@@ -490,6 +500,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filter-status').addEventListener('change',     () => loadAssets(1));
   document.getElementById('filter-brand').addEventListener('change',      () => loadAssets(1));
   document.getElementById('filter-department').addEventListener('change', () => loadAssets(1));
+  const ccFilter = document.getElementById('filter-cost-center');
+  if (ccFilter) ccFilter.addEventListener('change', () => loadAssets(1));
 
   // "Needs Attention — Missing Info" toggle
   document.getElementById('btn-incomplete').addEventListener('click', () => {
@@ -511,6 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filter-status').value = '';
     document.getElementById('filter-brand').value = '';
     document.getElementById('filter-department').value = '';
+    const ccr = document.getElementById('filter-cost-center'); if (ccr) ccr.value = '';
     incompleteMode = false;
     setIncompleteButton(false);
     loadAssets(1);

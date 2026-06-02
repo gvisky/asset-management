@@ -83,12 +83,15 @@ async function setup() {
   await mapCostCenters();
 }
 
-// One-time mapping of the Accounting team's cost-center / SAP data onto assets.
+// Mapping of the Accounting team's cost-center / SAP data onto assets.
 // Links on asset_code == "Asset code ECC" and fills Cost Center, ECC CC, Asset S4,
-// Asset Description, Cost Center Description, plus Purchase Date and Cost.
-// Runs after assets are seeded; guarded by app_meta so it applies just once.
+// Asset Description, Cost Center Description, Department (= Cost Center Description),
+// plus Purchase Date and Cost. Assets in the file that don't yet exist are created.
+// Runs after assets are seeded; guarded by app_meta so it applies once per version.
+// Bump META_KEY to re-run after a new accounting file is dropped in.
 async function mapCostCenters() {
-  const done = await backend.get("SELECT value FROM app_meta WHERE key = 'cost_center_mapped'");
+  const META_KEY = 'cost_center_mapped_v3';
+  const done = await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY]);
   if (done) return;
   const seedPath = path.join(__dirname, 'cost-center-seed.json');
   if (!fs.existsSync(seedPath)) return;
@@ -96,24 +99,47 @@ async function mapCostCenters() {
   try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
   catch (e) { console.error('[map] cost-center-seed.json parse failed:', e.message); return; }
 
-  let mapped = 0;
+  let updated = 0, inserted = 0;
   for (const r of recs) {
     const code = (r.asset_code_ecc || '').toString().trim();
     if (!code) continue;
-    const res = await backend.run(
-      `UPDATE assets SET
-         cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?,
-         purchase_date = CASE WHEN ? <> '' THEN ? ELSE purchase_date END,
-         cost          = CASE WHEN ? <> '' THEN ? ELSE cost END
-       WHERE LOWER(asset_code) = LOWER(?) AND deleted_at IS NULL`,
-      [r.cost_center || '', r.ecc_cc || '', r.asset_s4 || '', r.asset_description || '', r.cost_center_desc || '',
-       r.purchase_date || '', r.purchase_date || '', r.cost || '', r.cost || '', code]);
-    if (res.changes) mapped += res.changes;
+    const dept = r.cost_center_desc || '';   // Department is overwritten from the cost-center description
+
+    const existing = await backend.get(
+      'SELECT id FROM assets WHERE LOWER(asset_code) = LOWER(?) AND deleted_at IS NULL', [code]);
+    if (existing) {
+      // Update every asset sharing this code (some legacy rows duplicate an asset_code).
+      const res = await backend.run(
+        `UPDATE assets SET
+           cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?,
+           department    = CASE WHEN ? <> '' THEN ? ELSE department END,
+           purchase_date = CASE WHEN ? <> '' THEN ? ELSE purchase_date END,
+           cost          = CASE WHEN ? <> '' THEN ? ELSE cost END
+         WHERE LOWER(asset_code) = LOWER(?) AND deleted_at IS NULL`,
+        [r.cost_center || '', r.ecc_cc || '', r.asset_s4 || '', r.asset_description || '', r.cost_center_desc || '',
+         dept, dept, r.purchase_date || '', r.purchase_date || '', r.cost || '', r.cost || '', code]);
+      if (res.changes) updated += res.changes;
+    } else {
+      // New asset from the accounting file. Skip if it was already inserted (by Asset S4).
+      const byS4 = r.asset_s4
+        ? await backend.get('SELECT id FROM assets WHERE asset_s4 = ? AND deleted_at IS NULL', [r.asset_s4])
+        : null;
+      if (byS4) continue;
+      await backend.run(
+        `INSERT INTO assets
+           (country, status, department, brand_model, asset_code, history_usage,
+            purchase_date, cost, cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc)
+         VALUES ('Vietnam', 'Active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [dept, r.asset_description || '', code, 'Imported from Accounting cost-center file',
+         r.purchase_date || '', r.cost || '', r.cost_center || '', r.ecc_cc || '',
+         r.asset_s4 || '', r.asset_description || '', dept]);
+      inserted++;
+    }
   }
   await backend.run(
-    "INSERT INTO app_meta (key, value) VALUES ('cost_center_mapped', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-    [String(mapped)]);
-  console.log(`[map] Cost-center / SAP mapping applied to ${mapped} assets`);
+    'INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [META_KEY, `updated=${updated},inserted=${inserted}`]);
+  console.log(`[map] Cost-center / SAP mapping: updated ${updated}, inserted ${inserted} assets`);
 }
 
 // On first boot with empty servers, load db/servers-seed.json if present.

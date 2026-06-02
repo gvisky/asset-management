@@ -41,6 +41,10 @@ const REPORTS = {
       { name: 'By Status',   rows: await all(`SELECT status AS Status, COUNT(*) AS Count FROM assets WHERE deleted_at IS NULL${sc.clause} GROUP BY status ORDER BY Count DESC`, sc.params) },
       { name: 'By Location', rows: await all(`SELECT location AS Location, COUNT(*) AS Count FROM assets WHERE deleted_at IS NULL${sc.clause} GROUP BY location ORDER BY Count DESC`, sc.params) },
       { name: 'By Country',  rows: await all(`SELECT country AS Country, COUNT(*) AS Count FROM assets WHERE deleted_at IS NULL${sc.clause} GROUP BY country ORDER BY Count DESC`, sc.params) },
+      { name: 'By Cost Center', rows: await all(
+          `SELECT cost_center AS "Cost Center", MAX(cost_center_desc) AS "Description", COUNT(*) AS Count
+             FROM assets WHERE deleted_at IS NULL AND cost_center <> ''${sc.clause}
+            GROUP BY cost_center ORDER BY Count DESC`, sc.params) },
     ];
     return { sheets };
   },
