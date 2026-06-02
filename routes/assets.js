@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { get, all, run, audit, notify } = require('../db/database');
+const XLSX = require('xlsx');
 const { requireAuth, requireRole, requireGlobalAdmin, requireITAdmin } = require('../middleware/auth');
 const { buildDeliveryForm } = require('../lib/delivery-form');
+const { ASSET_COLUMNS } = require('../lib/asset-columns');
 
 // Identity fields that only IT may edit; editing one locks the record until an
 // IT admin unlocks it. Same set is used on the Server Inventory.
@@ -357,6 +359,70 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const created = await get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
   await audit(req.user, 'CREATE', created.id, `Created asset "${created.asset_code || created.brand_model || 'untitled'}" (${finalCountry})`);
   res.status(201).json(created);
+}));
+
+// ── POST /api/assets/import — re-upload the edited Asset Inventory report ──────
+// IT members upload the .xlsx exported from /api/reports/assets.xlsx (as base64).
+// Rows with an ID update that asset; rows without an ID are inserted. History
+// Usage and the Locked flag are preserved (never overwritten). Rows missing from
+// the file are NOT deleted (use the Recycle Bin to remove assets).
+const WRITABLE_COLS = ASSET_COLUMNS.filter(c => c.writable);
+router.post('/import', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  if (req.user.team !== 'IT') return res.status(403).json({ error: 'Only IT members can import the asset report' });
+  const b64 = req.body && req.body.xlsx_base64;
+  if (!b64) return res.status(400).json({ error: 'No file provided' });
+
+  let rows;
+  try {
+    const buf = Buffer.from(b64, 'base64');
+    const wb = XLSX.read(buf, { type: 'buffer' });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+  } catch (e) { return res.status(400).json({ error: 'Could not read the Excel file' }); }
+
+  const scope = scopeOf(req);
+  let updated = 0, inserted = 0, skipped = 0;
+
+  for (const row of rows) {
+    // Pull the writable fields from their column headers.
+    const data = {};
+    for (const c of WRITABLE_COLS) {
+      if (c.header in row) data[c.field] = String(row[c.header] == null ? '' : row[c.header]).trim();
+    }
+    // Country: scoped users are locked to their region; otherwise validate.
+    let country = scope || data.country;
+    if (!VALID_COUNTRIES.includes(country)) country = scope || 'Vietnam';
+    data.country = country;
+
+    const idRaw = row['ID'];
+    const id = (idRaw === '' || idRaw == null) ? null : Number(idRaw);
+
+    if (id && Number.isFinite(id)) {
+      const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [id]);
+      if (!existing) { skipped++; continue; }
+      if (scope && existing.country !== scope) { skipped++; continue; }   // outside region
+      // status must stay valid; blank/invalid keeps the existing value.
+      const status = ['Active', 'Broken', 'Stock'].includes(data.status) ? data.status : existing.status;
+      const fields = WRITABLE_COLS.map(c => c.field);
+      const vals = fields.map(f => (f === 'status' ? status : (data[f] !== undefined ? data[f] : existing[f])));
+      await run(`UPDATE assets SET ${fields.map(f => f + ' = ?').join(', ')} WHERE id = ? AND deleted_at IS NULL`,
+        [...vals, id]);
+      updated++;
+    } else {
+      // New row — require at least one non-empty value to avoid blank inserts.
+      if (!WRITABLE_COLS.some(c => data[c.field])) { skipped++; continue; }
+      if (!['Active', 'Broken', 'Stock'].includes(data.status)) data.status = 'Active';
+      const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+      const hist = `${ts} UTC: created via report import by ${req.user.username}`;
+      const fields = WRITABLE_COLS.map(c => c.field);
+      const cols = [...fields, 'history_usage'];
+      const vals = [...fields.map(f => data[f] || ''), hist];
+      await run(`INSERT INTO assets (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
+      inserted++;
+    }
+  }
+
+  await audit(req.user, 'IMPORT', null, `Imported Asset Inventory report: ${updated} updated, ${inserted} inserted, ${skipped} skipped`);
+  res.json({ updated, inserted, skipped, total: rows.length });
 }));
 
 // ── PUT /api/assets/:id — update (admin/editor only) ──────────────────────────

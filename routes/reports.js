@@ -3,6 +3,7 @@ const router = express.Router();
 const XLSX = require('xlsx');
 const { all } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
+const { ASSET_COLUMNS } = require('../lib/asset-columns');
 
 router.use(requireAuth);
 // HR-only users (no Asset Inventory access) can't use the asset reports/export.
@@ -23,15 +24,17 @@ function scoped(req, col = 'country') {
 
 // Each report returns { sheets: [{ name, rows }] }.
 const REPORTS = {
+  // Full Asset Inventory — every field we hold, keyed by ID so the file can be
+  // edited and re-uploaded (POST /api/assets/import) to sync the database.
   async assets(req) {
     const sc = scoped(req);
-    const rows = await all(
-      `SELECT asset_code AS "Asset Code", brand_model AS "Brand/Model", computer_no AS "Computer No",
-              serial_no AS "Serial", country AS "Country", location AS "Location",
-              department AS "Department", user_name AS "User", ad_name AS "AD Name", status AS "Status",
-              vendor AS "Vendor", purchase_date AS "Purchase Date", warranty_expiry AS "Warranty Expiry",
-              cost AS "Cost", po_number AS "PO Number"
-         FROM assets WHERE deleted_at IS NULL${sc.clause} ORDER BY country, id`, sc.params);
+    const raw = await all(
+      `SELECT * FROM assets WHERE deleted_at IS NULL${sc.clause} ORDER BY country, cost_center, id`, sc.params);
+    const rows = raw.map(r => {
+      const o = {};
+      for (const c of ASSET_COLUMNS) o[c.header] = r[c.field] == null ? '' : r[c.field];
+      return o;
+    });
     return { sheets: [{ name: 'Assets', rows }] };
   },
 

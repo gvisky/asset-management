@@ -57,6 +57,27 @@
         <div class="stat-grid" id="report-grid"></div>
       </div>
     </div>
+
+    <!-- Import / Sync (IT only) -->
+    <div class="card" id="import-card" style="display:none;margin-top:18px">
+      <div class="card-header">
+        <span class="card-title">⬆️ Import / Sync Asset Inventory</span>
+        <span class="text-muted text-sm">IT only · upload the edited Asset Inventory .xlsx</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted text-sm" style="margin:0 0 12px">
+          Download <strong>Asset Inventory</strong> above, arrange it in Excel, then upload the same file here to
+          update the database. Rows keep their <strong>ID</strong> column — matching rows are updated and rows with a
+          blank ID are added as new assets. <em>History Usage</em> and the <em>Locked</em> flag are preserved, and rows
+          you remove from the file are <strong>not</strong> deleted (use the Recycle Bin for that). Don't rename the column headers.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="import-file" accept=".xlsx" class="form-control" style="max-width:340px">
+          <button class="btn btn-primary" id="import-btn">Upload &amp; Sync</button>
+          <span id="import-status" class="text-muted text-sm"></span>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
