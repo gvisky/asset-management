@@ -10,6 +10,12 @@ const { ASSET_COLUMNS, normalizeAssetType } = require('../lib/asset-columns');
 // IT admin unlocks it. Same set is used on the Server Inventory.
 const PROTECTED_FIELDS = { serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' };
 
+// Asset types that never need the "missing info" identifiers (no serial /
+// computer no / AD name), so they're never flagged in Needs Attention.
+const NO_FLAG_TYPES = ['camera', 'data center', 'ip phone', 'license', 'live stream', 'screen'];
+const NOT_FLAGGED_SQL =
+  `(asset_type IS NULL OR asset_type = '' OR LOWER(asset_type) NOT IN (${NO_FLAG_TYPES.map(() => '?').join(',')}))`;
+
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
 // Only this account may edit the History Usage audit log (configurable via env).
@@ -79,6 +85,7 @@ router.get('/', wrap(async (req, res) => {
       serial_no IN (SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${dupCountry} GROUP BY serial_no HAVING COUNT(*) > 1)
     )`);
     if (cf.clause) params.push(...cf.params);
+    conditions.push(NOT_FLAGGED_SQL); params.push(...NO_FLAG_TYPES);
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');
@@ -128,8 +135,8 @@ router.get('/stats', wrap(async (req, res) => {
       asset_code  IS NULL OR asset_code  = '' OR
       computer_no IS NULL OR computer_no = '' OR
       (status = 'Active' AND (ad_name IS NULL OR ad_name = ''))
-    )`];
-  const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, lp)).cnt);
+    )`, NOT_FLAGGED_SQL];
+  const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, [...lp, ...NO_FLAG_TYPES])).cnt);
 
   // Warranty expiring/expired within 90 days (live assets that have a date set).
   const warCond = [...liveCond, "warranty_expiry <> ''", "date(warranty_expiry) <= date('now','+90 days')"];
@@ -192,15 +199,17 @@ router.get('/incomplete', wrap(async (req, res) => {
       (status = 'Active' AND (ad_name IS NULL OR ad_name=''))
     )`];
   if (cf.clause) cond.push(cf.clause);
-  const incomplete = await all(`SELECT * FROM assets WHERE ${cond.join(' AND ')}`, cf.params);
+  cond.push(NOT_FLAGGED_SQL);
+  const incomplete = await all(`SELECT * FROM assets WHERE ${cond.join(' AND ')}`, [...cf.params, ...NO_FLAG_TYPES]);
 
-  // Assets that share a duplicated serial number.
+  // Assets that share a duplicated serial number (exempt types excluded from flagging).
   let dupRows = [];
   if (dups.length) {
     const ph = dups.map(() => '?').join(',');
     const dcond = ['deleted_at IS NULL', `serial_no IN (${ph})`];
     if (cf.clause) dcond.push(cf.clause);
-    dupRows = await all(`SELECT * FROM assets WHERE ${dcond.join(' AND ')}`, [...dups, ...cf.params]);
+    dcond.push(NOT_FLAGGED_SQL);
+    dupRows = await all(`SELECT * FROM assets WHERE ${dcond.join(' AND ')}`, [...dups, ...cf.params, ...NO_FLAG_TYPES]);
   }
 
   // Map each duplicated serial → the assets that carry it.
