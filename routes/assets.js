@@ -374,8 +374,7 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
 // Usage and the Locked flag are preserved (never overwritten). Rows missing from
 // the file are NOT deleted (use the Recycle Bin to remove assets).
 const WRITABLE_COLS = ASSET_COLUMNS.filter(c => c.writable);
-router.post('/import', requireRole('admin', 'editor'), wrap(async (req, res) => {
-  if (req.user.team !== 'IT') return res.status(403).json({ error: 'Only IT members can import the asset report' });
+router.post('/import', requireITAdmin, wrap(async (req, res) => {
   const b64 = req.body && req.body.xlsx_base64;
   if (!b64) return res.status(400).json({ error: 'No file provided' });
 

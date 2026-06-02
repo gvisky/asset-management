@@ -38,6 +38,18 @@ const REPORTS = {
     return { sheets: [{ name: 'Assets', rows }] };
   },
 
+  // Locked items — assets whose protected fields (Serial / Brand-Model / Asset
+  // Code) are frozen, with the key identifying info.
+  async locked(req) {
+    const sc = scoped(req);
+    const rows = await all(
+      `SELECT cost_center AS "Cost Center", department AS "Department", brand_model AS "Brand/Model",
+              serial_no AS "Serial", asset_code AS "Asset Code (ECC)", asset_s4 AS "Asset S4", user_name AS "User Name"
+         FROM assets WHERE deleted_at IS NULL AND fields_locked = 1${sc.clause}
+        ORDER BY cost_center, brand_model`, sc.params);
+    return { sheets: [{ name: 'Locked Items', rows }] };
+  },
+
   async summary(req) {
     const sc = scoped(req);
     const sheets = [
