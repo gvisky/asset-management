@@ -78,11 +78,13 @@ async function loadSummary() {
 // Populate the Brand Model and Department dropdowns with distinct values.
 async function loadFilters() {
   try {
-    const { brands, departments, countries, costCenters } = await apiGet('/api/assets/filters');
+    const { brands, departments, countries, costCenters, assetTypes } = await apiGet('/api/assets/filters');
     const brandSel   = document.getElementById('filter-brand');
     const deptSel     = document.getElementById('filter-department');
     const countrySel = document.getElementById('filter-country');
     const ccSel       = document.getElementById('filter-cost-center');
+    const atSel       = document.getElementById('filter-asset-type');
+    const atList      = document.getElementById('asset-type-options');
     brandSel.innerHTML = '<option value="">All Models</option>' +
       brands.map(b => `<option value="${b.replace(/"/g,'&quot;')}">${b}</option>`).join('');
     deptSel.innerHTML = '<option value="">All Departments</option>' +
@@ -94,6 +96,9 @@ async function loadFilters() {
         const lbl = cc.descr ? `${cc.code} — ${cc.descr} (${cc.count})` : `${cc.code} (${cc.count})`;
         return `<option value="${String(cc.code).replace(/"/g,'&quot;')}">${lbl}</option>`;
       }).join('');
+    if (atSel) atSel.innerHTML = '<option value="">All Asset Types</option>' +
+      (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}">${t.type} (${t.count})</option>`).join('');
+    if (atList) atList.innerHTML = (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}"></option>`).join('');
 
     // Regional managers (scoped to one country) don't need the country filter
     // and their add/edit form is locked to their country.
@@ -118,6 +123,7 @@ async function loadAssets(page = 1) {
   const brand      = document.getElementById('filter-brand').value;
   const department = document.getElementById('filter-department').value;
   const costCenter = (document.getElementById('filter-cost-center') || {}).value || '';
+  const assetType  = (document.getElementById('filter-asset-type') || {}).value || '';
 
   const params = new URLSearchParams({ page, limit: PAGE_SIZE });
   if (search)        params.set('search',     search);
@@ -127,6 +133,7 @@ async function loadAssets(page = 1) {
   if (brand)         params.set('brand',      brand);
   if (department)    params.set('department', department);
   if (costCenter)    params.set('cost_center', costCenter);
+  if (assetType)     params.set('asset_type', assetType);
   if (incompleteMode) params.set('incomplete', '1');
 
   try {
@@ -157,7 +164,7 @@ function renderTable(rows) {
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
           : `<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code>`}</td>
-      <td>${a.brand_model || '—'}</td>
+      <td>${a.asset_type ? `<span class="badge badge-office" style="font-size:10px">${esc(a.asset_type)}</span><br>` : ''}${a.brand_model || '—'}</td>
       <td class="text-muted text-sm">${a.computer_no || '—'}</td>
       <td><span class="badge badge-factory">${a.country || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
@@ -234,6 +241,7 @@ async function onView(id) {
       ['Cost Center',   a.cost_center ? `${a.cost_center}${a.cost_center_desc ? ' — ' + a.cost_center_desc : ''}` : ''],
       ['ECC CC',        a.ecc_cc],
       ['Asset Description', a.asset_description],
+      ['Asset Type',    a.asset_type],
       ['Brand / Model', a.brand_model],
       ['Country',       a.country],
       ['Location',      locationBadge(a.location)],
@@ -460,6 +468,7 @@ function applyUrlFilters() {
   const department = p.get('department') || '';
   const country = p.get('country') || '';
   const costCenter = p.get('cost_center') || '';
+  const assetType = p.get('asset_type') || '';
   if (status)     document.getElementById('filter-status').value = status;
   if (location)   document.getElementById('filter-location').value = location;
   if (search)     document.getElementById('search-input').value = search;
@@ -467,6 +476,7 @@ function applyUrlFilters() {
   if (department) document.getElementById('filter-department').value = department;
   if (country)    document.getElementById('filter-country').value = country;
   if (costCenter) { const el = document.getElementById('filter-cost-center'); if (el) el.value = costCenter; }
+  if (assetType)  { const el = document.getElementById('filter-asset-type'); if (el) el.value = assetType; }
   if (p.get('incomplete')) { incompleteMode = true; setIncompleteButton(true); }
 }
 
@@ -502,6 +512,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filter-department').addEventListener('change', () => loadAssets(1));
   const ccFilter = document.getElementById('filter-cost-center');
   if (ccFilter) ccFilter.addEventListener('change', () => loadAssets(1));
+  const atFilter = document.getElementById('filter-asset-type');
+  if (atFilter) atFilter.addEventListener('change', () => loadAssets(1));
 
   // "Needs Attention — Missing Info" toggle
   document.getElementById('btn-incomplete').addEventListener('click', () => {
@@ -524,6 +536,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filter-brand').value = '';
     document.getElementById('filter-department').value = '';
     const ccr = document.getElementById('filter-cost-center'); if (ccr) ccr.value = '';
+    const atr = document.getElementById('filter-asset-type'); if (atr) atr.value = '';
     incompleteMode = false;
     setIncompleteButton(false);
     loadAssets(1);

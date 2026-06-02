@@ -48,6 +48,10 @@ const REPORTS = {
           `SELECT cost_center AS "Cost Center", MAX(cost_center_desc) AS "Description", COUNT(*) AS Count
              FROM assets WHERE deleted_at IS NULL AND cost_center <> ''${sc.clause}
             GROUP BY cost_center ORDER BY Count DESC`, sc.params) },
+      { name: 'By Asset Type', rows: await all(
+          `SELECT asset_type AS "Asset Type", COUNT(*) AS Count
+             FROM assets WHERE deleted_at IS NULL AND asset_type <> ''${sc.clause}
+            GROUP BY asset_type ORDER BY Count DESC`, sc.params) },
     ];
     return { sheets };
   },

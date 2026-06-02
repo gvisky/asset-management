@@ -461,6 +461,8 @@ async function migrate() {
   if (!acols.includes('asset_s4'))          await backend.run("ALTER TABLE assets ADD COLUMN asset_s4 TEXT DEFAULT ''");
   if (!acols.includes('asset_description')) await backend.run("ALTER TABLE assets ADD COLUMN asset_description TEXT DEFAULT ''");
   if (!acols.includes('cost_center_desc'))  await backend.run("ALTER TABLE assets ADD COLUMN cost_center_desc TEXT DEFAULT ''");
+  // Asset Type (Laptop, Screen, IP phone, …) — for grouping/filtering the inventory.
+  if (!acols.includes('asset_type'))        await backend.run("ALTER TABLE assets ADD COLUMN asset_type TEXT DEFAULT ''");
 }
 
 // Create a notification for a given audience/country/scope.

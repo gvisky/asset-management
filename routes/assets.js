@@ -4,7 +4,7 @@ const { get, all, run, audit, notify } = require('../db/database');
 const XLSX = require('xlsx');
 const { requireAuth, requireRole, requireGlobalAdmin, requireITAdmin } = require('../middleware/auth');
 const { buildDeliveryForm } = require('../lib/delivery-form');
-const { ASSET_COLUMNS } = require('../lib/asset-columns');
+const { ASSET_COLUMNS, normalizeAssetType } = require('../lib/asset-columns');
 
 // Identity fields that only IT may edit; editing one locks the record until an
 // IT admin unlocks it. Same set is used on the Server Inventory.
@@ -44,7 +44,7 @@ function countryFilter(req) {
 // ── GET /api/assets — list (excludes soft-deleted) with search & filter ───────
 router.get('/', wrap(async (req, res) => {
   const { search = '', status = '', location = '', brand = '', department = '',
-          cost_center = '', incomplete = '', page = 1, limit = 50 } = req.query;
+          cost_center = '', asset_type = '', incomplete = '', page = 1, limit = 50 } = req.query;
 
   const conditions = ['deleted_at IS NULL'];
   const params = [];
@@ -67,6 +67,7 @@ router.get('/', wrap(async (req, res) => {
   if (brand)      { conditions.push('brand_model = ?'); params.push(brand); }
   if (department) { conditions.push('department = ?');  params.push(department); }
   if (cost_center){ conditions.push('cost_center = ?'); params.push(cost_center); }
+  if (asset_type) { conditions.push('asset_type = ?');  params.push(asset_type); }
   if (incomplete) {
     // Must mirror GET /incomplete exactly: missing key field, Active-without-AD, or duplicate serial.
     const dupCountry = cf.clause ? ` AND ${cf.clause}` : '';
@@ -161,9 +162,14 @@ router.get('/filters', wrap(async (req, res) => {
        FROM assets WHERE deleted_at IS NULL AND cost_center <> ''${extra}
        GROUP BY cost_center ORDER BY cost_center COLLATE NOCASE`, cf.params
   )).map(r => ({ code: r.code, descr: r.descr || '', count: Number(r.cnt) }));
+  // Asset types (grouped) with their count.
+  const assetTypes = (await all(
+    `SELECT asset_type AS v, COUNT(*) AS cnt FROM assets WHERE deleted_at IS NULL AND asset_type <> ''${extra}
+       GROUP BY asset_type ORDER BY asset_type COLLATE NOCASE`, cf.params
+  )).map(r => ({ type: r.v, count: Number(r.cnt) }));
   // Global users get the full country list; scoped users get only their own.
   const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
-  res.json({ brands, departments, countries, costCenters });
+  res.json({ brands, departments, countries, costCenters, assetTypes });
 }));
 
 // ── GET /api/assets/incomplete — missing key identifiers OR duplicate serial ──
@@ -334,7 +340,8 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
     user_name = '', ad_name = '', history_usage = '', remark = '',
     status = 'Active',
     purchase_date = '', warranty_expiry = '', vendor = '', cost = '', po_number = '',
-    cost_center = '', ecc_cc = '', asset_s4 = '', asset_description = '', cost_center_desc = ''
+    cost_center = '', ecc_cc = '', asset_s4 = '', asset_description = '', cost_center_desc = '',
+    asset_type = ''
   } = req.body;
 
   const finalCountry = resolveCountry(req, country);
@@ -349,12 +356,12 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
       (location, country, department, computer_no, brand_model, date_assigned,
        serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
        purchase_date, warranty_expiry, vendor, cost, po_number, sap_confirmed,
-       cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+       cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc, asset_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, hist, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number,
-     cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc]);
+     cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc, normalizeAssetType(asset_type)]);
 
   const created = await get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
   await audit(req.user, 'CREATE', created.id, `Created asset "${created.asset_code || created.brand_model || 'untitled'}" (${finalCountry})`);
@@ -383,17 +390,25 @@ router.post('/import', requireRole('admin', 'editor'), wrap(async (req, res) => 
   let updated = 0, inserted = 0, skipped = 0;
 
   for (const row of rows) {
+    // Build a case/space-tolerant header → value lookup so minor header edits
+    // (e.g. "Asset type" vs "Asset Type") still map correctly.
+    const byHeader = {};
+    for (const k of Object.keys(row)) byHeader[k.trim().toLowerCase()] = row[k];
+    const idRawCell = byHeader['id'];
+
     // Pull the writable fields from their column headers.
     const data = {};
     for (const c of WRITABLE_COLS) {
-      if (c.header in row) data[c.field] = String(row[c.header] == null ? '' : row[c.header]).trim();
+      const key = c.header.trim().toLowerCase();
+      if (key in byHeader) data[c.field] = String(byHeader[key] == null ? '' : byHeader[key]).trim();
     }
+    if (data.asset_type !== undefined) data.asset_type = normalizeAssetType(data.asset_type);
     // Country: scoped users are locked to their region; otherwise validate.
     let country = scope || data.country;
     if (!VALID_COUNTRIES.includes(country)) country = scope || 'Vietnam';
     data.country = country;
 
-    const idRaw = row['ID'];
+    const idRaw = idRawCell;
     const id = (idRaw === '' || idRaw == null) ? null : Number(idRaw);
 
     if (id && Number.isFinite(id)) {
@@ -437,7 +452,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     location, country, department, computer_no, brand_model, date_assigned,
     serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
     purchase_date, warranty_expiry, vendor, cost, po_number,
-    cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc
+    cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc, asset_type
   } = req.body;
 
   // Scoped users can't move an asset out of their country.
@@ -456,10 +471,12 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     asset_code: 'Asset Code', user_name: 'User', ad_name: 'AD Name', status: 'Status', remark: 'Remark',
     purchase_date: 'Purchase Date', warranty_expiry: 'Warranty', vendor: 'Vendor', cost: 'Cost', po_number: 'PO Number',
     cost_center: 'Cost Center', ecc_cc: 'ECC CC', asset_s4: 'Asset S4', asset_description: 'Asset Description', cost_center_desc: 'Cost Center Desc',
+    asset_type: 'Asset Type',
   };
   const incoming = { location, country: finalCountry, department, computer_no, brand_model, date_assigned,
     serial_no, mk, asset_code, user_name, ad_name, status, remark, purchase_date, warranty_expiry, vendor, cost, po_number,
-    cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc };
+    cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc,
+    asset_type: asset_type !== undefined ? normalizeAssetType(asset_type) : undefined };
   const norm = (v) => String(v == null ? '' : v).trim();
   const changes = [];
   for (const [k, lbl] of Object.entries(TRACK)) {
@@ -506,13 +523,14 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
       date_assigned = ?, serial_no = ?, mk = ?, asset_code = ?,
       user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?,
       purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?, fields_locked = ?,
-      cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?
+      cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?, asset_type = ?
     WHERE id = ? AND deleted_at IS NULL`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, newHistory, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number, sapConfirmed, lockNow,
      keep(cost_center, existing.cost_center), keep(ecc_cc, existing.ecc_cc), keep(asset_s4, existing.asset_s4),
      keep(asset_description, existing.asset_description), keep(cost_center_desc, existing.cost_center_desc),
+     keep(incoming.asset_type, existing.asset_type),
      req.params.id]);
 
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
