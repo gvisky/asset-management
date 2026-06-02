@@ -80,6 +80,40 @@ async function setup() {
   await seedAssets();
   await seedPersonnel();
   await seedServers();
+  await mapCostCenters();
+}
+
+// One-time mapping of the Accounting team's cost-center / SAP data onto assets.
+// Links on asset_code == "Asset code ECC" and fills Cost Center, ECC CC, Asset S4,
+// Asset Description, Cost Center Description, plus Purchase Date and Cost.
+// Runs after assets are seeded; guarded by app_meta so it applies just once.
+async function mapCostCenters() {
+  const done = await backend.get("SELECT value FROM app_meta WHERE key = 'cost_center_mapped'");
+  if (done) return;
+  const seedPath = path.join(__dirname, 'cost-center-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let recs;
+  try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[map] cost-center-seed.json parse failed:', e.message); return; }
+
+  let mapped = 0;
+  for (const r of recs) {
+    const code = (r.asset_code_ecc || '').toString().trim();
+    if (!code) continue;
+    const res = await backend.run(
+      `UPDATE assets SET
+         cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?,
+         purchase_date = CASE WHEN ? <> '' THEN ? ELSE purchase_date END,
+         cost          = CASE WHEN ? <> '' THEN ? ELSE cost END
+       WHERE LOWER(asset_code) = LOWER(?) AND deleted_at IS NULL`,
+      [r.cost_center || '', r.ecc_cc || '', r.asset_s4 || '', r.asset_description || '', r.cost_center_desc || '',
+       r.purchase_date || '', r.purchase_date || '', r.cost || '', r.cost || '', code]);
+    if (res.changes) mapped += res.changes;
+  }
+  await backend.run(
+    "INSERT INTO app_meta (key, value) VALUES ('cost_center_mapped', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    [String(mapped)]);
+  console.log(`[map] Cost-center / SAP mapping applied to ${mapped} assets`);
 }
 
 // On first boot with empty servers, load db/servers-seed.json if present.
@@ -395,6 +429,12 @@ async function migrate() {
   if (!acols.includes('sap_confirmed'))   await backend.run("ALTER TABLE assets ADD COLUMN sap_confirmed INTEGER NOT NULL DEFAULT 0");
   // fields_locked = 1 once an IT member has edited a protected field (Serial / Brand-Model / Asset Code).
   if (!acols.includes('fields_locked'))   await backend.run("ALTER TABLE assets ADD COLUMN fields_locked INTEGER NOT NULL DEFAULT 0");
+  // Accounting / SAP mapping (from Mapped_Asset_Cost_Center): linked via asset_code = "Asset code ECC".
+  if (!acols.includes('cost_center'))       await backend.run("ALTER TABLE assets ADD COLUMN cost_center TEXT DEFAULT ''");
+  if (!acols.includes('ecc_cc'))            await backend.run("ALTER TABLE assets ADD COLUMN ecc_cc TEXT DEFAULT ''");
+  if (!acols.includes('asset_s4'))          await backend.run("ALTER TABLE assets ADD COLUMN asset_s4 TEXT DEFAULT ''");
+  if (!acols.includes('asset_description')) await backend.run("ALTER TABLE assets ADD COLUMN asset_description TEXT DEFAULT ''");
+  if (!acols.includes('cost_center_desc'))  await backend.run("ALTER TABLE assets ADD COLUMN cost_center_desc TEXT DEFAULT ''");
 }
 
 // Create a notification for a given audience/country/scope.

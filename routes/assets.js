@@ -54,10 +54,11 @@ router.get('/', wrap(async (req, res) => {
     conditions.push(`(
       department   LIKE ? OR computer_no  LIKE ? OR brand_model LIKE ? OR
       serial_no    LIKE ? OR asset_code   LIKE ? OR user_name   LIKE ? OR
-      ad_name      LIKE ?
+      ad_name      LIKE ? OR asset_s4     LIKE ? OR cost_center LIKE ? OR
+      asset_description LIKE ?
     )`);
     const like = `%${search}%`;
-    params.push(like, like, like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like, like, like);
   }
   if (status)     { conditions.push('status = ?');      params.push(status); }
   if (location)   { conditions.push('location = ?');    params.push(location); }
@@ -283,7 +284,7 @@ router.get('/:id/delivery-form', wrap(async (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const buf = buildDeliveryForm({
     brand_model: a.brand_model,
-    asset_code:  a.asset_code,
+    asset_code:  a.asset_s4 || a.asset_code,   // Asset S4 is the main code after mapping
     serial_no:   a.serial_no,
     date_print:  today,
     department:  a.department,
@@ -323,7 +324,8 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
     date_assigned = '', serial_no = '', mk = '', asset_code = '',
     user_name = '', ad_name = '', history_usage = '', remark = '',
     status = 'Active',
-    purchase_date = '', warranty_expiry = '', vendor = '', cost = '', po_number = ''
+    purchase_date = '', warranty_expiry = '', vendor = '', cost = '', po_number = '',
+    cost_center = '', ecc_cc = '', asset_s4 = '', asset_description = '', cost_center_desc = ''
   } = req.body;
 
   const finalCountry = resolveCountry(req, country);
@@ -337,11 +339,13 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
     INSERT INTO assets
       (location, country, department, computer_no, brand_model, date_assigned,
        serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
-       purchase_date, warranty_expiry, vendor, cost, po_number, sap_confirmed)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+       purchase_date, warranty_expiry, vendor, cost, po_number, sap_confirmed,
+       cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, hist, remark, status,
-     purchase_date, warranty_expiry, vendor, cost, po_number]);
+     purchase_date, warranty_expiry, vendor, cost, po_number,
+     cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc]);
 
   const created = await get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
   await audit(req.user, 'CREATE', created.id, `Created asset "${created.asset_code || created.brand_model || 'untitled'}" (${finalCountry})`);
@@ -359,7 +363,8 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const {
     location, country, department, computer_no, brand_model, date_assigned,
     serial_no, mk, asset_code, user_name, ad_name, history_usage, remark, status,
-    purchase_date, warranty_expiry, vendor, cost, po_number
+    purchase_date, warranty_expiry, vendor, cost, po_number,
+    cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc
   } = req.body;
 
   // Scoped users can't move an asset out of their country.
@@ -377,9 +382,11 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     brand_model: 'Brand/Model', date_assigned: 'Date Assigned', serial_no: 'Serial', mk: 'M&K',
     asset_code: 'Asset Code', user_name: 'User', ad_name: 'AD Name', status: 'Status', remark: 'Remark',
     purchase_date: 'Purchase Date', warranty_expiry: 'Warranty', vendor: 'Vendor', cost: 'Cost', po_number: 'PO Number',
+    cost_center: 'Cost Center', ecc_cc: 'ECC CC', asset_s4: 'Asset S4', asset_description: 'Asset Description', cost_center_desc: 'Cost Center Desc',
   };
   const incoming = { location, country: finalCountry, department, computer_no, brand_model, date_assigned,
-    serial_no, mk, asset_code, user_name, ad_name, status, remark, purchase_date, warranty_expiry, vendor, cost, po_number };
+    serial_no, mk, asset_code, user_name, ad_name, status, remark, purchase_date, warranty_expiry, vendor, cost, po_number,
+    cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc };
   const norm = (v) => String(v == null ? '' : v).trim();
   const changes = [];
   for (const [k, lbl] of Object.entries(TRACK)) {
@@ -418,16 +425,21 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   // A real change means accounting must re-sync SAP → reset the confirmation flag.
   const sapConfirmed = changes.length ? 0 : existing.sap_confirmed;
 
+  // For fields that may be absent from the request body, keep the existing value.
+  const keep = (v, cur) => (v !== undefined ? v : cur);
   await run(`
     UPDATE assets SET
       location = ?, country = ?, department = ?, computer_no = ?, brand_model = ?,
       date_assigned = ?, serial_no = ?, mk = ?, asset_code = ?,
       user_name = ?, ad_name = ?, history_usage = ?, remark = ?, status = ?,
-      purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?, fields_locked = ?
+      purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?, fields_locked = ?,
+      cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?
     WHERE id = ? AND deleted_at IS NULL`,
     [location, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, newHistory, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number, sapConfirmed, lockNow,
+     keep(cost_center, existing.cost_center), keep(ecc_cc, existing.ecc_cc), keep(asset_s4, existing.asset_s4),
+     keep(asset_description, existing.asset_description), keep(cost_center_desc, existing.cost_center_desc),
      req.params.id]);
 
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);

@@ -146,12 +146,14 @@ function renderTable(rows) {
   tbody.innerHTML = rows.map((a, i) => `
     <tr class="${a.fields_locked ? 'row-locked' : ''}">
       <td class="text-muted text-sm">${a.id}</td>
-      <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code></td>
+      <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
+          ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
+          : `<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code>`}</td>
       <td>${a.brand_model || '—'}</td>
       <td class="text-muted text-sm">${a.computer_no || '—'}</td>
       <td><span class="badge badge-factory">${a.country || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
-      <td class="truncate" title="${esc(a.department) }">${a.department || '—'}</td>
+      <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${a.department || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
       <td>${a.user_name || '—'}</td>
       <td class="text-muted text-sm">${a.ad_name || '<span style="color:var(--broken)">—</span>'}</td>
       <td class="text-muted text-sm">${a.serial_no || '—'}</td>
@@ -219,7 +221,11 @@ async function onView(id) {
     viewAsset = a;
 
     const fields = [
-      ['Asset Code',    a.asset_code],
+      ['Asset S4 (main)', a.asset_s4],
+      ['Asset Code (ECC)', a.asset_code],
+      ['Cost Center',   a.cost_center ? `${a.cost_center}${a.cost_center_desc ? ' — ' + a.cost_center_desc : ''}` : ''],
+      ['ECC CC',        a.ecc_cc],
+      ['Asset Description', a.asset_description],
       ['Brand / Model', a.brand_model],
       ['Country',       a.country],
       ['Location',      locationBadge(a.location)],

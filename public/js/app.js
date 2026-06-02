@@ -32,7 +32,8 @@ const FIELDS = [
   'location','country','status','department','computer_no','brand_model',
   'serial_no','asset_code','user_name','ad_name','mk','date_assigned',
   'history_usage','remark',
-  'purchase_date','warranty_expiry','vendor','cost','po_number'
+  'purchase_date','warranty_expiry','vendor','cost','po_number',
+  'cost_center','ecc_cc','asset_s4','asset_description','cost_center_desc'
 ];
 
 // Warranty status badge from an ISO date string ('' → nothing).
