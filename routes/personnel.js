@@ -2,9 +2,11 @@ const express = require('express');
 const XLSX = require('xlsx');
 const router = express.Router();
 const { get, all, run, audit, notify, getMeta, setMeta } = require('../db/database');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, isITAdmin } = require('../middleware/auth');
+const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
+const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
 const USER_TYPES = ['', 'Hayat Member', 'No Hayat Member'];
 const STATUSES   = ['Active', 'to be delete', 'pending delete', 'deleted'];
@@ -87,14 +89,103 @@ router.get('/filters', wrap(async (req, res) => {
 }));
 
 // ── GET /api/personnel/cost-centers — the Cost Center ⇄ Department map ─────────
-// Available to HR & IT (so the Edit User form can keep the two fields in step),
-// even for HR-only users without Asset Inventory access.
+// Country-scoped: Thailand/Malaysia use a different scheme, so they get only
+// their own cost centers (currently none → blank). Available to HR & IT.
 router.get('/cost-centers', wrap(async (req, res) => {
+  const country = scopeOf(req) || req.query.country || '';
+  const cond = ['deleted_at IS NULL', "cost_center <> ''"];
+  const params = [];
+  if (country) { cond.push('country = ?'); params.push(country); }
   const rows = await all(
     `SELECT cost_center AS code, MAX(cost_center_desc) AS descr
-       FROM assets WHERE deleted_at IS NULL AND cost_center <> ''
-       GROUP BY cost_center ORDER BY cost_center COLLATE NOCASE`);
+       FROM assets WHERE ${cond.join(' AND ')}
+       GROUP BY cost_center ORDER BY cost_center COLLATE NOCASE`, params);
   res.json(rows.map(r => ({ code: r.code, descr: r.descr || '' })));
+}));
+
+// ── POST /api/personnel — add a new user (IT admin only) ──────────────────────
+router.post('/', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can add users' });
+  const b = req.body || {};
+  const display_name = (b.display_name || '').trim();
+  const email = (b.email || '').trim();
+  if (!display_name || !email) return res.status(400).json({ error: 'Display name and email are required' });
+  let country = (b.country || '').trim();
+  if (!VALID_COUNTRIES.includes(country)) country = 'Vietnam';
+  const user_type = USER_TYPES.includes(b.user_type) ? b.user_type : '';
+  const status = STATUSES.includes(b.status) ? b.status : 'Active';
+  // TH/MY use a different scheme — don't store VN cost centers for them.
+  const department  = country === 'Vietnam' ? (b.department || '')  : '';
+  const cost_center = country === 'Vietnam' ? (b.cost_center || '') : '';
+
+  const dup = await get('SELECT id FROM personnel WHERE LOWER(email) = LOWER(?)', [email]);
+  if (dup) return res.status(409).json({ error: 'A user with that email already exists' });
+
+  const result = await run(
+    `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position,
+        department, cost_center, touched)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [country, display_name, email, user_type, status, (b.company_name || '').trim(), (b.position || '').trim(),
+     department, cost_center]);
+  const created = await get('SELECT * FROM personnel WHERE id = ?', [result.lastInsertRowid]);
+  await audit(req.user, 'PERSONNEL', created.id, `Added user "${display_name}" (${country})`);
+  res.status(201).json(created);
+}));
+
+// ── POST /api/personnel/import-sync — re-upload the User Inventory report ──────
+// IT admin uploads the .xlsx exported from /api/reports/users.xlsx (base64).
+// Rows with an ID update that person; blank-ID rows are inserted.
+const PERS_WRITABLE = PERSONNEL_COLUMNS.filter(c => c.writable);
+router.post('/import-sync', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can import the User Inventory' });
+  const b64 = req.body && req.body.xlsx_base64;
+  if (!b64) return res.status(400).json({ error: 'No file provided' });
+
+  let rows;
+  try {
+    const wb = XLSX.read(Buffer.from(b64, 'base64'), { type: 'buffer' });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+  } catch (e) { return res.status(400).json({ error: 'Could not read the Excel file' }); }
+
+  let updated = 0, inserted = 0, skipped = 0;
+  for (const row of rows) {
+    const byHeader = {};
+    for (const k of Object.keys(row)) byHeader[k.trim().toLowerCase()] = row[k];
+    const data = {};
+    for (const c of PERS_WRITABLE) {
+      const key = c.header.trim().toLowerCase();
+      if (key in byHeader) data[c.field] = String(byHeader[key] == null ? '' : byHeader[key]).trim();
+    }
+    if (!VALID_COUNTRIES.includes(data.country)) data.country = data.country || 'Vietnam';
+    // Thailand/Malaysia don't carry Vietnam's cost-center/department scheme.
+    if (data.country !== 'Vietnam') { data.department = ''; data.cost_center = ''; }
+
+    const idRaw = byHeader['id'];
+    const id = (idRaw === '' || idRaw == null) ? null : Number(idRaw);
+    if (id && Number.isFinite(id)) {
+      const existing = await get('SELECT * FROM personnel WHERE id = ?', [id]);
+      if (!existing) { skipped++; continue; }
+      const ut = USER_TYPES.includes(data.user_type) ? data.user_type : existing.user_type;
+      const st = STATUSES.includes(data.status) ? data.status : existing.status;
+      const fields = PERS_WRITABLE.map(c => c.field);
+      const vals = fields.map(f => f === 'user_type' ? ut : f === 'status' ? st
+        : (data[f] !== undefined ? data[f] : existing[f]));
+      await run(`UPDATE personnel SET ${fields.map(f => f + ' = ?').join(', ')}, touched = 1, updated_at = datetime('now') WHERE id = ?`,
+        [...vals, id]);
+      updated++;
+    } else {
+      if (!data.display_name && !data.email) { skipped++; continue; }
+      if (!USER_TYPES.includes(data.user_type)) data.user_type = '';
+      if (!STATUSES.includes(data.status)) data.status = 'Active';
+      const fields = PERS_WRITABLE.map(c => c.field);
+      const cols = [...fields, 'touched'];
+      const vals = [...fields.map(f => data[f] || ''), 1];
+      await run(`INSERT INTO personnel (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
+      inserted++;
+    }
+  }
+  await audit(req.user, 'PERSONNEL', null, `Synced User Inventory: ${updated} updated, ${inserted} inserted, ${skipped} skipped`);
+  res.json({ updated, inserted, skipped, total: rows.length });
 }));
 
 // ── GET /api/personnel/summary — dashboard metrics (country-scoped) ───────────

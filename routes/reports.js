@@ -4,6 +4,7 @@ const XLSX = require('xlsx');
 const { all } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
 const { ASSET_COLUMNS } = require('../lib/asset-columns');
+const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
 
 router.use(requireAuth);
 // HR-only users (no Asset Inventory access) can't use the asset reports/export.
@@ -49,6 +50,20 @@ const REPORTS = {
          FROM assets WHERE deleted_at IS NULL AND user_locked = 1${sc.clause}
         ORDER BY cost_center, brand_model`, sc.params);
     return { sheets: [{ name: 'Locked Items', rows }] };
+  },
+
+  // Full User Inventory — keyed by ID so it can be edited and re-uploaded
+  // (POST /api/personnel/import-sync) to sync the personnel database.
+  async users(req) {
+    const sc = scoped(req);
+    const raw = await all(
+      `SELECT * FROM personnel WHERE 1=1${sc.clause} ORDER BY country, display_name COLLATE NOCASE`, sc.params);
+    const rows = raw.map(r => {
+      const o = {};
+      for (const c of PERSONNEL_COLUMNS) o[c.header] = r[c.field] == null ? '' : r[c.field];
+      return o;
+    });
+    return { sheets: [{ name: 'Users', rows }] };
   },
 
   async summary(req) {

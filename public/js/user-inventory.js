@@ -24,12 +24,15 @@ function optionList(values, selected) {
   ).join('');
 }
 
-// ── Cost-center map for the Edit User form (Department ⇄ Cost Center, 1:1) ─────
-let CC_LIST = [];                 // [{ code, descr }]
+// ── Cost-center map (Department ⇄ Cost Center, 1:1) — country-scoped ───────────
+// Thailand/Malaysia use a different scheme, so they get their own (currently
+// none → blank). Vietnam returns its 38 cost centers.
+let CC_LIST = [];                 // [{ code, descr }] for the loaded country
 let CC_BY_CODE = {}, CC_BY_DESC = {};
-async function loadCostCenters() {
+async function loadCostCenters(country) {
   try {
-    CC_LIST = await apiGet('/api/personnel/cost-centers') || [];
+    const q = country ? '?country=' + encodeURIComponent(country) : '';
+    CC_LIST = await apiGet('/api/personnel/cost-centers' + q) || [];
   } catch (e) { CC_LIST = []; }
   CC_BY_CODE = {}; CC_BY_DESC = {};
   CC_LIST.forEach(cc => {
@@ -45,13 +48,17 @@ function fillSelect(sel, values, current, blankLabel) {
   sel.innerHTML = opts.join('');
   sel.value = current || '';
 }
-function openEditUser(id, name, dept, cc) {
+// Fill a Department + Cost Center pair of selects from the current CC_LIST.
+function fillDeptCc(deptSel, ccSel, dept, cc, country) {
+  const blank = (country && country !== 'Vietnam') ? '— (set up TH/MY scheme first) —' : '— none —';
+  fillSelect(deptSel, CC_LIST.map(c => c.descr).filter(Boolean), dept, blank);
+  fillSelect(ccSel, CC_LIST.map(c => c.code), cc, blank);
+}
+async function openEditUser(id, name, country, dept, cc) {
   document.getElementById('eu-id').value = id;
-  document.getElementById('edituser-title').textContent = `Edit ${name} — Department / Cost Center`;
-  const dSel = document.getElementById('eu-department');
-  const cSel = document.getElementById('eu-cost_center');
-  fillSelect(dSel, CC_LIST.map(c => c.descr).filter(Boolean), dept, '— none —');
-  fillSelect(cSel, CC_LIST.map(c => c.code), cc, '— none —');
+  document.getElementById('edituser-title').textContent = `Edit ${name} (${country}) — Department / Cost Center`;
+  await loadCostCenters(country);   // only this person's country's scheme
+  fillDeptCc(document.getElementById('eu-department'), document.getElementById('eu-cost_center'), dept, cc, country);
   document.getElementById('edituser-overlay').classList.add('open');
 }
 async function saveEditUser() {
@@ -65,6 +72,45 @@ async function saveEditUser() {
     loadPeople(currentPage);
   } catch (err) {
     const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Save failed'; } })();
+    showToast(msg, 'error');
+  }
+}
+
+// ── Add User (IT admin only) ──────────────────────────────────────────────────
+async function openAddUser() {
+  ['au-display_name', 'au-email', 'au-company_name', 'au-position'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('au-country').value = 'Vietnam';
+  document.getElementById('au-user_type').value = '';
+  document.getElementById('au-status').value = 'Active';
+  await loadCostCenters('Vietnam');
+  fillDeptCc(document.getElementById('au-department'), document.getElementById('au-cost_center'), '', '', 'Vietnam');
+  document.getElementById('adduser-overlay').classList.add('open');
+}
+async function onAddUserCountry() {
+  const country = document.getElementById('au-country').value;
+  await loadCostCenters(country);
+  fillDeptCc(document.getElementById('au-department'), document.getElementById('au-cost_center'), '', '', country);
+}
+async function saveAddUser() {
+  const body = {
+    display_name: document.getElementById('au-display_name').value.trim(),
+    email:        document.getElementById('au-email').value.trim(),
+    country:      document.getElementById('au-country').value,
+    user_type:    document.getElementById('au-user_type').value,
+    status:       document.getElementById('au-status').value,
+    company_name: document.getElementById('au-company_name').value.trim(),
+    position:     document.getElementById('au-position').value.trim(),
+    department:   document.getElementById('au-department').value,
+    cost_center:  document.getElementById('au-cost_center').value,
+  };
+  if (!body.display_name || !body.email) { showToast('Display name and email are required', 'error'); return; }
+  try {
+    await apiPost('/api/personnel', body);
+    showToast('User added');
+    document.getElementById('adduser-overlay').classList.remove('open');
+    loadPeople(1);
+  } catch (err) {
+    const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Could not add user'; } })();
     showToast(msg, 'error');
   }
 }
@@ -138,13 +184,13 @@ function renderTable(rows) {
     const dept = p.department || '';
     const cc   = p.cost_center || '';
     const editBtn = `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
-        onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(dept)}', '${esc(cc)}')">✏️</button>`;
+        onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(p.country)}', '${esc(dept)}', '${esc(cc)}')">✏️</button>`;
     return `
       <tr>
         <td><strong>${esc(p.display_name) || '—'}</strong></td>
         <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
         <td>${assetsCell}</td>
-        <td class="text-sm">${dept ? esc(dept) : '<span class="text-muted">—</span>'} ${editBtn}</td>
+        <td class="text-sm">${editBtn} ${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${p.country}</span></td>
         <td>
@@ -275,9 +321,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 400);
 
   loadCountries().then(() => loadPeople());
-  loadCostCenters();
   loadMeta();
   loadSummary();
+
+  // "+ Add User" — IT admin only.
+  const setupAdd = (u) => {
+    if (!u || !(u.team === 'IT' && u.role === 'admin')) return;
+    const btn = document.getElementById('btn-adduser');
+    if (btn) btn.style.display = '';
+  };
+  if (window.CURRENT_USER) setupAdd(window.CURRENT_USER);
+  else if (typeof ensureAuth === 'function') ensureAuth().then(setupAdd);
+  document.getElementById('btn-adduser').addEventListener('click', openAddUser);
+  document.getElementById('adduser-close').addEventListener('click', () => document.getElementById('adduser-overlay').classList.remove('open'));
+  document.getElementById('adduser-cancel').addEventListener('click', () => document.getElementById('adduser-overlay').classList.remove('open'));
+  document.getElementById('adduser-save').addEventListener('click', saveAddUser);
+  document.getElementById('au-country').addEventListener('change', onAddUserCountry);
+  document.getElementById('au-department').addEventListener('change', (e) => {
+    const cc = CC_BY_DESC[(e.target.value || '').trim().toLowerCase()];
+    if (cc) document.getElementById('au-cost_center').value = cc.code;
+  });
+  document.getElementById('au-cost_center').addEventListener('change', (e) => {
+    const cc = CC_BY_CODE[(e.target.value || '').trim().toLowerCase()];
+    if (cc) document.getElementById('au-department').value = cc.descr;
+  });
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'personnel');
   document.getElementById('assets-close').addEventListener('click', () => document.getElementById('assets-overlay').classList.remove('open'));
 

@@ -82,6 +82,20 @@ async function setup() {
   await seedServers();
   await mapCostCenters();
   await backfillPersonnelDept();
+  await clearNonVnPersonnelDept();
+}
+
+// Thailand & Malaysia use a different (not-yet-defined) Cost Center / Department
+// scheme, so don't carry the Vietnam values for them — blank them once.
+async function clearNonVnPersonnelDept() {
+  const META_KEY = 'personnel_nonvn_blank_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const res = await backend.run(
+    "UPDATE personnel SET department = '', cost_center = '' WHERE country IN ('Thailand','Malaysia')");
+  await backend.run(
+    'INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [META_KEY, String(res.changes || 0)]);
+  console.log(`[map] Cleared VN dept/cost-center for ${res.changes || 0} TH/MY people`);
 }
 
 // Seed each person's Department / Cost Center from their linked assets (matched

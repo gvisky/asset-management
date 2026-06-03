@@ -3,6 +3,7 @@
 const REPORTS = [
   { id: 'assets',      title: 'Asset Inventory',     desc: 'Every field we hold, keyed by ID — edit & re-upload below to sync.' },
   { id: 'servers',     title: 'Server Inventory',    desc: 'All servers with hostname, IP, OS, specs.' },
+  { id: 'users',       title: 'User Inventory',      desc: 'All people, keyed by ID — edit & re-upload below to sync.' },
   { id: 'locked',      title: 'Locked Items',        desc: 'Records locked by a User Name / AD Name change, with cost center, dept, model, serial, codes & user.' },
   { id: 'summary',     title: 'Asset Summary',       desc: 'Counts by status, location, country, cost center & asset type.' },
   { id: 'warranty',    title: 'Warranty Due',        desc: 'Assets & servers expiring/expired within 90 days.' },
@@ -31,21 +32,21 @@ function fileToBase64(file) {
   });
 }
 
-async function runImport() {
-  const input = document.getElementById('import-file');
-  const status = document.getElementById('import-status');
-  const btn = document.getElementById('import-btn');
+// Generic sync uploader for the round-trippable .xlsx reports.
+async function runSync({ endpoint, inputId, statusId, btnId, label }) {
+  const input = document.getElementById(inputId);
+  const status = document.getElementById(statusId);
+  const btn = document.getElementById(btnId);
   const file = input.files && input.files[0];
-  if (!file) { showToast('Choose the Asset Inventory .xlsx first', 'error'); return; }
-  if (!confirm('Upload this file and update the asset database? Matching rows (by ID) will be overwritten.')) return;
+  if (!file) { showToast(`Choose the ${label} .xlsx first`, 'error'); return; }
+  if (!confirm(`Upload this file and update the ${label.toLowerCase()} database? Matching rows (by ID) will be overwritten.`)) return;
 
   btn.disabled = true;
   status.textContent = 'Uploading…';
   try {
     const xlsx_base64 = await fileToBase64(file);
-    const r = await fetch('/api/assets/import', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const r = await fetch(endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ xlsx_base64 }),
     });
     const d = await r.json();
@@ -60,6 +61,8 @@ async function runImport() {
     btn.disabled = false;
   }
 }
+const runImport = () => runSync({ endpoint: '/api/assets/import', inputId: 'import-file', statusId: 'import-status', btnId: 'import-btn', label: 'Asset Inventory' });
+const runImportUsers = () => runSync({ endpoint: '/api/personnel/import-sync', inputId: 'import-users-file', statusId: 'import-users-status', btnId: 'import-users-btn', label: 'User Inventory' });
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('report-grid').innerHTML = REPORTS.map(card).join('');
@@ -71,6 +74,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (card) card.style.display = '';
     const btn = document.getElementById('import-btn');
     if (btn && !btn.dataset.wired) { btn.dataset.wired = '1'; btn.addEventListener('click', runImport); }
+    const ucard = document.getElementById('import-card-users');
+    if (ucard) ucard.style.display = '';
+    const ubtn = document.getElementById('import-users-btn');
+    if (ubtn && !ubtn.dataset.wired) { ubtn.dataset.wired = '1'; ubtn.addEventListener('click', runImportUsers); }
   };
   if (window.CURRENT_USER) setupImport(window.CURRENT_USER);
   else if (typeof ensureAuth === 'function') ensureAuth().then(setupImport);

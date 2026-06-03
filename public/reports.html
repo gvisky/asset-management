@@ -78,6 +78,26 @@
         </div>
       </div>
     </div>
+
+    <!-- Import / Sync User Inventory (IT admin only) -->
+    <div class="card" id="import-card-users" style="display:none;margin-top:18px">
+      <div class="card-header">
+        <span class="card-title">⬆️ Import / Sync User Inventory</span>
+        <span class="text-muted text-sm">IT admin only · upload the edited User Inventory .xlsx</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted text-sm" style="margin:0 0 12px">
+          Download <strong>User Inventory</strong> above, edit it in Excel, then upload it here. Rows keep their
+          <strong>ID</strong> — matching rows are updated and blank-ID rows are added as new users. Don't rename headers.
+          Thailand/Malaysia don't use Vietnam's Cost Center/Department.
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="import-users-file" accept=".xlsx" class="form-control" style="max-width:340px">
+          <button class="btn btn-primary" id="import-users-btn">Upload &amp; Sync</button>
+          <span id="import-users-status" class="text-muted text-sm"></span>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
