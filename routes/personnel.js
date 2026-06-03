@@ -67,12 +67,16 @@ router.get('/', wrap(async (req, res) => {
   const total = Number((await get(`SELECT COUNT(*) AS c FROM personnel ${where}`, params)).c);
   // asset_count links a person to the Asset Inventory by AD Name:
   // asset.ad_name == the local-part of the person's email (before @hayat.com.tr).
+  // Department & Cost Center are pulled from the person's linked assets (same AD
+  // Name link as asset_count). A person may hold assets across more than one, so
+  // these are the distinct values, comma-separated.
+  const adMatch = `a.deleted_at IS NULL AND instr(p.email,'@') > 0
+        AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1))`;
   const data = await all(
-    `SELECT p.*, (
-        SELECT COUNT(*) FROM assets a
-        WHERE a.deleted_at IS NULL AND a.ad_name <> '' AND instr(p.email,'@') > 0
-          AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1))
-      ) AS asset_count
+    `SELECT p.*,
+      (SELECT COUNT(*)        FROM assets a WHERE ${adMatch} AND a.ad_name <> '')            AS asset_count,
+      (SELECT GROUP_CONCAT(DISTINCT a.department)  FROM assets a WHERE ${adMatch} AND a.department <> '')  AS departments,
+      (SELECT GROUP_CONCAT(DISTINCT a.cost_center) FROM assets a WHERE ${adMatch} AND a.cost_center <> '') AS cost_centers
      FROM personnel p ${where} ORDER BY display_name COLLATE NOCASE LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );

@@ -59,7 +59,7 @@ async function loadPeople(page = 1) {
   } catch (err) {
     const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Failed to load'; } })();
     document.getElementById('people-tbody').innerHTML =
-      `<tr><td colspan="8" class="empty-state">${msg}</td></tr>`;
+      `<tr><td colspan="11" class="empty-state">${msg}</td></tr>`;
   }
 }
 
@@ -73,7 +73,7 @@ function renderHint() {
 function renderTable(rows) {
   const tbody = document.getElementById('people-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No people found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No people found.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(p => {
@@ -90,11 +90,15 @@ function renderTable(rows) {
         ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets('${adName.replace(/'/g, "\\'")}','${esc(p.display_name)}')">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
         : `<span class="badge badge-active">${cnt}</span>`;
     }
+    const deptText = (p.departments || '').split(',').filter(Boolean).join(', ');
+    const ccText   = (p.cost_centers || '').split(',').filter(Boolean).join(', ');
     return `
       <tr>
         <td><strong>${esc(p.display_name) || '—'}</strong></td>
         <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
         <td>${assetsCell}</td>
+        <td class="text-sm">${deptText ? esc(deptText) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-muted text-sm">${ccText ? esc(ccText) : '—'}</td>
         <td><span class="badge badge-factory">${p.country}</span></td>
         <td>
           ${canEditUserType
