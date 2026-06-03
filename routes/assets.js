@@ -54,7 +54,7 @@ function countryFilter(req) {
 // ── GET /api/assets — list (excludes soft-deleted) with search & filter ───────
 router.get('/', wrap(async (req, res) => {
   const { search = '', status = '', location = '', brand = '', department = '',
-          cost_center = '', asset_type = '', incomplete = '', page = 1, limit = 50 } = req.query;
+          cost_center = '', asset_type = '', incomplete = '', ad_issue = '', page = 1, limit = 50 } = req.query;
 
   const conditions = ['deleted_at IS NULL'];
   const params = [];
@@ -90,6 +90,17 @@ router.get('/', wrap(async (req, res) => {
     )`);
     if (cf.clause) params.push(...cf.params);
     conditions.push(NOT_FLAGGED_SQL); params.push(...NO_FLAG_TYPES);
+  }
+  if (ad_issue) {
+    // AD-link problems, editable in place: an AD Name that matches no user, OR an
+    // Active asset missing its AD Name (exempt types excluded).
+    conditions.push(`(
+      (ad_name <> '' AND NOT EXISTS (SELECT 1 FROM personnel p WHERE instr(p.email,'@') > 0
+          AND LOWER(substr(p.email, 1, instr(p.email,'@') - 1)) = LOWER(assets.ad_name)))
+      OR
+      (status = 'Active' AND (ad_name IS NULL OR ad_name = '') AND ${NOT_FLAGGED_SQL})
+    )`);
+    params.push(...NO_FLAG_TYPES);
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');

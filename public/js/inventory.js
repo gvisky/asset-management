@@ -5,7 +5,8 @@ const PAGE_SIZE = 25;
 let deleteTargetId = null;
 let viewAsset = null;
 let editMode = false;
-let incompleteMode = false;   // "Needs Attention" filter toggle
+let incompleteMode = false;   // "Needs Attention — Missing Info" filter toggle
+let adIssueMode = false;      // "Needs Attention — Missing AD & Asset" filter toggle
 // Cost-center linkage maps (Department ⇄ Cost Center ⇄ ECC CC ⇄ Description are 1:1).
 let CC_BY_CODE = {};   // cost_center code → { code, descr, ecc }
 let CC_BY_DESC = {};   // cost_center description (=department) → { code, descr, ecc }
@@ -51,39 +52,6 @@ async function unlockUser(id) {
   } catch (e) {
     showToast('Only an IT admin can unlock', 'error');
     loadHistory();
-  }
-}
-
-// ── Missing AD & Asset — cross-check Asset Inventory ⇄ User Inventory ──────────
-async function openAdAudit() {
-  document.getElementById('adaudit-overlay').classList.add('open');
-  const box = document.getElementById('adaudit-body');
-  box.innerHTML = 'Loading…';
-  try {
-    const d = await apiGet('/api/assets/ad-audit');
-    const section = (title, count, tableHtml) =>
-      `<div style="margin-bottom:18px">
-         <div style="font-weight:700;font-size:13.5px;margin-bottom:6px">${title} <span class="text-muted">(${count})</span></div>
-         ${count ? tableHtml : '<div class="text-muted text-sm">✅ None.</div>'}
-       </div>`;
-    const assetRows = (rows) => `<div class="table-wrap"><table>
-      <thead><tr><th>Code</th><th>Brand/Model</th><th>AD Name</th><th>Status</th><th>Country</th></tr></thead>
-      <tbody>${rows.map(a => `<tr>
-        <td><code style="font-size:12px;color:var(--brand)">${esc(a.asset_s4 || a.asset_code) || '—'}</code></td>
-        <td>${esc(a.brand_model) || '—'}</td>
-        <td>${a.ad_name ? esc(a.ad_name) : '<span style="color:var(--broken)">— missing —</span>'}</td>
-        <td>${statusBadge(a.status)}</td>
-        <td>${esc(a.country)}</td></tr>`).join('')}</tbody></table></div>`;
-    box.innerHTML =
-      section('🔗 Assets — AD Name not found in User Inventory', d.unmatchedAssets.length, assetRows(d.unmatchedAssets))
-      + section('🪪 Active assets — missing AD Name', d.missingAdAssets.length, assetRows(d.missingAdAssets))
-      + section('👤 Active users — no asset on record', d.usersNoAsset.length,
-          `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>User Type</th><th>Country</th></tr></thead>
-           <tbody>${d.usersNoAsset.map(u => `<tr>
-             <td>${esc(u.display_name)}</td><td class="text-muted text-sm">${esc(u.email)}</td>
-             <td>${esc(u.user_type) || '—'}</td><td>${esc(u.country)}</td></tr>`).join('')}</tbody></table></div>`);
-  } catch (e) {
-    box.innerHTML = '<div class="text-muted text-sm">Could not load the cross-check.</div>';
   }
 }
 
@@ -168,6 +136,7 @@ async function loadAssets(page = 1) {
   if (costCenter)    params.set('cost_center', costCenter);
   if (assetType)     params.set('asset_type', assetType);
   if (incompleteMode) params.set('incomplete', '1');
+  if (adIssueMode)   params.set('ad_issue', '1');
 
   try {
     const result = await apiGet(`${API}?${params}`);
@@ -582,11 +551,18 @@ function applyUrlFilters() {
   if (costCenter) { const el = document.getElementById('filter-cost-center'); if (el) el.value = costCenter; }
   if (assetType)  { const el = document.getElementById('filter-asset-type'); if (el) el.value = assetType; }
   if (p.get('incomplete')) { incompleteMode = true; setIncompleteButton(true); }
+  if (p.get('ad_issue'))   { adIssueMode = true; setAdIssueButton(true); }
 }
 
 // Visual state of the "Needs Attention" toggle button.
 function setIncompleteButton(active) {
   const btn = document.getElementById('btn-incomplete');
+  if (!btn) return;
+  btn.classList.toggle('btn-primary', active);
+  btn.classList.toggle('btn-ghost', !active);
+}
+function setAdIssueButton(active) {
+  const btn = document.getElementById('btn-adaudit');
   if (!btn) return;
   btn.classList.toggle('btn-primary', active);
   btn.classList.toggle('btn-ghost', !active);
@@ -637,10 +613,12 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('history-close').addEventListener('click', () =>
     document.getElementById('history-overlay').classList.remove('open'));
 
-  // "Missing AD & Asset" — AD ↔ User cross-check
-  document.getElementById('btn-adaudit').addEventListener('click', openAdAudit);
-  document.getElementById('adaudit-close').addEventListener('click', () =>
-    document.getElementById('adaudit-overlay').classList.remove('open'));
+  // "Missing AD & Asset" — toggle filter (editable in place)
+  document.getElementById('btn-adaudit').addEventListener('click', () => {
+    adIssueMode = !adIssueMode;
+    setAdIssueButton(adIssueMode);
+    loadAssets(1);
+  });
 
   // Reset
   document.getElementById('btn-reset').addEventListener('click', () => {
@@ -654,6 +632,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const atr = document.getElementById('filter-asset-type'); if (atr) atr.value = '';
     incompleteMode = false;
     setIncompleteButton(false);
+    adIssueMode = false;
+    setAdIssueButton(false);
     loadAssets(1);
   });
 
