@@ -48,6 +48,27 @@ function fillSelect(sel, values, current, blankLabel) {
   sel.innerHTML = opts.join('');
   sel.value = current || '';
 }
+// Set a <select> to a value, adding the option first if it isn't there yet.
+function selVal(sel, v) {
+  if (!sel) return;
+  if (v && ![...sel.options].some(o => o.value === v)) {
+    const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+  }
+  sel.value = v || '';
+}
+// Wire a Department⇄Cost Center pair so changing one updates the other.
+function linkDeptCc(deptId, ccId) {
+  const d = document.getElementById(deptId), c = document.getElementById(ccId);
+  if (!d || !c) return;
+  d.addEventListener('change', () => {
+    const m = CC_BY_DESC[(d.value || '').trim().toLowerCase()];
+    if (m) selVal(c, m.code);
+  });
+  c.addEventListener('change', () => {
+    const m = CC_BY_CODE[(c.value || '').trim().toLowerCase()];
+    if (m) selVal(d, m.descr);
+  });
+}
 // Fill a Department + Cost Center pair of selects from the current CC_LIST.
 function fillDeptCc(deptSel, ccSel, dept, cc, country) {
   const blank = (country && country !== 'Vietnam') ? '— (set up TH/MY scheme first) —' : '— none —';
@@ -337,14 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('adduser-cancel').addEventListener('click', () => document.getElementById('adduser-overlay').classList.remove('open'));
   document.getElementById('adduser-save').addEventListener('click', saveAddUser);
   document.getElementById('au-country').addEventListener('change', onAddUserCountry);
-  document.getElementById('au-department').addEventListener('change', (e) => {
-    const cc = CC_BY_DESC[(e.target.value || '').trim().toLowerCase()];
-    if (cc) document.getElementById('au-cost_center').value = cc.code;
-  });
-  document.getElementById('au-cost_center').addEventListener('change', (e) => {
-    const cc = CC_BY_CODE[(e.target.value || '').trim().toLowerCase()];
-    if (cc) document.getElementById('au-department').value = cc.descr;
-  });
+  linkDeptCc('au-department', 'au-cost_center');
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'personnel');
   document.getElementById('assets-close').addEventListener('click', () => document.getElementById('assets-overlay').classList.remove('open'));
 
@@ -352,20 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('edituser-close').addEventListener('click', () => document.getElementById('edituser-overlay').classList.remove('open'));
   document.getElementById('edituser-cancel').addEventListener('click', () => document.getElementById('edituser-overlay').classList.remove('open'));
   document.getElementById('edituser-save').addEventListener('click', saveEditUser);
-  document.getElementById('eu-department').addEventListener('change', (e) => {
-    const cc = CC_BY_DESC[(e.target.value || '').trim().toLowerCase()];
-    if (cc) document.getElementById('eu-cost_center').value = cc.code;
-  });
-  document.getElementById('eu-cost_center').addEventListener('change', (e) => {
-    const cc = CC_BY_CODE[(e.target.value || '').trim().toLowerCase()];
-    if (cc) {
-      const dSel = document.getElementById('eu-department');
-      if (![...dSel.options].some(o => o.value === cc.descr)) {
-        const opt = document.createElement('option'); opt.value = cc.descr; opt.textContent = cc.descr; dSel.appendChild(opt);
-      }
-      dSel.value = cc.descr;
-    }
-  });
+  linkDeptCc('eu-department', 'eu-cost_center');
 
   // Upload buttons (top bar + reminder banner)
   document.getElementById('btn-upload').addEventListener('click', handleUpload);
