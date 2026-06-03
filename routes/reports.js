@@ -179,6 +179,9 @@ router.get('/:name', wrap(async (req, res) => {
   const stamp = new Date().toISOString().slice(0, 10);
   res.setHeader('Content-Disposition', `attachment; filename="${name}-${stamp}.xlsx"`);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  // Always serve a fresh export — never a cached copy (re-downloads after a sync).
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   res.send(buf);
 }));
 

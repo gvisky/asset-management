@@ -13,7 +13,7 @@ const REPORTS = [
 ];
 
 function card(r) {
-  return `<a class="stat-card" href="/api/reports/${r.id}.xlsx" download>
+  return `<a class="stat-card" href="/api/reports/${r.id}.xlsx?t=${Date.now()}" download>
     <div class="stat-icon" style="background:#dcfce7">
       <svg width="22" height="22" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </div>
