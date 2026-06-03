@@ -106,9 +106,17 @@ router.get('/', wrap(async (req, res) => {
   const where = 'WHERE ' + conditions.join(' AND ');
   const offset = (Number(page) - 1) * Number(limit);
 
+  // When filtering by AD issues, tag each row with the reason so the table can
+  // highlight exactly what's wrong (no extra params — the subquery has none).
+  const adReasonSel = ad_issue ? `, CASE
+      WHEN ad_name <> '' AND NOT EXISTS (SELECT 1 FROM personnel p WHERE instr(p.email,'@') > 0
+          AND LOWER(substr(p.email, 1, instr(p.email,'@') - 1)) = LOWER(assets.ad_name)) THEN 'unmatched'
+      WHEN (ad_name IS NULL OR ad_name = '') THEN 'missing'
+      ELSE '' END AS ad_issue_reason` : '';
+
   const totalRow = await get(`SELECT COUNT(*) as cnt FROM assets ${where}`, params);
   const rows = await all(
-    `SELECT * FROM assets ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    `SELECT *${adReasonSel} FROM assets ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );
 

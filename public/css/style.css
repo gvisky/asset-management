@@ -229,6 +229,11 @@ tbody tr:hover { background: #f9fafb; }
 tbody tr.row-locked > td { background: #fff7ed; }
 tbody tr.row-locked:hover > td { background: #ffedd5; }
 tbody tr.row-locked > td:first-child { box-shadow: inset 3px 0 0 #f59e0b; }
+
+/* Rows flagged by the "Missing AD & Asset" filter (red tint + red marker) */
+tbody tr.row-adissue > td { background: #fef2f2; }
+tbody tr.row-adissue:hover > td { background: #fee2e2; }
+tbody tr.row-adissue > td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
 .lock-banner {
   display: flex; gap: 8px; align-items: flex-start;
   padding: 10px 12px; margin-bottom: 14px; border-radius: 8px;

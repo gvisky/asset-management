@@ -161,7 +161,7 @@ function renderTable(rows) {
   }
 
   tbody.innerHTML = rows.map((a, i) => `
-    <tr class="${(a.fields_locked || a.user_locked) ? 'row-locked' : ''}">
+    <tr class="${a.ad_issue_reason ? 'row-adissue' : ((a.fields_locked || a.user_locked) ? 'row-locked' : '')}">
       <td class="text-muted text-sm">${a.id}</td>
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
@@ -172,7 +172,7 @@ function renderTable(rows) {
       <td>${locationBadge(a.location)}</td>
       <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${a.department || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
       <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${a.user_name || '—'}</td>
-      <td class="text-muted text-sm">${a.ad_name || '<span style="color:var(--broken)">—</span>'}</td>
+      <td class="text-muted text-sm">${adNameCell(a)}</td>
       <td class="text-muted text-sm">${a.serial_no || '—'}</td>
       <td>${statusBadge(a.status)}</td>
       <td>
@@ -194,6 +194,17 @@ function renderTable(rows) {
 
 function esc(str) {
   return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+// AD Name cell — when the "Missing AD & Asset" filter is on, show WHY it's flagged.
+function adNameCell(a) {
+  if (a.ad_issue_reason === 'missing') {
+    return '<span class="badge badge-broken" title="Active asset with no AD Name — add it">⚠ missing AD</span>';
+  }
+  if (a.ad_issue_reason === 'unmatched') {
+    return `<span class="badge badge-retired" title="This AD Name is not found in User Inventory (no matching email before @hayat.com.tr)">⚠ ${a.ad_name || ''} — no user</span>`;
+  }
+  return a.ad_name || '<span style="color:var(--broken)">—</span>';
 }
 
 function renderPagination(total, page, limit) {
