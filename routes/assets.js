@@ -159,9 +159,14 @@ router.get('/stats', wrap(async (req, res) => {
 router.get('/filters', wrap(async (req, res) => {
   const cf = countryFilter(req);
   const extra = cf.clause ? ` AND ${cf.clause}` : '';
+  // Brands can be narrowed to a single asset type (so the model dropdown follows
+  // the selected Asset Type filter).
+  const at = (req.query.asset_type || '').trim();
+  const brandExtra = extra + (at ? ' AND asset_type = ?' : '');
+  const brandParams = at ? [...cf.params, at] : cf.params;
   const brands = (await all(
-    `SELECT DISTINCT brand_model AS v FROM assets WHERE deleted_at IS NULL AND brand_model <> ''${extra} ORDER BY brand_model COLLATE NOCASE`,
-    cf.params
+    `SELECT DISTINCT brand_model AS v FROM assets WHERE deleted_at IS NULL AND brand_model <> ''${brandExtra} ORDER BY brand_model COLLATE NOCASE`,
+    brandParams
   )).map(r => r.v);
   const departments = (await all(
     `SELECT DISTINCT department AS v FROM assets WHERE deleted_at IS NULL AND department <> ''${extra} ORDER BY department COLLATE NOCASE`,
@@ -169,10 +174,10 @@ router.get('/filters', wrap(async (req, res) => {
   )).map(r => r.v);
   // Cost centers (grouped) with their description and asset count.
   const costCenters = (await all(
-    `SELECT cost_center AS code, MAX(cost_center_desc) AS descr, COUNT(*) AS cnt
+    `SELECT cost_center AS code, MAX(cost_center_desc) AS descr, MAX(ecc_cc) AS ecc, COUNT(*) AS cnt
        FROM assets WHERE deleted_at IS NULL AND cost_center <> ''${extra}
        GROUP BY cost_center ORDER BY cost_center COLLATE NOCASE`, cf.params
-  )).map(r => ({ code: r.code, descr: r.descr || '', count: Number(r.cnt) }));
+  )).map(r => ({ code: r.code, descr: r.descr || '', ecc: r.ecc || '', count: Number(r.cnt) }));
   // Asset types (grouped) with their count.
   const assetTypes = (await all(
     `SELECT asset_type AS v, COUNT(*) AS cnt FROM assets WHERE deleted_at IS NULL AND asset_type <> ''${extra}

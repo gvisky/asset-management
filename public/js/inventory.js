@@ -6,6 +6,9 @@ let deleteTargetId = null;
 let viewAsset = null;
 let editMode = false;
 let incompleteMode = false;   // "Needs Attention" filter toggle
+// Cost-center linkage maps (Department ⇄ Cost Center ⇄ ECC CC ⇄ Description are 1:1).
+let CC_BY_CODE = {};   // cost_center code → { code, descr, ecc }
+let CC_BY_DESC = {};   // cost_center description (=department) → { code, descr, ecc }
 
 // ── History Usage modal — records locked by a User Name / AD Name change ───────
 async function openHistory() {
@@ -89,6 +92,13 @@ async function loadFilters() {
     if (atSel) atSel.innerHTML = '<option value="">All Asset Types</option>' +
       (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}">${t.type} (${t.count})</option>`).join('');
     if (atList) atList.innerHTML = (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}"></option>`).join('');
+
+    // Build the cost-center linkage maps for the edit form.
+    CC_BY_CODE = {}; CC_BY_DESC = {};
+    (costCenters || []).forEach(cc => {
+      if (cc.code) CC_BY_CODE[String(cc.code).trim().toLowerCase()] = cc;
+      if (cc.descr) CC_BY_DESC[String(cc.descr).trim().toLowerCase()] = cc;
+    });
 
     // Regional managers (scoped to one country) don't need the country filter
     // and their add/edit form is locked to their country.
@@ -441,6 +451,55 @@ function applyFieldLock(a) {
   }
 }
 
+// ── Cost-center linkage in the edit form ──────────────────────────────────────
+// Department, Cost Center, ECC CC and Cost Center Description are 1:1 related, so
+// changing one fills the others. Programmatic setFormData() won't trigger these.
+function setF(id, val) { const el = document.getElementById(id); if (el) el.value = val == null ? '' : val; }
+function ensureDeptOption(value) {
+  const sel = document.getElementById('f-department');
+  if (!sel || sel.tagName !== 'SELECT' || !value) return;
+  if (![...sel.options].some(o => o.value === value)) {
+    const opt = document.createElement('option');
+    opt.value = value; opt.textContent = value;
+    sel.insertBefore(opt, sel.lastElementChild);   // before the "New…" option
+  }
+}
+function linkFromDepartment() {
+  const dept = (document.getElementById('f-department') || {}).value || '';
+  const cc = CC_BY_DESC[dept.trim().toLowerCase()];
+  if (!cc) return;                                  // unmapped dept → leave others as-is
+  setF('f-cost_center', cc.code);
+  setF('f-ecc_cc', cc.ecc);
+  setF('f-cost_center_desc', cc.descr);
+}
+function linkFromCostCenter() {
+  const code = (document.getElementById('f-cost_center') || {}).value || '';
+  const cc = CC_BY_CODE[code.trim().toLowerCase()];
+  if (!cc) return;
+  setF('f-ecc_cc', cc.ecc);
+  setF('f-cost_center_desc', cc.descr);
+  ensureDeptOption(cc.descr);
+  setF('f-department', cc.descr);
+}
+
+// Refresh the model (brand) filter options to match the selected Asset Type.
+async function refreshBrandOptions() {
+  const sel = document.getElementById('filter-brand');
+  if (!sel) return;
+  const at = (document.getElementById('filter-asset-type') || {}).value || '';
+  const country = (document.getElementById('filter-country') || {}).value || '';
+  const cur = sel.value;
+  const params = new URLSearchParams();
+  if (at) params.set('asset_type', at);
+  if (country) params.set('country', country);
+  try {
+    const { brands } = await apiGet('/api/assets/filters?' + params.toString());
+    sel.innerHTML = '<option value="">All Models</option>' +
+      (brands || []).map(b => `<option value="${b.replace(/"/g, '&quot;')}">${b}</option>`).join('');
+    sel.value = (cur && (brands || []).includes(cur)) ? cur : '';   // keep selection if still valid
+  } catch (e) { /* leave as-is */ }
+}
+
 // Download the pre-filled Delivery-Acceptance form (.xlsx) for printing & signature.
 function printDeliveryForm(id) {
   if (!id) return;
@@ -525,7 +584,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const ccFilter = document.getElementById('filter-cost-center');
   if (ccFilter) ccFilter.addEventListener('change', () => loadAssets(1));
   const atFilter = document.getElementById('filter-asset-type');
-  if (atFilter) atFilter.addEventListener('change', () => loadAssets(1));
+  if (atFilter) atFilter.addEventListener('change', async () => { await refreshBrandOptions(); loadAssets(1); });
+
+  // Edit-form linkage: Department ⇄ Cost Center ⇄ ECC CC ⇄ Cost Center Description.
+  const fDept = document.getElementById('f-department');
+  if (fDept) fDept.addEventListener('change', linkFromDepartment);
+  const fCC = document.getElementById('f-cost_center');
+  if (fCC) fCC.addEventListener('change', linkFromCostCenter);
 
   // "Needs Attention — Missing Info" toggle
   document.getElementById('btn-incomplete').addEventListener('click', () => {
