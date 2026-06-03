@@ -24,6 +24,51 @@ function optionList(values, selected) {
   ).join('');
 }
 
+// ── Cost-center map for the Edit User form (Department ⇄ Cost Center, 1:1) ─────
+let CC_LIST = [];                 // [{ code, descr }]
+let CC_BY_CODE = {}, CC_BY_DESC = {};
+async function loadCostCenters() {
+  try {
+    CC_LIST = await apiGet('/api/personnel/cost-centers') || [];
+  } catch (e) { CC_LIST = []; }
+  CC_BY_CODE = {}; CC_BY_DESC = {};
+  CC_LIST.forEach(cc => {
+    if (cc.code)  CC_BY_CODE[String(cc.code).trim().toLowerCase()] = cc;
+    if (cc.descr) CC_BY_DESC[String(cc.descr).trim().toLowerCase()] = cc;
+  });
+}
+function fillSelect(sel, values, current, blankLabel) {
+  const opts = ['<option value="">' + (blankLabel || '—') + '</option>'];
+  const has = values.some(v => v === current);
+  if (current && !has) opts.push(`<option value="${esc(current)}">${esc(current)} (current)</option>`);
+  values.forEach(v => opts.push(`<option value="${esc(v)}">${esc(v)}</option>`));
+  sel.innerHTML = opts.join('');
+  sel.value = current || '';
+}
+function openEditUser(id, name, dept, cc) {
+  document.getElementById('eu-id').value = id;
+  document.getElementById('edituser-title').textContent = `Edit ${name} — Department / Cost Center`;
+  const dSel = document.getElementById('eu-department');
+  const cSel = document.getElementById('eu-cost_center');
+  fillSelect(dSel, CC_LIST.map(c => c.descr).filter(Boolean), dept, '— none —');
+  fillSelect(cSel, CC_LIST.map(c => c.code), cc, '— none —');
+  document.getElementById('edituser-overlay').classList.add('open');
+}
+async function saveEditUser() {
+  const id = document.getElementById('eu-id').value;
+  const department  = document.getElementById('eu-department').value;
+  const cost_center = document.getElementById('eu-cost_center').value;
+  try {
+    await apiPut(`/api/personnel/${id}`, { department, cost_center });
+    showToast('Saved');
+    document.getElementById('edituser-overlay').classList.remove('open');
+    loadPeople(currentPage);
+  } catch (err) {
+    const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Save failed'; } })();
+    showToast(msg, 'error');
+  }
+}
+
 async function loadCountries() {
   try {
     const { countries } = await apiGet('/api/personnel/filters');
@@ -90,15 +135,17 @@ function renderTable(rows) {
         ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets('${adName.replace(/'/g, "\\'")}','${esc(p.display_name)}')">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
         : `<span class="badge badge-active">${cnt}</span>`;
     }
-    const deptText = (p.departments || '').split(',').filter(Boolean).join(', ');
-    const ccText   = (p.cost_centers || '').split(',').filter(Boolean).join(', ');
+    const dept = p.department || '';
+    const cc   = p.cost_center || '';
+    const editBtn = `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
+        onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(dept)}', '${esc(cc)}')">✏️</button>`;
     return `
       <tr>
         <td><strong>${esc(p.display_name) || '—'}</strong></td>
         <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
         <td>${assetsCell}</td>
-        <td class="text-sm">${deptText ? esc(deptText) : '<span class="text-muted">—</span>'}</td>
-        <td class="text-muted text-sm">${ccText ? esc(ccText) : '—'}</td>
+        <td class="text-sm">${dept ? esc(dept) : '<span class="text-muted">—</span>'} ${editBtn}</td>
+        <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${p.country}</span></td>
         <td>
           ${canEditUserType
@@ -228,10 +275,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 400);
 
   loadCountries().then(() => loadPeople());
+  loadCostCenters();
   loadMeta();
   loadSummary();
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'personnel');
   document.getElementById('assets-close').addEventListener('click', () => document.getElementById('assets-overlay').classList.remove('open'));
+
+  // Edit User (Department / Cost Center) modal — linked fields.
+  document.getElementById('edituser-close').addEventListener('click', () => document.getElementById('edituser-overlay').classList.remove('open'));
+  document.getElementById('edituser-cancel').addEventListener('click', () => document.getElementById('edituser-overlay').classList.remove('open'));
+  document.getElementById('edituser-save').addEventListener('click', saveEditUser);
+  document.getElementById('eu-department').addEventListener('change', (e) => {
+    const cc = CC_BY_DESC[(e.target.value || '').trim().toLowerCase()];
+    if (cc) document.getElementById('eu-cost_center').value = cc.code;
+  });
+  document.getElementById('eu-cost_center').addEventListener('change', (e) => {
+    const cc = CC_BY_CODE[(e.target.value || '').trim().toLowerCase()];
+    if (cc) {
+      const dSel = document.getElementById('eu-department');
+      if (![...dSel.options].some(o => o.value === cc.descr)) {
+        const opt = document.createElement('option'); opt.value = cc.descr; opt.textContent = cc.descr; dSel.appendChild(opt);
+      }
+      dSel.value = cc.descr;
+    }
+  });
 
   // Upload buttons (top bar + reminder banner)
   document.getElementById('btn-upload').addEventListener('click', handleUpload);

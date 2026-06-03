@@ -130,6 +130,32 @@
   </main>
 </div>
 
+<!-- Edit User (Department / Cost Center) modal -->
+<div class="modal-overlay" id="edituser-overlay">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <span class="modal-title" id="edituser-title">Edit User</span>
+      <button class="modal-close" id="edituser-close"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="eu-id">
+      <div class="form-group">
+        <label class="form-label">Department</label>
+        <select class="form-control" id="eu-department"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cost Center</label>
+        <select class="form-control" id="eu-cost_center"></select>
+      </div>
+      <div class="text-muted text-sm">Department and Cost Center are linked — changing one updates the other.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="edituser-cancel">Cancel</button>
+      <button class="btn btn-primary" id="edituser-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Linked assets (by AD Name) modal -->
 <div class="modal-overlay" id="assets-overlay">
   <div class="modal" style="max-width:640px">

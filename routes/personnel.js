@@ -67,16 +67,12 @@ router.get('/', wrap(async (req, res) => {
   const total = Number((await get(`SELECT COUNT(*) AS c FROM personnel ${where}`, params)).c);
   // asset_count links a person to the Asset Inventory by AD Name:
   // asset.ad_name == the local-part of the person's email (before @hayat.com.tr).
-  // Department & Cost Center are pulled from the person's linked assets (same AD
-  // Name link as asset_count). A person may hold assets across more than one, so
-  // these are the distinct values, comma-separated.
-  const adMatch = `a.deleted_at IS NULL AND instr(p.email,'@') > 0
+  // Department & Cost Center are stored on the person (editable by HR/IT, seeded
+  // from their assets). asset_count links to the Asset Inventory by AD Name.
+  const adMatch = `a.deleted_at IS NULL AND a.ad_name <> '' AND instr(p.email,'@') > 0
         AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1))`;
   const data = await all(
-    `SELECT p.*,
-      (SELECT COUNT(*)        FROM assets a WHERE ${adMatch} AND a.ad_name <> '')            AS asset_count,
-      (SELECT GROUP_CONCAT(DISTINCT a.department)  FROM assets a WHERE ${adMatch} AND a.department <> '')  AS departments,
-      (SELECT GROUP_CONCAT(DISTINCT a.cost_center) FROM assets a WHERE ${adMatch} AND a.cost_center <> '') AS cost_centers
+    `SELECT p.*, (SELECT COUNT(*) FROM assets a WHERE ${adMatch}) AS asset_count
      FROM personnel p ${where} ORDER BY display_name COLLATE NOCASE LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );
@@ -88,6 +84,17 @@ router.get('/', wrap(async (req, res) => {
 router.get('/filters', wrap(async (req, res) => {
   const countries = scopeOf(req) ? [scopeOf(req)] : ['Vietnam', 'Thailand', 'Malaysia'];
   res.json({ countries });
+}));
+
+// ── GET /api/personnel/cost-centers — the Cost Center ⇄ Department map ─────────
+// Available to HR & IT (so the Edit User form can keep the two fields in step),
+// even for HR-only users without Asset Inventory access.
+router.get('/cost-centers', wrap(async (req, res) => {
+  const rows = await all(
+    `SELECT cost_center AS code, MAX(cost_center_desc) AS descr
+       FROM assets WHERE deleted_at IS NULL AND cost_center <> ''
+       GROUP BY cost_center ORDER BY cost_center COLLATE NOCASE`);
+  res.json(rows.map(r => ({ code: r.code, descr: r.descr || '' })));
 }));
 
 // ── GET /api/personnel/summary — dashboard metrics (country-scoped) ───────────
@@ -207,6 +214,10 @@ router.put('/:id', wrap(async (req, res) => {
       sets.push('leaving_date = ?'); params.push(ld);
     }
   }
+
+  // HR and IT: Department & Cost Center (the person's own; kept in step via the form).
+  if ('department' in req.body)  { sets.push('department = ?');  params.push(req.body.department || ''); }
+  if ('cost_center' in req.body) { sets.push('cost_center = ?'); params.push(req.body.cost_center || ''); }
 
   // IT: Status — only allowed once HR has set the User Type.
   if (isIT(req) && 'status' in req.body) {

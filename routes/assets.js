@@ -289,6 +289,45 @@ router.post('/:id/sap-confirm', wrap(async (req, res) => {
   res.json({ message: 'ok', sap_confirmed: confirmed });
 }));
 
+// ── GET /api/assets/ad-audit — cross-check asset AD Name ⇄ User Inventory email
+// (rule: AD Name = email local-part before @). Country-scoped. ────────────────
+router.get('/ad-audit', wrap(async (req, res) => {
+  const cf = countryFilter(req);
+  const aWhere = cf.clause ? ` AND ${cf.clause}` : '';
+
+  // Assets whose AD Name matches no user in the User Inventory (broken link).
+  const unmatchedAssets = await all(
+    `SELECT id, asset_code, asset_s4, brand_model, ad_name, status, country, location
+       FROM assets a
+      WHERE a.deleted_at IS NULL AND a.ad_name <> ''${aWhere}
+        AND NOT EXISTS (SELECT 1 FROM personnel p WHERE instr(p.email,'@') > 0
+            AND LOWER(substr(p.email, 1, instr(p.email,'@') - 1)) = LOWER(a.ad_name))
+      ORDER BY a.country, a.asset_code`, cf.params);
+
+  // Active assets that can't be linked because they have no AD Name
+  // (excludes exempt asset types; Broken/Stock don't need one).
+  const mCond = ['deleted_at IS NULL', "status = 'Active'", "(ad_name IS NULL OR ad_name = '')", NOT_FLAGGED_SQL];
+  const mParams = [...NO_FLAG_TYPES];
+  if (cf.clause) { mCond.push(cf.clause); mParams.push(...cf.params); }
+  const missingAdAssets = await all(
+    `SELECT id, asset_code, asset_s4, brand_model, status, country, location, asset_type
+       FROM assets WHERE ${mCond.join(' AND ')} ORDER BY country, asset_code`, mParams);
+
+  // Active users whose email local-part matches no asset AD Name (no device on record).
+  const scope = scopeOf(req);
+  const pCond = ["instr(email,'@') > 0", "status = 'Active'"];
+  const pParams = [];
+  if (scope) { pCond.push('country = ?'); pParams.push(scope); }
+  const usersNoAsset = await all(
+    `SELECT display_name, email, country, user_type FROM personnel p
+      WHERE ${pCond.join(' AND ')}
+        AND NOT EXISTS (SELECT 1 FROM assets a WHERE a.deleted_at IS NULL AND a.ad_name <> ''
+            AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1)))
+      ORDER BY display_name COLLATE NOCASE`, pParams);
+
+  res.json({ unmatchedAssets, missingAdAssets, usersNoAsset });
+}));
+
 // ── GET /api/assets/user-locked — records locked by a User Name / AD Name change
 // (a reassignment), surfaced by the 🕓 History Usage button. Country-scoped. ──
 router.get('/user-locked', wrap(async (req, res) => {

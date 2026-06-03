@@ -54,6 +54,39 @@ async function unlockUser(id) {
   }
 }
 
+// ── Missing AD & Asset — cross-check Asset Inventory ⇄ User Inventory ──────────
+async function openAdAudit() {
+  document.getElementById('adaudit-overlay').classList.add('open');
+  const box = document.getElementById('adaudit-body');
+  box.innerHTML = 'Loading…';
+  try {
+    const d = await apiGet('/api/assets/ad-audit');
+    const section = (title, count, tableHtml) =>
+      `<div style="margin-bottom:18px">
+         <div style="font-weight:700;font-size:13.5px;margin-bottom:6px">${title} <span class="text-muted">(${count})</span></div>
+         ${count ? tableHtml : '<div class="text-muted text-sm">✅ None.</div>'}
+       </div>`;
+    const assetRows = (rows) => `<div class="table-wrap"><table>
+      <thead><tr><th>Code</th><th>Brand/Model</th><th>AD Name</th><th>Status</th><th>Country</th></tr></thead>
+      <tbody>${rows.map(a => `<tr>
+        <td><code style="font-size:12px;color:var(--brand)">${esc(a.asset_s4 || a.asset_code) || '—'}</code></td>
+        <td>${esc(a.brand_model) || '—'}</td>
+        <td>${a.ad_name ? esc(a.ad_name) : '<span style="color:var(--broken)">— missing —</span>'}</td>
+        <td>${statusBadge(a.status)}</td>
+        <td>${esc(a.country)}</td></tr>`).join('')}</tbody></table></div>`;
+    box.innerHTML =
+      section('🔗 Assets — AD Name not found in User Inventory', d.unmatchedAssets.length, assetRows(d.unmatchedAssets))
+      + section('🪪 Active assets — missing AD Name', d.missingAdAssets.length, assetRows(d.missingAdAssets))
+      + section('👤 Active users — no asset on record', d.usersNoAsset.length,
+          `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>User Type</th><th>Country</th></tr></thead>
+           <tbody>${d.usersNoAsset.map(u => `<tr>
+             <td>${esc(u.display_name)}</td><td class="text-muted text-sm">${esc(u.email)}</td>
+             <td>${esc(u.user_type) || '—'}</td><td>${esc(u.country)}</td></tr>`).join('')}</tbody></table></div>`);
+  } catch (e) {
+    box.innerHTML = '<div class="text-muted text-sm">Could not load the cross-check.</div>';
+  }
+}
+
 // Summary cards at the top of the Asset Inventory page.
 async function loadSummary() {
   try {
@@ -603,6 +636,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-history').addEventListener('click', openHistory);
   document.getElementById('history-close').addEventListener('click', () =>
     document.getElementById('history-overlay').classList.remove('open'));
+
+  // "Missing AD & Asset" — AD ↔ User cross-check
+  document.getElementById('btn-adaudit').addEventListener('click', openAdAudit);
+  document.getElementById('adaudit-close').addEventListener('click', () =>
+    document.getElementById('adaudit-overlay').classList.remove('open'));
 
   // Reset
   document.getElementById('btn-reset').addEventListener('click', () => {

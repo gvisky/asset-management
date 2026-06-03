@@ -81,6 +81,28 @@ async function setup() {
   await seedPersonnel();
   await seedServers();
   await mapCostCenters();
+  await backfillPersonnelDept();
+}
+
+// Seed each person's Department / Cost Center from their linked assets (matched
+// by AD Name = email local-part). One-time; runs after the cost-center mapping.
+async function backfillPersonnelDept() {
+  const META_KEY = 'personnel_dept_backfill_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const sub = (col) =>
+    `(SELECT a.${col} FROM assets a
+        WHERE a.deleted_at IS NULL AND a.${col} <> '' AND instr(personnel.email,'@') > 0
+          AND LOWER(a.ad_name) = LOWER(substr(personnel.email, 1, instr(personnel.email,'@') - 1))
+        ORDER BY a.id LIMIT 1)`;
+  const res = await backend.run(
+    `UPDATE personnel SET
+        department  = COALESCE(${sub('department')}, department),
+        cost_center = COALESCE(${sub('cost_center')}, cost_center)
+      WHERE instr(email,'@') > 0 AND (department IS NULL OR department = '')`);
+  await backend.run(
+    'INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [META_KEY, String(res.changes || 0)]);
+  console.log(`[map] Personnel department/cost-center backfilled for ${res.changes || 0} people`);
 }
 
 // Mapping of the Accounting team's cost-center / SAP data onto assets.
@@ -387,6 +409,9 @@ async function migrate() {
 
   const pcols = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
   if (!pcols.includes('touched')) await backend.run('ALTER TABLE personnel ADD COLUMN touched INTEGER NOT NULL DEFAULT 0');
+  // Department & Cost Center on the person (editable by HR/IT; seeded from their assets).
+  if (!pcols.includes('department'))  await backend.run("ALTER TABLE personnel ADD COLUMN department TEXT DEFAULT ''");
+  if (!pcols.includes('cost_center')) await backend.run("ALTER TABLE personnel ADD COLUMN cost_center TEXT DEFAULT ''");
 
   // Rename asset status 'Retired' -> 'Stock'. SQLite can't alter a CHECK
   // constraint in place, so rebuild the table (existing rows are remapped).
