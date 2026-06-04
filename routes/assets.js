@@ -719,11 +719,15 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const scope = scopeOf(req);
   if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
 
-  // Models an IT admin has locked can't be deleted by anyone but an IT admin.
-  if (existing.brand_model && !isITAdmin(req.user)) {
+  // A locked model can't be deleted by anyone (incl. IT admin). To delete, an
+  // IT admin must first uncheck the lock in Dashboard → Top Models.
+  if (existing.brand_model) {
     const locked = await getLockedModels();
     if (locked.some(m => m.toLowerCase() === String(existing.brand_model).toLowerCase())) {
-      return res.status(403).json({ error: `Model "${existing.brand_model}" is locked from deletion by IT admin. You can edit it, but not delete it.` });
+      const who = isITAdmin(req.user)
+        ? 'Uncheck its 🔒 lock in Dashboard → Top Models first.'
+        : 'Ask an IT admin to unlock it first.';
+      return res.status(403).json({ error: `Model "${existing.brand_model}" is locked from deletion. ${who} You can still edit it.` });
     }
   }
 
