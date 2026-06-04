@@ -462,6 +462,26 @@ function applyFieldLock(a) {
       banner.innerHTML += '<br>' + note;
     }
   }
+
+  // Model lock — when the model is locked (Dashboard → Top Models), Asset Type,
+  // Brand/Model and Serial are frozen for everyone until an IT admin unlocks it.
+  const modelLocked = !isNew && !!a.model_locked;
+  ['asset_type', 'brand_model', 'serial_no'].forEach((f) => {
+    const el = document.getElementById('f-' + f);
+    if (!el) return;
+    if (modelLocked) {
+      el.readOnly = true; el.style.background = '#f3f4f6';
+      el.title = 'Locked — this model is locked from edits/deletion. An IT admin unlocks it in Dashboard → Top Models.';
+    }
+  });
+  if (banner && modelLocked) {
+    const note = '🔒 <span><strong>Model locked</strong> — Asset Type, Brand/Model and Serial can’t be changed. An IT admin unlocks it in Dashboard → Top Models.</span>';
+    if (banner.style.display === 'none') {
+      banner.className = 'lock-banner'; banner.style.display = ''; banner.innerHTML = note;
+    } else {
+      banner.innerHTML += '<br>' + note;
+    }
+  }
 }
 
 // ── Cost-center linkage in the edit form ──────────────────────────────────────

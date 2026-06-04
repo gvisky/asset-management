@@ -475,6 +475,9 @@ router.get('/:id', wrap(async (req, res) => {
   if (!row) return res.status(404).json({ error: 'Asset not found' });
   const scope = scopeOf(req);
   if (scope && row.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  // Flag if this asset's model is delete/edit-locked (freezes Asset Type / Brand-Model / Serial).
+  const lockedModels = await getLockedModels();
+  row.model_locked = row.brand_model && lockedModels.some(m => m.toLowerCase() === String(row.brand_model).toLowerCase()) ? 1 : 0;
   res.json(row);
 }));
 
@@ -637,6 +640,19 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     const before = norm(existing[k]); const after = norm(incoming[k]);
     if (before !== after) changes.push(`${lbl}: "${before || '∅'}"→"${after || '∅'}"`);
   }
+  // ── Model lock — if this asset's model is locked, NO user (incl. IT admin)
+  // may change its Asset Type, Brand/Model or Serial. Unlock the model first.
+  if (existing.brand_model) {
+    const lockedModels = await getLockedModels();
+    if (lockedModels.some(m => m.toLowerCase() === String(existing.brand_model).toLowerCase())) {
+      const frozen = { asset_type: 'Asset Type', brand_model: 'Brand/Model', serial_no: 'Serial' };
+      const changedFrozen = Object.keys(frozen).filter(k => incoming[k] !== undefined && norm(existing[k]) !== norm(incoming[k]));
+      if (changedFrozen.length) {
+        return res.status(403).json({ error: `Model "${existing.brand_model}" is locked — Asset Type, Brand/Model and Serial can't be changed. An IT admin must unlock it (Dashboard → Top Models) first.` });
+      }
+    }
+  }
+
   // ── Protected-field lock (Serial / Brand-Model / Asset Code) ───────────────
   const protectedChanged = Object.keys(PROTECTED_FIELDS).filter(
     (k) => incoming[k] !== undefined && norm(existing[k]) !== norm(incoming[k]));
