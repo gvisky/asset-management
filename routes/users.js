@@ -15,6 +15,10 @@ function normCountry(c) {
   if (!c) return null;
   return VALID_COUNTRIES.includes(c) ? c : null;
 }
+// Team: 'IT' / 'HR' / null (none).
+function normTeam(t) { return (t === 'IT' || t === 'HR') ? t : null; }
+// Asset Inventory access flag (0 = User-Inventory-only, e.g. HR-only members).
+function normAccess(v) { return (v === 0 || v === '0' || v === false || v === 'false') ? 0 : 1; }
 
 // How many GLOBAL admins exist (role admin with no country) — must never hit 0.
 async function globalAdminCount() {
@@ -24,13 +28,13 @@ async function globalAdminCount() {
 
 // ── GET /api/users — list all users ───────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
-  const rows = await all('SELECT id, username, full_name, role, country, created_at FROM users ORDER BY id');
+  const rows = await all('SELECT id, username, full_name, role, country, team, asset_access, created_at FROM users ORDER BY id');
   res.json(rows);
 }));
 
 // ── POST /api/users — create a user ───────────────────────────────────────
 router.post('/', wrap(async (req, res) => {
-  const { username, full_name = '', password, role = 'viewer', country = '' } = req.body;
+  const { username, full_name = '', password, role = 'viewer', country = '', team = '', asset_access } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
   if (password.length < 6)    return res.status(400).json({ error: 'Password must be at least 6 characters' });
   if (!['admin', 'editor', 'viewer'].includes(role)) return res.status(400).json({ error: 'Invalid role' });
@@ -39,10 +43,10 @@ router.post('/', wrap(async (req, res) => {
   if (exists) return res.status(409).json({ error: 'Username already exists' });
 
   const result = await run(
-    'INSERT INTO users (username, full_name, password_hash, role, country) VALUES (?, ?, ?, ?, ?)',
-    [username.trim(), full_name.trim(), hashPassword(password), role, normCountry(country)]
+    'INSERT INTO users (username, full_name, password_hash, role, country, team, asset_access) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [username.trim(), full_name.trim(), hashPassword(password), role, normCountry(country), normTeam(team), normAccess(asset_access)]
   );
-  res.status(201).json({ id: result.lastInsertRowid, username: username.trim(), full_name, role, country: normCountry(country) });
+  res.status(201).json(await get('SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [result.lastInsertRowid]));
 }));
 
 // ── PUT /api/users/:id — update role / region / name / (optional) password ─
@@ -65,15 +69,17 @@ router.put('/:id', wrap(async (req, res) => {
     return res.status(400).json({ error: 'Cannot change the last global administrator' });
   }
 
-  await run('UPDATE users SET full_name = ?, role = ?, country = ? WHERE id = ?',
-            [full_name !== undefined ? full_name : user.full_name, newRole, newCountry, req.params.id]);
+  const newTeam   = ('team' in req.body) ? normTeam(req.body.team) : (user.team || null);
+  const newAccess = ('asset_access' in req.body) ? normAccess(req.body.asset_access) : user.asset_access;
+  await run('UPDATE users SET full_name = ?, role = ?, country = ?, team = ?, asset_access = ? WHERE id = ?',
+            [full_name !== undefined ? full_name : user.full_name, newRole, newCountry, newTeam, newAccess, req.params.id]);
 
   if (password) {
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     await run('UPDATE users SET password_hash = ? WHERE id = ?', [hashPassword(password), req.params.id]);
   }
 
-  res.json(await get('SELECT id, username, full_name, role, country FROM users WHERE id = ?', [req.params.id]));
+  res.json(await get('SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [req.params.id]));
 }));
 
 // ── DELETE /api/users/:id — delete a user ─────────────────────────────────

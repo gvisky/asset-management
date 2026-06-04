@@ -630,8 +630,17 @@ async function ensureTeams() {
     );
     console.log('[seed] Created HR member hatran -> Vietnam (no asset access)');
   }
+  // Yen — Vietnam HR member (User Inventory only), same as Ha Tran.
+  const yenExists = await backend.get('SELECT id FROM users WHERE username = ?', ['yen']);
+  if (!yenExists) {
+    await backend.run(
+      'INSERT INTO users (username, full_name, password_hash, role, country, team, asset_access) VALUES (?, ?, ?, ?, ?, ?, 0)',
+      ['yen', 'Yen', hashPassword('yen123'), 'editor', 'Vietnam', 'HR']
+    );
+    console.log('[seed] Created HR member yen -> Vietnam (no asset access)');
+  }
   // HR-only members do not get Asset Inventory access.
-  await backend.run("UPDATE users SET asset_access = 0 WHERE username = 'hatran'");
+  await backend.run("UPDATE users SET asset_access = 0 WHERE username IN ('hatran', 'yen')");
 }
 
 // On first boot with empty personnel, load db/personnel-seed.json if present.

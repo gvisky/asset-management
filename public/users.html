@@ -57,7 +57,7 @@
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>Username</th><th>Full Name</th><th>Role</th><th>Region</th><th>Created</th><th>Actions</th></tr>
+            <tr><th>#</th><th>Username</th><th>Full Name</th><th>Role</th><th>Team</th><th>Region</th><th>Asset Access</th><th>Created</th><th>Actions</th></tr>
           </thead>
           <tbody id="users-tbody"><tr><td colspan="7" class="empty-state">Loading…</td></tr></tbody>
         </table>
@@ -119,6 +119,22 @@
             <option value="Malaysia">Malaysia</option>
           </select>
           <span class="text-muted text-sm">Limits this user to one country. A global Admin manages users; an Admin + a region can restore that region only.</span>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Team</label>
+          <select class="form-control" id="u-team">
+            <option value="">— None —</option>
+            <option value="IT">IT member</option>
+            <option value="HR">HR member</option>
+          </select>
+          <span class="text-muted text-sm">IT or HR — controls the User Inventory page. Only an IT admin can edit User Inventory.</span>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Asset Inventory access</label>
+          <select class="form-control" id="u-asset_access">
+            <option value="1">Yes — can see Asset Inventory</option>
+            <option value="0">No — User Inventory only</option>
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label" id="u-pass-label">Password *</label>

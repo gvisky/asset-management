@@ -23,7 +23,9 @@ async function loadUsers() {
         <td><strong>${u.username}</strong>${u.id === (me && me.id) ? ' <span class="text-muted text-sm">(you)</span>' : ''}</td>
         <td>${u.full_name || '—'}</td>
         <td>${roleBadge(u.role)}</td>
+        <td>${u.team ? `<span class="badge badge-office">${u.team}</span>` : '<span class="text-muted text-sm">—</span>'}</td>
         <td>${u.country ? `<span class="badge badge-factory">${u.country}</span>` : '<span class="text-muted text-sm">Global</span>'}</td>
+        <td class="text-sm">${Number(u.asset_access) === 0 ? '<span class="text-muted">User Inv. only</span>' : 'Yes'}</td>
         <td class="text-muted text-sm">${(u.created_at || '').split(' ')[0]}</td>
         <td>
           <div style="display:flex;gap:6px">
@@ -75,6 +77,8 @@ function editUser(u) {
   document.getElementById('u-fullname').value = u.full_name || '';
   document.getElementById('u-role').value = u.role;
   document.getElementById('u-country').value = u.country || '';
+  document.getElementById('u-team').value = u.team || '';
+  document.getElementById('u-asset_access').value = String(Number(u.asset_access) === 0 ? 0 : 1);
   document.getElementById('u-password').value = '';
   document.getElementById('u-pass-label').textContent = 'Reset Password';
   document.getElementById('u-pass-hint').style.display = 'block';
@@ -126,19 +130,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const full_name= document.getElementById('u-fullname').value.trim();
     const role     = document.getElementById('u-role').value;
     const country  = document.getElementById('u-country').value;
+    const team     = document.getElementById('u-team').value;
+    const asset_access = document.getElementById('u-asset_access').value;
     const password = document.getElementById('u-password').value;
 
     if (!username) { showToast('Username is required', 'error'); return; }
 
     try {
       if (userEditMode && id) {
-        const body = { full_name, role, country };
+        const body = { full_name, role, country, team, asset_access };
         if (password) body.password = password;
         await apiPut(`/api/users/${id}`, body);
         showToast('User updated');
       } else {
         if (!password) { showToast('Password is required', 'error'); return; }
-        await apiPost('/api/users', { username, full_name, role, country, password });
+        await apiPost('/api/users', { username, full_name, role, country, team, asset_access, password });
         showToast('User created');
       }
       closeUserModal();

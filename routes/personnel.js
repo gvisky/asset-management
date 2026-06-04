@@ -79,7 +79,7 @@ router.get('/', wrap(async (req, res) => {
     [...params, Number(limit), offset]
   );
   res.json({ total, page: Number(page), limit: Number(limit), data,
-             can: { editUserType: isHR(req), editStatus: isIT(req) } });
+             can: { edit: isITAdmin(req.user) } });
 }));
 
 // ── GET /api/personnel/filters — country list for the filter dropdown ─────────
@@ -217,14 +217,14 @@ router.get('/meta', wrap(async (req, res) => {
     days = Math.floor(Number(r.d));
     due = days >= 30;
   }
-  res.json({ last_import: last, days_since: days, due, canImport: isIT(req) });
+  res.json({ last_import: last, days_since: days, due, canImport: isITAdmin(req.user) });
 }));
 
 // ── POST /api/personnel/import — IT uploads a raw Azure CSV export ────────────
 // Filters to Vietnam/Thailand/Malaysia by Company Name, then upserts by email,
 // preserving HR/IT workflow fields (user_type, status, leaving_date).
 router.post('/import', wrap(async (req, res) => {
-  if (!isIT(req)) return res.status(403).json({ error: 'Only IT members can upload' });
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can upload' });
 
   const csv = req.body && req.body.csv;
   if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'No CSV content received' });
@@ -278,48 +278,37 @@ router.post('/import', wrap(async (req, res) => {
   res.json({ added, updated, skipped, preserved, byCountry, last_import: nowStr });
 }));
 
-// ── PUT /api/personnel/:id — field-level edit by team ─────────────────────────
+// ── PUT /api/personnel/:id — edit a record (IT admin only) ────────────────────
 router.put('/:id', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can edit User Inventory records' });
   const row = await get('SELECT * FROM personnel WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Person not found' });
 
-  // Region scope: HR/regional users can only touch their own country.
-  const scope = scopeOf(req);
-  if (scope && row.country !== scope) return res.status(403).json({ error: 'Not in your region' });
-
   const sets = [];
   const params = [];
+  const effectiveType = ('user_type' in req.body) ? (req.body.user_type || '') : row.user_type;
 
-  // HR: User Type + Leaving date
-  if (isHR(req)) {
-    if ('user_type' in req.body) {
-      const ut = req.body.user_type || '';
-      if (!USER_TYPES.includes(ut)) return res.status(400).json({ error: 'Invalid user type' });
-      sets.push('user_type = ?'); params.push(ut);
-    }
-    if ('leaving_date' in req.body) {
-      const ld = req.body.leaving_date || '';
-      // A non-empty leaving date requires a User Type first; clearing is always allowed.
-      const effectiveType = ('user_type' in req.body) ? (req.body.user_type || '') : row.user_type;
-      if (ld && !effectiveType) return res.status(400).json({ error: 'Set User Type before the leaving date' });
-      sets.push('leaving_date = ?'); params.push(ld);
-    }
+  if ('user_type' in req.body) {
+    const ut = req.body.user_type || '';
+    if (!USER_TYPES.includes(ut)) return res.status(400).json({ error: 'Invalid user type' });
+    sets.push('user_type = ?'); params.push(ut);
   }
-
-  // HR and IT: Department & Cost Center (the person's own; kept in step via the form).
-  if ('department' in req.body)  { sets.push('department = ?');  params.push(req.body.department || ''); }
-  if ('cost_center' in req.body) { sets.push('cost_center = ?'); params.push(req.body.cost_center || ''); }
-
-  // IT: Status — only allowed once HR has set the User Type.
-  if (isIT(req) && 'status' in req.body) {
-    if (!row.user_type) return res.status(400).json({ error: 'HR must set the User Type before Status can be changed' });
+  if ('leaving_date' in req.body) {
+    const ld = req.body.leaving_date || '';
+    if (ld && !effectiveType) return res.status(400).json({ error: 'Set User Type before the leaving date' });
+    sets.push('leaving_date = ?'); params.push(ld);
+  }
+  if ('status' in req.body) {
     const st = req.body.status;
     if (!STATUSES.includes(st)) return res.status(400).json({ error: 'Invalid status' });
+    if (st !== 'Active' && !effectiveType) return res.status(400).json({ error: 'Set the User Type before changing Status' });
     sets.push('status = ?'); params.push(st);
     sets.push("status_changed_at = datetime('now')");
   }
+  if ('department' in req.body)  { sets.push('department = ?');  params.push(req.body.department || ''); }
+  if ('cost_center' in req.body) { sets.push('cost_center = ?'); params.push(req.body.cost_center || ''); }
 
-  if (!sets.length) return res.status(403).json({ error: 'Nothing you are allowed to change' });
+  if (!sets.length) return res.status(400).json({ error: 'Nothing to change' });
 
   sets.push('touched = 1');                 // mark edited → import won't overwrite it
   sets.push("updated_at = datetime('now')");
@@ -327,19 +316,8 @@ router.put('/:id', wrap(async (req, res) => {
 
   const updated = await get('SELECT * FROM personnel WHERE id = ?', [req.params.id]);
   await audit(req.user, 'PERSONNEL', updated.id, `Updated personnel "${updated.display_name}" (${updated.country})`);
-
-  // Raise an alert about the change for the other team.
-  if (isHR(req) && ('user_type' in req.body || 'leaving_date' in req.body)) {
-    const bits = [];
-    if (updated.user_type) bits.push(`User Type "${updated.user_type}"`);
-    if (updated.leaving_date) bits.push(`leaving ${updated.leaving_date}`);
-    await notify({ audience: 'IT', country: updated.country, scope: 'personnel', level: 'warning',
-      message: `HR (${req.user.full_name}) updated ${updated.display_name} [${updated.country}]: ${bits.join(', ') || 'cleared'}.` });
-  }
-  if (isIT(req) && 'status' in req.body) {
-    await notify({ audience: 'HR', country: updated.country, scope: 'personnel', level: 'info',
-      message: `IT (${req.user.full_name}) set ${updated.display_name} [${updated.country}] status → "${updated.status}".` });
-  }
+  await notify({ audience: 'all', country: updated.country, scope: 'personnel', level: 'info',
+    message: `${req.user.full_name} updated ${updated.display_name} [${updated.country}] in User Inventory.` });
   res.json(updated);
 }));
 
