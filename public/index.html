@@ -82,16 +82,20 @@
 
     <!-- Charts row -->
     <div class="grid-2" style="margin-bottom:20px">
-      <!-- Brand distribution -->
+      <!-- Top Models by Asset Type -->
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="flex-wrap:wrap;gap:8px">
           <span class="card-title">Top Models</span>
-          <span class="text-muted text-sm">by count</span>
+          <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+            <select class="filter-select" id="tm-type" style="min-width:140px"></select>
+            <label id="tm-lock-wrap" title="Lock this asset type so editors cannot delete its assets (IT admin only)"
+                   style="display:none;align-items:center;gap:5px;font-size:12.5px;white-space:nowrap;cursor:pointer">
+              <input type="checkbox" id="tm-lock"> 🔒 Lock delete
+            </label>
+          </div>
         </div>
         <div class="card-body">
-          <div class="bar-list" id="brand-bars">
-            <div class="text-muted text-sm">Loading…</div>
-          </div>
+          <div id="tm-body"><div class="text-muted text-sm">Loading…</div></div>
         </div>
       </div>
 

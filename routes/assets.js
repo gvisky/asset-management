@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run, audit, notify } = require('../db/database');
+const { get, all, run, audit, notify, getMeta, setMeta } = require('../db/database');
 const XLSX = require('xlsx');
-const { requireAuth, requireRole, requireGlobalAdmin, requireITAdmin } = require('../middleware/auth');
+const { requireAuth, requireRole, requireGlobalAdmin, requireITAdmin, isITAdmin } = require('../middleware/auth');
 const { buildDeliveryForm } = require('../lib/delivery-form');
 const { ASSET_COLUMNS, normalizeAssetType } = require('../lib/asset-columns');
 
@@ -172,6 +172,56 @@ router.get('/stats', wrap(async (req, res) => {
 
   res.json({ total, byStatus, byLocation, byCountry, byBrand, recentlyAdded, deletedCount, incompleteCount,
              warrantyExpiring, openRepairs, scope: scopeOf(req) });
+}));
+
+// Asset types that are locked from deletion (stored as a JSON list in app_meta).
+async function getLockedTypes() {
+  try { const a = JSON.parse(await getMeta('locked_asset_types') || '[]'); return Array.isArray(a) ? a : []; }
+  catch { return []; }
+}
+
+// ── GET /api/assets/top-models — models + per-country quantity for an Asset Type
+// (Dashboard "Top Models" box). Country-scoped. ───────────────────────────────
+router.get('/top-models', wrap(async (req, res) => {
+  const cf = countryFilter(req);
+  const base = ['deleted_at IS NULL']; const bp = [];
+  if (cf.clause) { base.push(cf.clause); bp.push(...cf.params); }
+  const baseWhere = 'WHERE ' + base.join(' AND ');
+
+  const assetTypes = (await all(
+    `SELECT asset_type AS type, COUNT(*) AS cnt FROM assets ${baseWhere} AND asset_type <> ''
+       GROUP BY asset_type ORDER BY cnt DESC`, bp)).map(r => ({ type: r.type, count: Number(r.cnt) }));
+
+  const names = assetTypes.map(t => t.type);
+  let selected = (req.query.asset_type || '').trim();
+  if (!selected || !names.includes(selected)) selected = names.includes('Laptop') ? 'Laptop' : (names[0] || '');
+
+  const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
+  const rows = selected ? await all(
+    `SELECT brand_model, country, COUNT(*) AS cnt FROM assets WHERE ${base.join(' AND ')} AND asset_type = ?
+       GROUP BY brand_model, country`, [...bp, selected]) : [];
+  const map = {};
+  for (const r of rows) {
+    const bm = r.brand_model || 'Unknown';
+    (map[bm] = map[bm] || { brand_model: bm, total: 0, byCountry: {} });
+    map[bm].byCountry[r.country] = Number(r.cnt);
+    map[bm].total += Number(r.cnt);
+  }
+  const models = Object.values(map).sort((a, b) => b.total - a.total);
+  res.json({ assetTypes, selected, countries, models, lockedTypes: await getLockedTypes(), canLock: isITAdmin(req.user) });
+}));
+
+// ── GET / POST /api/assets/locked-types — delete-lock per Asset Type ──────────
+router.get('/locked-types', wrap(async (req, res) => res.json({ lockedTypes: await getLockedTypes() })));
+router.post('/locked-types', requireITAdmin, wrap(async (req, res) => {
+  const type = ((req.body && req.body.asset_type) || '').trim();
+  if (!type) return res.status(400).json({ error: 'asset_type is required' });
+  const locked = !!(req.body && req.body.locked);
+  let set = (await getLockedTypes()).filter(t => t.toLowerCase() !== type.toLowerCase());
+  if (locked) set.push(type);
+  await setMeta('locked_asset_types', JSON.stringify(set));
+  await audit(req.user, 'LOCK', null, `${locked ? 'Locked' : 'Unlocked'} asset type "${type}" from deletion`);
+  res.json({ lockedTypes: set });
 }));
 
 // ── GET /api/assets/filters — distinct values for the filter dropdowns ────────
@@ -668,6 +718,14 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 
   const scope = scopeOf(req);
   if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+
+  // Asset types an IT admin has locked can't be deleted by anyone but an IT admin.
+  if (existing.asset_type && !isITAdmin(req.user)) {
+    const locked = await getLockedTypes();
+    if (locked.some(t => t.toLowerCase() === String(existing.asset_type).toLowerCase())) {
+      return res.status(403).json({ error: `Asset type "${existing.asset_type}" is locked from deletion by IT admin. You can edit it, but not delete it.` });
+    }
+  }
 
   await run("UPDATE assets SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?",
             [req.user.username, req.params.id]);

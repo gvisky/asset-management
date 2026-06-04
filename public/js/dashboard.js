@@ -34,20 +34,8 @@ async function loadStats() {
     // By-country cards (Vietnam / Thailand / Malaysia) — appended to the stat grid.
     renderCountryCards(stats.byCountry || {});
 
-    // Brand bars
-    const brandEl = document.getElementById('brand-bars');
-    const maxCount = stats.byBrand[0]?.cnt || 1;
-    brandEl.innerHTML = stats.byBrand.map(b => `
-      <a class="bar-item" href="/inventory.html?search=${encodeURIComponent(b.brand_model || '')}" title="View ${b.brand_model || 'these'} assets">
-        <div class="bar-label">
-          <span>${b.brand_model || 'Unknown'}</span>
-          <span><strong>${b.cnt}</strong></span>
-        </div>
-        <div class="bar-track">
-          <div class="bar-fill" style="width:${Math.round(b.cnt / maxCount * 100)}%"></div>
-        </div>
-      </a>
-    `).join('') || '<div class="text-muted text-sm">No data</div>';
+    // Top Models — by selected Asset Type, split by country (loaded separately).
+    loadTopModels();
 
     // Recent assets table
     const tbody = document.getElementById('recent-tbody');
@@ -104,6 +92,65 @@ async function loadPersonnelSummary() {
 }
 
 // Render one clickable card per country, appended to the stat grid.
+// ── Top Models box — models + per-country quantity for a chosen Asset Type ────
+let _tmInited = false;
+async function loadTopModels(assetType) {
+  const body = document.getElementById('tm-body');
+  const sel = document.getElementById('tm-type');
+  if (!body || !sel) return;
+  try {
+    const q = assetType !== undefined ? assetType : sel.value;
+    const d = await apiGet('/api/assets/top-models' + (q ? '?asset_type=' + encodeURIComponent(q) : ''));
+
+    // Populate the type dropdown once (keep current selection thereafter).
+    sel.innerHTML = (d.assetTypes || []).map(t =>
+      `<option value="${String(t.type).replace(/"/g, '&quot;')}"${t.type === d.selected ? ' selected' : ''}>${t.type} (${t.count})</option>`).join('')
+      || '<option value="">No types</option>';
+    sel.value = d.selected || '';
+
+    // Lock checkbox — IT admin only.
+    const wrap = document.getElementById('tm-lock-wrap');
+    const chk = document.getElementById('tm-lock');
+    if (wrap && chk) {
+      wrap.style.display = d.canLock ? 'flex' : 'none';
+      chk.checked = (d.lockedTypes || []).some(t => t.toLowerCase() === String(d.selected).toLowerCase());
+      chk.dataset.type = d.selected;
+    }
+    const isLocked = (d.lockedTypes || []).some(t => t.toLowerCase() === String(d.selected).toLowerCase());
+
+    const countries = d.countries || [];
+    const max = d.models[0]?.total || 1;
+    if (!d.models.length) { body.innerHTML = '<div class="text-muted text-sm">No models for this type.</div>'; return; }
+    body.innerHTML = `
+      ${isLocked ? '<div class="text-sm" style="margin-bottom:8px;color:#92400e">🔒 This asset type is locked — editors cannot delete its assets.</div>' : ''}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Model</th>${countries.map(c => `<th style="text-align:right">${c}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead>
+        <tbody>${d.models.map(m => `
+          <tr>
+            <td><a href="/inventory.html?asset_type=${encodeURIComponent(d.selected)}&brand=${encodeURIComponent(m.brand_model)}" title="View these assets">${escD(m.brand_model)}</a></td>
+            ${countries.map(c => `<td style="text-align:right">${m.byCountry[c] || 0}</td>`).join('')}
+            <td style="text-align:right"><strong>${m.total}</strong></td>
+          </tr>`).join('')}</tbody>
+      </table></div>`;
+  } catch (e) {
+    body.innerHTML = '<div class="text-muted text-sm">Could not load models.</div>';
+  }
+
+  if (!_tmInited) {
+    _tmInited = true;
+    sel.addEventListener('change', () => loadTopModels(sel.value));
+    const chk = document.getElementById('tm-lock');
+    if (chk) chk.addEventListener('change', async () => {
+      try {
+        await apiPost('/api/assets/locked-types', { asset_type: chk.dataset.type, locked: chk.checked });
+        showToast(chk.checked ? `Locked "${chk.dataset.type}" from deletion` : `Unlocked "${chk.dataset.type}"`);
+        loadTopModels(chk.dataset.type);
+      } catch (e) { showToast('Only an IT admin can lock asset types', 'error'); chk.checked = !chk.checked; }
+    });
+  }
+}
+function escD(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
 function renderCountryCards(byCountry) {
   const grid = document.getElementById('stat-grid');
   if (!grid) return;
