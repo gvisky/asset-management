@@ -83,6 +83,96 @@ async function setup() {
   await mapCostCenters();
   await backfillPersonnelDept();
   await clearNonVnPersonnelDept();
+  await applyRealInventory();
+}
+
+// One-time reconciliation from the "Real Inventory list" (real-inventory-seed.json).
+// Matches each row to an asset by ECC code → serial → S4 and overwrites the
+// file's fields (file wins where it has a value; blanks are left alone). Rows
+// that match nothing (Malaysia/Thailand laptops) are inserted. Missing users are
+// added, and Vietnam users' department/cost-center are synced from their asset.
+async function applyRealInventory() {
+  const META_KEY = 'real_inventory_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const seedPath = path.join(__dirname, 'real-inventory-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let recs;
+  try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[map] real-inventory-seed.json parse failed:', e.message); return; }
+
+  const FIELDS = ['asset_code', 'asset_s4', 'serial_no', 'computer_no', 'ad_name', 'user_name', 'brand_model',
+    'asset_type', 'cost_center', 'cost_center_desc', 'ecc_cc', 'asset_description', 'mk', 'country', 'location',
+    'department', 'status', 'date_assigned', 'purchase_date', 'warranty_expiry', 'vendor', 'cost', 'po_number', 'remark'];
+  const VALID_STATUS = ['Active', 'Broken', 'Stock'];
+  const VALID_COUNTRY = ['Vietnam', 'Thailand', 'Malaysia'];
+
+  let updated = 0, inserted = 0, usersAdded = 0;
+  for (const r of recs) {
+    let a = null;
+    if (r.asset_code) a = await backend.get('SELECT * FROM assets WHERE LOWER(asset_code) = LOWER(?) AND deleted_at IS NULL', [r.asset_code]);
+    if (!a && r.serial_no) a = await backend.get('SELECT * FROM assets WHERE LOWER(serial_no) = LOWER(?) AND deleted_at IS NULL', [r.serial_no]);
+    if (!a && r.asset_s4) a = await backend.get('SELECT * FROM assets WHERE asset_s4 = ? AND deleted_at IS NULL', [r.asset_s4]);
+
+    if (a) {
+      const sets = [], vals = [];
+      for (const f of FIELDS) {
+        const v = r[f];
+        if (v === undefined || v === null || v === '') continue;     // never blank existing data
+        if (f === 'status' && !VALID_STATUS.includes(v)) continue;
+        if (f === 'country' && !VALID_COUNTRY.includes(v)) continue;
+        sets.push(`${f} = ?`); vals.push(v);
+      }
+      if (sets.length) { await backend.run(`UPDATE assets SET ${sets.join(', ')} WHERE id = ?`, [...vals, a.id]); updated++; }
+    } else {
+      if (r.serial_no) {
+        const dup = await backend.get('SELECT id FROM assets WHERE LOWER(serial_no) = LOWER(?) AND deleted_at IS NULL', [r.serial_no]);
+        if (dup) continue;
+      }
+      const status = VALID_STATUS.includes(r.status) ? r.status : 'Active';
+      const country = VALID_COUNTRY.includes(r.country) ? r.country : 'Vietnam';
+      await backend.run(
+        `INSERT INTO assets (asset_code, asset_s4, serial_no, computer_no, ad_name, user_name, brand_model,
+            asset_type, cost_center, cost_center_desc, ecc_cc, asset_description, mk, country, location,
+            department, status, date_assigned, purchase_date, warranty_expiry, vendor, cost, po_number, remark, history_usage)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [r.asset_code, r.asset_s4, r.serial_no, r.computer_no, r.ad_name, r.user_name, r.brand_model,
+         r.asset_type, r.cost_center, r.cost_center_desc, r.ecc_cc, r.asset_description, r.mk, country, r.location,
+         r.department, status, r.date_assigned, r.purchase_date, r.warranty_expiry, r.vendor, r.cost, r.po_number, r.remark,
+         'Imported from Real Inventory list']);
+      inserted++;
+    }
+  }
+
+  // Add any users (by AD Name) not already in the User Inventory. Email local-part
+  // is kept equal to the AD Name so the asset↔user link works.
+  const seenAd = new Set();
+  for (const r of recs) {
+    const ad = (r.ad_name || '').trim().toLowerCase();
+    if (!ad || seenAd.has(ad)) continue;
+    seenAd.add(ad);
+    const found = await backend.get(
+      "SELECT id FROM personnel WHERE instr(email,'@') > 0 AND LOWER(substr(email,1,instr(email,'@')-1)) = ?", [ad]);
+    if (found) continue;
+    const country = VALID_COUNTRY.includes(r.country) ? r.country : 'Vietnam';
+    const fileLp = (r.email && r.email.includes('@')) ? r.email.split('@')[0].toLowerCase() : '';
+    const email = (fileLp === ad) ? r.email : `${r.ad_name}@hayat.com.tr`;
+    await backend.run(
+      "INSERT INTO personnel (country, display_name, email, status, touched) VALUES (?, ?, ?, 'Active', 1)",
+      [country, r.user_name || r.ad_name, email]);
+    usersAdded++;
+  }
+
+  // Sync Vietnam users' Department / Cost Center from their linked asset.
+  const subA = (col) => `(SELECT a.${col} FROM assets a WHERE a.deleted_at IS NULL AND a.${col} <> ''
+        AND instr(personnel.email,'@') > 0 AND LOWER(a.ad_name) = LOWER(substr(personnel.email,1,instr(personnel.email,'@')-1))
+        ORDER BY a.id LIMIT 1)`;
+  await backend.run(
+    `UPDATE personnel SET department = COALESCE(${subA('department')}, department),
+        cost_center = COALESCE(${subA('cost_center')}, cost_center) WHERE country = 'Vietnam'`);
+
+  await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [META_KEY, `updated=${updated},inserted=${inserted},usersAdded=${usersAdded}`]);
+  console.log(`[map] Real Inventory reconciliation: ${updated} assets updated, ${inserted} added, ${usersAdded} users added`);
 }
 
 // Thailand & Malaysia use a different (not-yet-defined) Cost Center / Department
