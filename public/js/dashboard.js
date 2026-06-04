@@ -93,6 +93,7 @@ async function loadPersonnelSummary() {
 
 // Render one clickable card per country, appended to the stat grid.
 // ── Top Models box — models + per-country quantity for a chosen Asset Type ────
+// Each model has a 🔒 lock-delete checkbox at the front (IT admin only).
 let _tmInited = false;
 async function loadTopModels(assetType) {
   const body = document.getElementById('tm-body');
@@ -102,54 +103,50 @@ async function loadTopModels(assetType) {
     const q = assetType !== undefined ? assetType : sel.value;
     const d = await apiGet('/api/assets/top-models' + (q ? '?asset_type=' + encodeURIComponent(q) : ''));
 
-    // Populate the type dropdown once (keep current selection thereafter).
     sel.innerHTML = (d.assetTypes || []).map(t =>
       `<option value="${String(t.type).replace(/"/g, '&quot;')}"${t.type === d.selected ? ' selected' : ''}>${t.type} (${t.count})</option>`).join('')
       || '<option value="">No types</option>';
     sel.value = d.selected || '';
 
-    // Lock checkbox — IT admin only.
-    const wrap = document.getElementById('tm-lock-wrap');
-    const chk = document.getElementById('tm-lock');
-    if (wrap && chk) {
-      wrap.style.display = d.canLock ? 'flex' : 'none';
-      chk.checked = (d.lockedTypes || []).some(t => t.toLowerCase() === String(d.selected).toLowerCase());
-      chk.dataset.type = d.selected;
-    }
-    const isLocked = (d.lockedTypes || []).some(t => t.toLowerCase() === String(d.selected).toLowerCase());
-
+    const lockedSet = new Set((d.lockedModels || []).map(m => String(m).toLowerCase()));
+    const canLock = !!d.canLock;
     const countries = d.countries || [];
-    const max = d.models[0]?.total || 1;
     if (!d.models.length) { body.innerHTML = '<div class="text-muted text-sm">No models for this type.</div>'; return; }
     body.innerHTML = `
-      ${isLocked ? '<div class="text-sm" style="margin-bottom:8px;color:#92400e">🔒 This asset type is locked — editors cannot delete its assets.</div>' : ''}
+      ${canLock ? '<div class="text-muted text-sm" style="margin-bottom:6px">🔒 Tick a model to lock its assets from deletion (editors can edit but not delete).</div>' : ''}
       <div class="table-wrap"><table>
-        <thead><tr><th>Model</th>${countries.map(c => `<th style="text-align:right">${c}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead>
-        <tbody>${d.models.map(m => `
-          <tr>
-            <td><a href="/inventory.html?asset_type=${encodeURIComponent(d.selected)}&brand=${encodeURIComponent(m.brand_model)}" title="View these assets">${escD(m.brand_model)}</a></td>
+        <thead><tr>${canLock ? '<th title="Lock from deletion">🔒</th>' : ''}<th>Model</th>${countries.map(c => `<th style="text-align:right">${c}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead>
+        <tbody>${d.models.map(m => {
+          const locked = lockedSet.has(String(m.brand_model).toLowerCase());
+          const lockCell = canLock
+            ? `<td style="text-align:center"><input type="checkbox" class="tm-lock-cb" data-model="${escAttr(m.brand_model)}" ${locked ? 'checked' : ''} title="Lock '${escAttr(m.brand_model)}' from deletion"></td>`
+            : '';
+          return `<tr${locked ? ' style="background:#fff7ed"' : ''}>
+            ${lockCell}
+            <td>${locked ? '🔒 ' : ''}<a href="/inventory.html?asset_type=${encodeURIComponent(d.selected)}&brand=${encodeURIComponent(m.brand_model)}" title="View these assets">${escD(m.brand_model)}</a></td>
             ${countries.map(c => `<td style="text-align:right">${m.byCountry[c] || 0}</td>`).join('')}
             <td style="text-align:right"><strong>${m.total}</strong></td>
-          </tr>`).join('')}</tbody>
+          </tr>`;
+        }).join('')}</tbody>
       </table></div>`;
+
+    // Wire each model lock checkbox.
+    body.querySelectorAll('.tm-lock-cb').forEach(cb => cb.addEventListener('change', async () => {
+      const model = cb.dataset.model;
+      try {
+        await apiPost('/api/assets/locked-models', { brand_model: model, locked: cb.checked });
+        showToast(cb.checked ? `Locked "${model}" from deletion` : `Unlocked "${model}"`);
+        loadTopModels(sel.value);
+      } catch (e) { showToast('Only an IT admin can lock models', 'error'); cb.checked = !cb.checked; }
+    }));
   } catch (e) {
     body.innerHTML = '<div class="text-muted text-sm">Could not load models.</div>';
   }
 
-  if (!_tmInited) {
-    _tmInited = true;
-    sel.addEventListener('change', () => loadTopModels(sel.value));
-    const chk = document.getElementById('tm-lock');
-    if (chk) chk.addEventListener('change', async () => {
-      try {
-        await apiPost('/api/assets/locked-types', { asset_type: chk.dataset.type, locked: chk.checked });
-        showToast(chk.checked ? `Locked "${chk.dataset.type}" from deletion` : `Unlocked "${chk.dataset.type}"`);
-        loadTopModels(chk.dataset.type);
-      } catch (e) { showToast('Only an IT admin can lock asset types', 'error'); chk.checked = !chk.checked; }
-    });
-  }
+  if (!_tmInited) { _tmInited = true; sel.addEventListener('change', () => loadTopModels(sel.value)); }
 }
 function escD(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 function renderCountryCards(byCountry) {
   const grid = document.getElementById('stat-grid');

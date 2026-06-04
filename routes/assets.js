@@ -174,9 +174,9 @@ router.get('/stats', wrap(async (req, res) => {
              warrantyExpiring, openRepairs, scope: scopeOf(req) });
 }));
 
-// Asset types that are locked from deletion (stored as a JSON list in app_meta).
-async function getLockedTypes() {
-  try { const a = JSON.parse(await getMeta('locked_asset_types') || '[]'); return Array.isArray(a) ? a : []; }
+// Models (brand_model) that are locked from deletion (JSON list in app_meta).
+async function getLockedModels() {
+  try { const a = JSON.parse(await getMeta('locked_models') || '[]'); return Array.isArray(a) ? a : []; }
   catch { return []; }
 }
 
@@ -208,20 +208,20 @@ router.get('/top-models', wrap(async (req, res) => {
     map[bm].total += Number(r.cnt);
   }
   const models = Object.values(map).sort((a, b) => b.total - a.total);
-  res.json({ assetTypes, selected, countries, models, lockedTypes: await getLockedTypes(), canLock: isITAdmin(req.user) });
+  res.json({ assetTypes, selected, countries, models, lockedModels: await getLockedModels(), canLock: isITAdmin(req.user) });
 }));
 
-// ── GET / POST /api/assets/locked-types — delete-lock per Asset Type ──────────
-router.get('/locked-types', wrap(async (req, res) => res.json({ lockedTypes: await getLockedTypes() })));
-router.post('/locked-types', requireITAdmin, wrap(async (req, res) => {
-  const type = ((req.body && req.body.asset_type) || '').trim();
-  if (!type) return res.status(400).json({ error: 'asset_type is required' });
+// ── GET / POST /api/assets/locked-models — delete-lock per Model ──────────────
+router.get('/locked-models', wrap(async (req, res) => res.json({ lockedModels: await getLockedModels() })));
+router.post('/locked-models', requireITAdmin, wrap(async (req, res) => {
+  const model = ((req.body && req.body.brand_model) || '').trim();
+  if (!model) return res.status(400).json({ error: 'brand_model is required' });
   const locked = !!(req.body && req.body.locked);
-  let set = (await getLockedTypes()).filter(t => t.toLowerCase() !== type.toLowerCase());
-  if (locked) set.push(type);
-  await setMeta('locked_asset_types', JSON.stringify(set));
-  await audit(req.user, 'LOCK', null, `${locked ? 'Locked' : 'Unlocked'} asset type "${type}" from deletion`);
-  res.json({ lockedTypes: set });
+  let set = (await getLockedModels()).filter(m => m.toLowerCase() !== model.toLowerCase());
+  if (locked) set.push(model);
+  await setMeta('locked_models', JSON.stringify(set));
+  await audit(req.user, 'LOCK', null, `${locked ? 'Locked' : 'Unlocked'} model "${model}" from deletion`);
+  res.json({ lockedModels: set });
 }));
 
 // ── GET /api/assets/filters — distinct values for the filter dropdowns ────────
@@ -719,11 +719,11 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const scope = scopeOf(req);
   if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
 
-  // Asset types an IT admin has locked can't be deleted by anyone but an IT admin.
-  if (existing.asset_type && !isITAdmin(req.user)) {
-    const locked = await getLockedTypes();
-    if (locked.some(t => t.toLowerCase() === String(existing.asset_type).toLowerCase())) {
-      return res.status(403).json({ error: `Asset type "${existing.asset_type}" is locked from deletion by IT admin. You can edit it, but not delete it.` });
+  // Models an IT admin has locked can't be deleted by anyone but an IT admin.
+  if (existing.brand_model && !isITAdmin(req.user)) {
+    const locked = await getLockedModels();
+    if (locked.some(m => m.toLowerCase() === String(existing.brand_model).toLowerCase())) {
+      return res.status(403).json({ error: `Model "${existing.brand_model}" is locked from deletion by IT admin. You can edit it, but not delete it.` });
     }
   }
 
