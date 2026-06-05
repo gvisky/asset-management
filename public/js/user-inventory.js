@@ -337,7 +337,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (u && u.team !== 'HR' && u.team !== 'IT') window.location.href = '/';
   }, 400);
 
-  loadCountries().then(() => loadPeople());
+  // Load the table independently of the filter dropdown — a slow/failed
+  // /filters call must never leave the page stuck on "Loading…".
+  loadPeople();
+  loadCountries();
   loadMeta();
   loadSummary();
 
