@@ -90,6 +90,7 @@ router.get('/', wrap(async (req, res) => {
     )`);
     if (cf.clause) params.push(...cf.params);
     conditions.push(NOT_FLAGGED_SQL); params.push(...NO_FLAG_TYPES);
+    conditions.push("status = 'Active'");   // Broken/Stock are not flagged for missing info
   }
   if (ad_issue) {
     // AD-link problems, editable in place: an AD Name that matches no user, OR an
@@ -158,7 +159,7 @@ router.get('/stats', wrap(async (req, res) => {
       asset_code  IS NULL OR asset_code  = '' OR
       computer_no IS NULL OR computer_no = '' OR
       (status = 'Active' AND (ad_name IS NULL OR ad_name = ''))
-    )`, NOT_FLAGGED_SQL];
+    )`, NOT_FLAGGED_SQL, "status = 'Active'"];
   const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, [...lp, ...NO_FLAG_TYPES])).cnt);
 
   // Warranty expiring/expired within 90 days (live assets that have a date set).
@@ -268,23 +269,22 @@ router.get('/incomplete', wrap(async (req, res) => {
      GROUP BY serial_no HAVING COUNT(*) > 1`, cf.params)).map(r => String(r.serial_no));
   const dupSet = new Set(dups);
 
-  // Assets missing a key identifier, OR an Active asset with no AD Name.
-  // (Broken/Stock assets don't need an AD Name.)
-  const cond = ['deleted_at IS NULL', `(
+  // Only Active assets are flagged — Broken/Stock are never shown in Needs Attention.
+  const cond = ['deleted_at IS NULL', "status = 'Active'", `(
       serial_no IS NULL OR serial_no='' OR
       asset_code IS NULL OR asset_code='' OR
       computer_no IS NULL OR computer_no='' OR
-      (status = 'Active' AND (ad_name IS NULL OR ad_name=''))
+      (ad_name IS NULL OR ad_name='')
     )`];
   if (cf.clause) cond.push(cf.clause);
   cond.push(NOT_FLAGGED_SQL);
   const incomplete = await all(`SELECT * FROM assets WHERE ${cond.join(' AND ')}`, [...cf.params, ...NO_FLAG_TYPES]);
 
-  // Assets that share a duplicated serial number (exempt types excluded from flagging).
+  // Active assets that share a duplicated serial number (exempt types excluded).
   let dupRows = [];
   if (dups.length) {
     const ph = dups.map(() => '?').join(',');
-    const dcond = ['deleted_at IS NULL', `serial_no IN (${ph})`];
+    const dcond = ['deleted_at IS NULL', "status = 'Active'", `serial_no IN (${ph})`];
     if (cf.clause) dcond.push(cf.clause);
     dcond.push(NOT_FLAGGED_SQL);
     dupRows = await all(`SELECT * FROM assets WHERE ${dcond.join(' AND ')}`, [...dups, ...cf.params, ...NO_FLAG_TYPES]);
