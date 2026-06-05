@@ -603,6 +603,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Load dropdown options first, then apply any URL filters and load the table.
   loadFilters().then(() => {
     applyUrlFilters();
+    // Fresh landing (no URL filters) → default the view to Asset Type "Laptop".
+    if (!window.location.search) {
+      const at = document.getElementById('filter-asset-type');
+      if (at && [...at.options].some(o => o.value === 'Laptop')) {
+        at.value = 'Laptop';
+        if (typeof refreshBrandOptions === 'function') refreshBrandOptions();
+      }
+    }
     loadAssets();
     const editId = new URLSearchParams(window.location.search).get('edit');
     if (editId) onEdit(editId);
