@@ -2,7 +2,7 @@
 
 let currentPage = 1;
 const PAGE_SIZE = 50;
-let canEdit = false;   // only IT admin may edit User Inventory records
+let canEditUsers = false;   // only IT admin may edit User Inventory records
 
 const USER_TYPES = ['', 'Hayat Member', 'No Hayat Member'];
 const STATUSES   = ['Active', 'to be delete', 'pending delete', 'deleted'];
@@ -161,7 +161,7 @@ async function loadPeople(page = 1) {
 
   try {
     const result = await apiGet(`/api/personnel?${params}`);
-    canEdit = !!(result.can && result.can.edit);
+    canEditUsers = !!(result.can && result.can.edit);
     renderHint();
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
@@ -175,7 +175,7 @@ async function loadPeople(page = 1) {
 
 function renderHint() {
   const el = document.getElementById('role-hint');
-  if (canEdit) el.textContent = 'You are an IT admin — you can edit User Type, Status, Leaving Date, Department and Cost Center. "to be delete" auto-moves to "pending delete" after 1 month.';
+  if (canEditUsers) el.textContent = 'You are an IT admin — you can edit User Type, Status, Leaving Date, Department and Cost Center. "to be delete" auto-moves to "pending delete" after 1 month.';
   else el.textContent = 'View only — only an IT admin can edit User Inventory records.';
 }
 
@@ -187,9 +187,9 @@ function renderTable(rows) {
   }
   tbody.innerHTML = rows.map(p => {
     // Leaving date editable only once a User Type is set.
-    const ldDisabled = (canEdit && p.user_type) ? '' : 'disabled';
+    const ldDisabled = (canEditUsers && p.user_type) ? '' : 'disabled';
     // Status needs a User Type first.
-    const stLocked = canEdit && !p.user_type;
+    const stLocked = canEditUsers && !p.user_type;
     const adName = String(p.email || '').split('@')[0];
     const canSeeAssets = window.CURRENT_USER && window.CURRENT_USER.asset_access !== 0;
     const cnt = Number(p.asset_count || 0);
@@ -201,7 +201,7 @@ function renderTable(rows) {
     }
     const dept = p.department || '';
     const cc   = p.cost_center || '';
-    const editBtn = canEdit ? `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
+    const editBtn = canEditUsers ? `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
         onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(p.country)}', '${esc(dept)}', '${esc(cc)}')">✏️</button> ` : '';
     return `
       <tr>
@@ -212,19 +212,19 @@ function renderTable(rows) {
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${p.country}</span></td>
         <td>
-          ${canEdit
+          ${canEditUsers
             ? `<select class="form-control" style="min-width:150px;padding:5px 8px" onchange="savePerson(${p.id}, 'user_type', this.value)">${optionList(USER_TYPES, p.user_type)}</select>`
             : (p.user_type ? p.user_type : '<span class="text-muted">—</span>')}
         </td>
         <td>
-          ${canEdit
+          ${canEditUsers
             ? `<select class="form-control" style="min-width:140px;padding:5px 8px" ${stLocked ? 'disabled' : ''} title="${stLocked ? 'Set the User Type first' : ''}" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status)}</select>${stLocked ? '<div class="text-muted text-sm" style="margin-top:2px">set User Type first</div>' : ''}`
             : statusPill(p.status)}
         </td>
         <td class="text-muted text-sm">${esc(p.company_name) || '—'}</td>
         <td class="text-muted text-sm">${esc(p.position) || '—'}</td>
         <td>
-          ${canEdit
+          ${canEditUsers
             ? `<input type="date" class="form-control" style="min-width:140px;padding:5px 8px" value="${esc(p.leaving_date)}" ${ldDisabled} onchange="savePerson(${p.id}, 'leaving_date', this.value)" title="${ldDisabled ? 'Set User Type first' : ''}">`
             : (p.leaving_date ? esc(p.leaving_date) : '<span class="text-muted">—</span>')}
         </td>
