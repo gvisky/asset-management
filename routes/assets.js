@@ -93,16 +93,15 @@ router.get('/', wrap(async (req, res) => {
     conditions.push("status = 'Active'");   // Broken/Stock are not flagged for missing info
   }
   if (ad_issue) {
-    // AD-link problems, editable in place (Active assets only): an AD Name that
-    // matches no user, OR a missing AD Name (exempt types excluded).
+    // AD-link problems, editable in place: an AD Name that matches no user, OR an
+    // Active asset missing its AD Name (exempt types excluded).
     conditions.push(`(
       (ad_name <> '' AND NOT EXISTS (SELECT 1 FROM personnel p WHERE instr(p.email,'@') > 0
           AND LOWER(substr(p.email, 1, instr(p.email,'@') - 1)) = LOWER(assets.ad_name)))
       OR
-      ((ad_name IS NULL OR ad_name = '') AND ${NOT_FLAGGED_SQL})
+      (status = 'Active' AND (ad_name IS NULL OR ad_name = '') AND ${NOT_FLAGGED_SQL})
     )`);
     params.push(...NO_FLAG_TYPES);
-    conditions.push("status = 'Active'");   // only Active records are flagged
   }
 
   const where = 'WHERE ' + conditions.join(' AND ');
