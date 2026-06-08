@@ -6,20 +6,23 @@ let canEditUsers = false;   // only IT admin may edit User Inventory records
 
 const USER_TYPES = ['', 'Hayat Member', 'No Hayat Member'];
 const STATUSES   = ['Active', 'to be delete', 'pending delete', 'deleted'];
+// Display labels for stored status values (value kept stable for the backend).
+const STATUS_LABELS = { 'pending delete': 'Confirmed Delete' };
+function statusLabel(s) { return STATUS_LABELS[s] || s; }
 
 function statusPill(s) {
   const map = {
     'Active': 'badge-active', 'to be delete': 'badge-retired',
     'pending delete': 'badge-broken', 'deleted': 'badge-broken',
   };
-  return `<span class="badge ${map[s] || ''}">${s}</span>`;
+  return `<span class="badge ${map[s] || ''}">${statusLabel(s)}</span>`;
 }
 
 function esc(v) { return String(v == null ? '' : v).replace(/"/g, '&quot;'); }
 
-function optionList(values, selected) {
+function optionList(values, selected, labels) {
   return values.map(v =>
-    `<option value="${esc(v)}"${v === (selected || '') ? ' selected' : ''}>${v === '' ? '—' : v}</option>`
+    `<option value="${esc(v)}"${v === (selected || '') ? ' selected' : ''}>${v === '' ? '—' : ((labels && labels[v]) || v)}</option>`
   ).join('');
 }
 
@@ -175,7 +178,7 @@ async function loadPeople(page = 1) {
 
 function renderHint() {
   const el = document.getElementById('role-hint');
-  if (canEditUsers) el.textContent = 'You are an IT admin — you can edit User Type, Status, Leaving Date, Department and Cost Center. "to be delete" auto-moves to "pending delete" after 1 month.';
+  if (canEditUsers) el.textContent = 'You are an IT admin — you can edit User Type, Status, Leaving Date, Department and Cost Center. "to be delete" auto-moves to "Confirmed Delete" after 1 month.';
   else el.textContent = 'View only — only an IT admin can edit User Inventory records.';
 }
 
@@ -218,7 +221,7 @@ function renderTable(rows) {
         </td>
         <td>
           ${canEditUsers
-            ? `<select class="form-control" style="min-width:140px;padding:5px 8px" ${stLocked ? 'disabled' : ''} title="${stLocked ? 'Set the User Type first' : ''}" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status)}</select>${stLocked ? '<div class="text-muted text-sm" style="margin-top:2px">set User Type first</div>' : ''}`
+            ? `<select class="form-control" style="min-width:140px;padding:5px 8px" ${stLocked ? 'disabled' : ''} title="${stLocked ? 'Set the User Type first' : ''}" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status, STATUS_LABELS)}</select>${stLocked ? '<div class="text-muted text-sm" style="margin-top:2px">set User Type first</div>' : ''}`
             : statusPill(p.status)}
         </td>
         <td class="text-muted text-sm">${esc(p.company_name) || '—'}</td>
@@ -300,7 +303,7 @@ async function loadSummary() {
       ['Total People', s.total, '#e0e7ff', '#4338ca'],
       ['Hayat: No', s.noHayat || 0, '#fee2e2', '#dc2626'],
       ['To Be Delete', s.byStatus['to be delete'] || 0, '#fef9c3', '#ca8a04'],
-      ['Pending Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c'],
+      ['Confirmed Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c'],
       ['Deleted', s.byStatus['deleted'] || 0, '#fee2e2', '#b91c1c'],
     ]);
   } catch (e) { /* ignore */ }

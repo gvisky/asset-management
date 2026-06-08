@@ -70,7 +70,7 @@ async function loadPersonnelSummary() {
       ['Hayat: No',      s.noHayat || 0,               '#fee2e2', '#dc2626', 'No Hayat Member'],
       ['Leaving set',    s.leaving || 0,               '#fef3c7', '#d97706', ''],
       ['To Be Delete',   s.byStatus['to be delete'] || 0,   '#fef9c3', '#ca8a04', 'to be delete'],
-      ['Pending Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c', 'pending delete'],
+      ['Confirmed Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c', 'pending delete'],
       ['Deleted',        s.byStatus['deleted'] || 0,        '#fee2e2', '#b91c1c', 'deleted'],
     ];
     grid.innerHTML = cards.map(([label, val, bg, fg, statusFilter]) => {
