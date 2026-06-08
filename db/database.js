@@ -93,8 +93,13 @@ async function setup() {
 // address) where blank, and set asset_type = 'Hand terminals' where blank — so
 // the records show up under the Hand Terminal filter (with their MAC) on every
 // environment, even where the cost-center import created them without a type.
+function isBlankish(v) {
+  const s = (v == null ? '' : String(v)).trim().toLowerCase();
+  return s === '' || s === 'none' || s === 'null' || s === 'n/a' || s === 'na' || s === '-' || s === '—';
+}
+
 async function applyHtComputerNoFill() {
-  const META_KEY = 'ht_computer_no_fill_v2';
+  const META_KEY = 'ht_computer_no_fill_v3';
   if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
   const seedPath = path.join(__dirname, 'ht-fill-seed.json');
   if (!fs.existsSync(seedPath)) return;
@@ -113,16 +118,23 @@ async function applyHtComputerNoFill() {
        ORDER BY id ASC LIMIT 1`, [code, code]);
     if (!a) continue;
     const sets = [], vals = [];
-    if (cn && !(a.computer_no && a.computer_no.trim())) { sets.push('computer_no = ?'); vals.push(cn); }  // never overwrite
-    if (!(a.asset_type && a.asset_type.trim())) { sets.push("asset_type = 'Hand terminals'"); typed++; }   // only set when blank
+    // Fill MAC when the stored value is empty OR a placeholder like "None"/"none"/"null".
+    if (cn && isBlankish(a.computer_no)) { sets.push('computer_no = ?'); vals.push(cn); }
+    if (isBlankish(a.asset_type)) { sets.push("asset_type = 'Hand terminals'"); typed++; }
     if (!sets.length) continue;
     await backend.run(`UPDATE assets SET ${sets.join(', ')} WHERE id = ?`, [...vals, a.id]);
     updated++;
   }
 
+  // Clean up display: turn any leftover placeholder Computer No on Hand terminals
+  // into a true blank so the UI shows "—" instead of the literal "None"/"null".
+  const cleaned = await backend.run(
+    `UPDATE assets SET computer_no = '' WHERE asset_type = 'Hand terminals' AND deleted_at IS NULL
+       AND LOWER(TRIM(computer_no)) IN ('none','null','n/a','na','-','—')`);
+
   await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     [META_KEY, `updated=${updated},typed=${typed}`]);
-  console.log(`[map] HT fill: ${updated} assets updated (${typed} got asset_type=Hand terminals)`);
+  console.log(`[map] HT fill v3: ${updated} updated (${typed} typed), placeholder Computer No cleaned`);
 }
 
 // One-time fill from screen.xlsx (screen-fill-seed.json): match each monitor by
