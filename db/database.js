@@ -84,6 +84,39 @@ async function setup() {
   await backfillPersonnelDept();
   await clearNonVnPersonnelDept();
   await applyRealInventory();
+  await applyScreenFill();
+}
+
+// One-time fill from screen.xlsx (screen-fill-seed.json): match each monitor by
+// Asset Code (preferring the 'Screen'-typed record) and fill Serial # (only when
+// blank — never overwrite) and set Location = 'Office'.
+async function applyScreenFill() {
+  const META_KEY = 'screen_fill_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const seedPath = path.join(__dirname, 'screen-fill-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let recs;
+  try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[map] screen-fill-seed.json parse failed:', e.message); return; }
+
+  let updated = 0;
+  for (const r of recs) {
+    const code = (r.asset_code || '').trim();
+    if (!code) continue;
+    const a = await backend.get(
+      `SELECT id, serial_no FROM assets WHERE deleted_at IS NULL
+         AND (LOWER(asset_code) = LOWER(?) OR LOWER(asset_s4) = LOWER(?))
+       ORDER BY (asset_type = 'Screen') DESC, id ASC LIMIT 1`, [code, code]);
+    if (!a) continue;
+    const serial = (r.serial_no || '').trim();
+    const newSerial = (a.serial_no && a.serial_no.trim()) ? a.serial_no : serial; // never overwrite
+    await backend.run('UPDATE assets SET serial_no = ?, location = ? WHERE id = ?', [newSerial, 'Office', a.id]);
+    updated++;
+  }
+
+  await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [META_KEY, `updated=${updated}`]);
+  console.log(`[map] Screen fill: ${updated} screens set Location=Office + serial`);
 }
 
 // One-time reconciliation from the "Real Inventory list" (real-inventory-seed.json).
