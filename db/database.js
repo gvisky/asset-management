@@ -88,10 +88,13 @@ async function setup() {
   await applyHtComputerNoFill();
 }
 
-// One-time fill from HT.xlsx (ht-fill-seed.json): match each row by Asset Code
-// and fill Computer No (MAC address) only when blank — never overwrite.
+// One-time fill from HT.xlsx (ht-fill-seed.json). Every row in that file is a
+// "Hand terminals" asset. Match each row by Asset Code, fill Computer No (MAC
+// address) where blank, and set asset_type = 'Hand terminals' where blank — so
+// the records show up under the Hand Terminal filter (with their MAC) on every
+// environment, even where the cost-center import created them without a type.
 async function applyHtComputerNoFill() {
-  const META_KEY = 'ht_computer_no_fill_v1';
+  const META_KEY = 'ht_computer_no_fill_v2';
   if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
   const seedPath = path.join(__dirname, 'ht-fill-seed.json');
   if (!fs.existsSync(seedPath)) return;
@@ -99,24 +102,27 @@ async function applyHtComputerNoFill() {
   try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
   catch (e) { console.error('[map] ht-fill-seed.json parse failed:', e.message); return; }
 
-  let updated = 0;
+  let updated = 0, typed = 0;
   for (const r of recs) {
     const code = (r.asset_code || '').trim();
     const cn = (r.computer_no || '').trim();
-    if (!code || !cn) continue;
+    if (!code) continue;
     const a = await backend.get(
-      `SELECT id, computer_no FROM assets WHERE deleted_at IS NULL
+      `SELECT id, computer_no, asset_type FROM assets WHERE deleted_at IS NULL
          AND (LOWER(asset_code) = LOWER(?) OR LOWER(asset_s4) = LOWER(?))
        ORDER BY id ASC LIMIT 1`, [code, code]);
     if (!a) continue;
-    if (a.computer_no && a.computer_no.trim()) continue; // never overwrite
-    await backend.run('UPDATE assets SET computer_no = ? WHERE id = ?', [cn, a.id]);
+    const sets = [], vals = [];
+    if (cn && !(a.computer_no && a.computer_no.trim())) { sets.push('computer_no = ?'); vals.push(cn); }  // never overwrite
+    if (!(a.asset_type && a.asset_type.trim())) { sets.push("asset_type = 'Hand terminals'"); typed++; }   // only set when blank
+    if (!sets.length) continue;
+    await backend.run(`UPDATE assets SET ${sets.join(', ')} WHERE id = ?`, [...vals, a.id]);
     updated++;
   }
 
   await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-    [META_KEY, `updated=${updated}`]);
-  console.log(`[map] HT Computer No fill: ${updated} assets updated`);
+    [META_KEY, `updated=${updated},typed=${typed}`]);
+  console.log(`[map] HT fill: ${updated} assets updated (${typed} got asset_type=Hand terminals)`);
 }
 
 // One-time fill from screen.xlsx (screen-fill-seed.json): match each monitor by
