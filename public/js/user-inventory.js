@@ -178,7 +178,7 @@ async function loadPeople(page = 1) {
 
 function renderHint() {
   const el = document.getElementById('role-hint');
-  if (canEditUsers) el.textContent = 'You are an IT admin — you can edit User Type, Status, Leaving Date, Department and Cost Center. "to be delete" auto-moves to "Confirmed Delete" after 1 month.';
+  if (canEditUsers) el.textContent = 'You are an IT admin — you can edit User Type, Status, Leaving Date, Department and Cost Center. Status is set manually.';
   else el.textContent = 'View only — only an IT admin can edit User Inventory records.';
 }
 
@@ -191,8 +191,6 @@ function renderTable(rows) {
   tbody.innerHTML = rows.map(p => {
     // Leaving date editable only once a User Type is set.
     const ldDisabled = (canEditUsers && p.user_type) ? '' : 'disabled';
-    // Status needs a User Type first.
-    const stLocked = canEditUsers && !p.user_type;
     const adName = String(p.email || '').split('@')[0];
     const canSeeAssets = window.CURRENT_USER && window.CURRENT_USER.asset_access !== 0;
     const cnt = Number(p.asset_count || 0);
@@ -221,7 +219,7 @@ function renderTable(rows) {
         </td>
         <td>
           ${canEditUsers
-            ? `<select class="form-control" style="min-width:140px;padding:5px 8px" ${stLocked ? 'disabled' : ''} title="${stLocked ? 'Set the User Type first' : ''}" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status, STATUS_LABELS)}</select>${stLocked ? '<div class="text-muted text-sm" style="margin-top:2px">set User Type first</div>' : ''}`
+            ? `<select class="form-control" style="min-width:140px;padding:5px 8px" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status, STATUS_LABELS)}</select>`
             : statusPill(p.status)}
         </td>
         <td class="text-muted text-sm">${esc(p.company_name) || '—'}</td>

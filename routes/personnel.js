@@ -34,19 +34,8 @@ router.use((req, res, next) => {
   next();
 });
 
-// Lazily flip "to be delete" → "pending delete" once it's older than one month.
-async function applyAutoTransition() {
-  await run(
-    "UPDATE personnel SET status = 'pending delete' " +
-    "WHERE status = 'to be delete' AND status_changed_at IS NOT NULL " +
-    "AND status_changed_at <= datetime('now','-1 month')"
-  );
-}
-
 // ── GET /api/personnel — list (country-scoped) ────────────────────────────────
 router.get('/', wrap(async (req, res) => {
-  await applyAutoTransition();
-
   const { search = '', country = '', status = '', user_type = '', page = 1, limit = 50 } = req.query;
   const conditions = [];
   const params = [];
@@ -190,7 +179,6 @@ router.post('/import-sync', wrap(async (req, res) => {
 
 // ── GET /api/personnel/summary — dashboard metrics (country-scoped) ───────────
 router.get('/summary', wrap(async (req, res) => {
-  await applyAutoTransition();
   const scope = scopeOf(req);
   const cond = scope ? 'WHERE country = ?' : '';
   const params = scope ? [scope] : [];
@@ -301,7 +289,7 @@ router.put('/:id', wrap(async (req, res) => {
   if ('status' in req.body) {
     const st = req.body.status;
     if (!STATUSES.includes(st)) return res.status(400).json({ error: 'Invalid status' });
-    if (st !== 'Active' && !effectiveType) return res.status(400).json({ error: 'Set the User Type before changing Status' });
+    // Status is set manually only — no preconditions, no auto-transition.
     sets.push('status = ?'); params.push(st);
     sets.push("status_changed_at = datetime('now')");
   }
