@@ -86,6 +86,39 @@ async function setup() {
   await applyRealInventory();
   await applyScreenFill();
   await applyHtComputerNoFill();
+  await applyPtSerialFill();
+}
+
+// One-time fill from PT.xlsx (pt-fill-seed.json). Each row is a Printer asset.
+// Match by Asset Code and fill Serial # where blank/placeholder — never
+// overwrites a real serial.
+async function applyPtSerialFill() {
+  const META_KEY = 'pt_serial_fill_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const seedPath = path.join(__dirname, 'pt-fill-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let recs;
+  try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[map] pt-fill-seed.json parse failed:', e.message); return; }
+
+  let updated = 0;
+  for (const r of recs) {
+    const code = (r.asset_code || '').trim();
+    const sn = (r.serial_no || '').trim();
+    if (!code || !sn) continue;
+    const a = await backend.get(
+      `SELECT id, serial_no FROM assets WHERE deleted_at IS NULL
+         AND (LOWER(asset_code) = LOWER(?) OR LOWER(asset_s4) = LOWER(?))
+       ORDER BY (asset_type = 'Printer') DESC, id ASC LIMIT 1`, [code, code]);
+    if (!a) continue;
+    if (!isBlankish(a.serial_no)) continue; // never overwrite a real serial
+    await backend.run('UPDATE assets SET serial_no = ? WHERE id = ?', [sn, a.id]);
+    updated++;
+  }
+
+  await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [META_KEY, `updated=${updated}`]);
+  console.log(`[map] PT serial fill: ${updated} printers updated`);
 }
 
 // One-time fill from HT.xlsx (ht-fill-seed.json). Every row in that file is a
