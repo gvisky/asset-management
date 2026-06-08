@@ -87,6 +87,46 @@ async function setup() {
   await applyScreenFill();
   await applyHtComputerNoFill();
   await applyPtSerialFill();
+  await applyTlTabletFill();
+}
+
+// One-time fill from tl.xlsx (tl-fill-seed.json). Each row is a Tablet asset.
+// These already carry their serials from the main seed, but were seeded before
+// the asset_type column existed, so on older deploys their asset_type is blank
+// and they don't appear under the Tablet filter. Set asset_type='Tablet' where
+// blank; only fill Serial # if it is somehow blank/placeholder (never overwrite,
+// and the DB/seed serials — with leading zeros — are authoritative over the
+// file's number-truncated ones).
+async function applyTlTabletFill() {
+  const META_KEY = 'tl_tablet_fill_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const seedPath = path.join(__dirname, 'tl-fill-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let recs;
+  try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[map] tl-fill-seed.json parse failed:', e.message); return; }
+
+  let updated = 0, typed = 0;
+  for (const r of recs) {
+    const code = (r.asset_code || '').trim();
+    const sn = (r.serial_no || '').trim();
+    if (!code) continue;
+    const a = await backend.get(
+      `SELECT id, serial_no, asset_type FROM assets WHERE deleted_at IS NULL
+         AND (LOWER(asset_code) = LOWER(?) OR LOWER(asset_s4) = LOWER(?))
+       ORDER BY id ASC LIMIT 1`, [code, code]);
+    if (!a) continue;
+    const sets = [], vals = [];
+    if (isBlankish(a.asset_type)) { sets.push("asset_type = 'Tablet'"); typed++; }
+    if (sn && isBlankish(a.serial_no)) { sets.push('serial_no = ?'); vals.push(sn); }
+    if (!sets.length) continue;
+    await backend.run(`UPDATE assets SET ${sets.join(', ')} WHERE id = ?`, [...vals, a.id]);
+    updated++;
+  }
+
+  await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [META_KEY, `updated=${updated},typed=${typed}`]);
+  console.log(`[map] TL tablet fill: ${updated} updated (${typed} got asset_type=Tablet)`);
 }
 
 // One-time fill from PT.xlsx (pt-fill-seed.json). Each row is a Printer asset.
