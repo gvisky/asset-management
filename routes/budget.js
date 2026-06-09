@@ -16,6 +16,29 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
+// Validate/coerce client-supplied rows to the known schema (never trust the body).
+const VALID_VT = ['A', 'B', 'E', 'T'];
+const CATEGORY = { A: 'Actual', B: 'Budget', E: 'Additional Budget', T: 'Transfer' };
+const str = (v) => String(v == null ? '' : v).slice(0, 300);
+const intOrNull = (v) => (v === '' || v == null || isNaN(Number(v))) ? null : Math.trunc(Number(v));
+function sanitizeRows(rows) {
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== 'object') continue;
+    if (!COUNTRIES.includes(r.country)) continue;
+    const vt = String(r.version_type || '').trim().toUpperCase();
+    if (!VALID_VT.includes(vt)) continue;
+    out.push({
+      country: r.country, company: str(r.company), budget_owner: str(r.budget_owner), department: str(r.department),
+      version_type: vt, category: CATEGORY[vt] || vt, fiscal_year: intOrNull(r.fiscal_year),
+      period: str(r.period), period_month: intOrNull(r.period_month), project_no: str(r.project_no),
+      project_name: str(r.project_name), project_category: str(r.project_category), cost_element: str(r.cost_element),
+      amount_usd: round2(r.amount_usd), doc_no: str(r.doc_no), description: str(r.description),
+    });
+  }
+  return out;
+}
+
 // SUM expressions per bucket.
 const SUM = {
   budget:   "SUM(CASE WHEN version_type='B' THEN amount_usd ELSE 0 END)",
@@ -151,13 +174,18 @@ router.get('/export.xlsx', wrap(async (req, res) => {
 // Parses the report (Vietnam/Thailand/Malaysia, Jan–Apr 2026) and REPLACES the
 // budget table. Keeps the financial data out of Git — loaded only via upload.
 router.post('/import', wrap(async (req, res) => {
-  const b64 = req.body && req.body.xlsx_base64;
-  if (!b64) return res.status(400).json({ error: 'No file provided' });
-
   let rows;
-  try {
-    rows = parseBudgetFromBuffer(Buffer.from(b64, 'base64'));
-  } catch (e) { return res.status(400).json({ error: e.message || 'Could not read the Excel file' }); }
+  if (Array.isArray(req.body && req.body.rows)) {
+    // Preferred path: the browser already parsed & filtered the workbook, so we
+    // receive only the ~few-hundred matching rows (no large upload / parse here).
+    rows = sanitizeRows(req.body.rows);
+  } else if (req.body && req.body.xlsx_base64) {
+    // Fallback: parse a (small) uploaded .xlsx server-side.
+    try { rows = parseBudgetFromBuffer(Buffer.from(req.body.xlsx_base64, 'base64')); }
+    catch (e) { return res.status(400).json({ error: e.message || 'Could not read the Excel file' }); }
+  } else {
+    return res.status(400).json({ error: 'No file provided' });
+  }
 
   if (!rows.length) return res.status(400).json({ error: 'No matching rows found (Vietnam/Thailand/Malaysia, Jan–Apr 2026, Budget/Actual).' });
 

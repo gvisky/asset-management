@@ -156,12 +156,84 @@ function renderAll(d) {
   renderInsights('insights-under', d.insights.under, 'under');
 }
 
-function fileToBase64(file) {
+// ── Client-side Budget report parser (mirrors lib/budget-parse.js) ────────────
+// Parsing in the browser avoids uploading the full (38 MB) workbook and keeps
+// the server off the huge source sheet — only the filtered rows are sent.
+const BUDGET_CATEGORY = { A: 'Actual', B: 'Budget', E: 'Additional Budget', T: 'Transfer' };
+const BUDGET_PERIODS = new Set(['2026-01', '2026-02', '2026-03', '2026-04']);
+const BUDGET_HEADER_MAP = {
+  'sirket tanimi': 'company', 'mali yil': 'fiscal_year', 'donem': 'period', 'but vrs': 'version_type',
+  'tutar usd': 'amount_usd', 'mudurluk': 'department', 'proje kategorisi': 'project_category',
+  'proje servis adi': 'project', 'alt proje servis adi': 'sub_project', 'program servis adi': 'program',
+  'proje no': 'project_no', 'mc tanimi': 'cost_element', 'belge no': 'doc_no', 'aciklama': 'description',
+};
+const BUDGET_REQUIRED = ['company', 'period', 'version_type', 'amount_usd'];
+function bNorm(s) {
+  return String(s == null ? '' : s)
+    .replace(/İ/g, 'I').replace(/ı/g, 'i').replace(/Ş/g, 'S').replace(/ş/g, 's')
+    .replace(/Ğ/g, 'G').replace(/ğ/g, 'g').replace(/Ü/g, 'U').replace(/ü/g, 'u')
+    .replace(/Ö/g, 'O').replace(/ö/g, 'o').replace(/Ç/g, 'C').replace(/ç/g, 'c')
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function bCountryOf(c) {
+  const v = String(c).toUpperCase();
+  if (v.includes('VIETNAM')) return 'Vietnam';
+  if (v.includes('THAILAND')) return 'Thailand';
+  if (v.includes('MALAYSIA')) return 'Malaysia';
+  return null;
+}
+function bNormPeriod(v) {
+  const m = String(v).match(/(\d{4})\D*(\d{1,2})/);
+  if (!m) return { period: String(v).trim(), year: null, month: null };
+  return { period: m[1] + '-' + String(Number(m[2])).padStart(2, '0'), year: Number(m[1]), month: Number(m[2]) };
+}
+function bFindHeader(rows) {
+  for (let h = 0; h < Math.min(6, rows.length); h++) {
+    const idx = {}; (rows[h] || []).forEach((c, i) => { const f = BUDGET_HEADER_MAP[bNorm(c)]; if (f && idx[f] === undefined) idx[f] = i; });
+    if (BUDGET_REQUIRED.every(f => idx[f] !== undefined)) return { headerRow: h, map: idx };
+  }
+  return null;
+}
+function parseBudgetFile(arrayBuffer) {
+  const meta = XLSX.read(arrayBuffer, { type: 'array', bookSheets: true });
+  const names = meta.SheetNames || [];
+  const dataish = (n) => /data|ocak|nisan/i.test(n);
+  const ordered = names.slice().sort((a, b) => (dataish(b) ? 1 : 0) - (dataish(a) ? 1 : 0));
+  for (const name of ordered) {
+    let rows;
+    try { const wb = XLSX.read(arrayBuffer, { type: 'array', sheets: [name] }); rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' }); }
+    catch (e) { continue; }
+    const hdr = bFindHeader(rows); if (!hdr) continue;
+    const map = hdr.map, get = (r, f) => (map[f] !== undefined ? r[map[f]] : '');
+    const out = [];
+    for (let i = hdr.headerRow + 1; i < rows.length; i++) {
+      const r = rows[i];
+      const country = bCountryOf(get(r, 'company')); if (!country) continue;
+      const p = bNormPeriod(get(r, 'period')); if (!BUDGET_PERIODS.has(p.period)) continue;
+      const vt = String(get(r, 'version_type')).trim().toUpperCase(); if (vt !== 'A' && vt !== 'B') continue;
+      const dept = String(get(r, 'department')).trim();
+      out.push({
+        country, company: String(get(r, 'company')).trim(), budget_owner: dept, department: dept,
+        version_type: vt, category: BUDGET_CATEGORY[vt] || vt,
+        fiscal_year: Number(get(r, 'fiscal_year')) || p.year, period: p.period, period_month: p.month,
+        project_no: String(get(r, 'project_no')).trim(),
+        project_name: String(get(r, 'project') || get(r, 'sub_project') || get(r, 'program')).trim(),
+        project_category: String(get(r, 'project_category')).trim(),
+        cost_element: String(get(r, 'cost_element')).trim(),
+        amount_usd: Math.round((Number(get(r, 'amount_usd')) || 0) * 100) / 100,
+        doc_no: String(get(r, 'doc_no')).trim(), description: String(get(r, 'description')).trim(),
+      });
+    }
+    return out;
+  }
+  throw new Error('Could not find the budget data sheet (need columns: Şirket Tanımı, Dönem, Büt. Vrs, Tutar USD).');
+}
+function fileToArrayBuffer(file) {
   return new Promise((resolve, reject) => {
     const fr = new FileReader();
-    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onload = () => resolve(fr.result);
     fr.onerror = reject;
-    fr.readAsDataURL(file);
+    fr.readAsArrayBuffer(file);
   });
 }
 
@@ -176,16 +248,21 @@ function wireBudgetImport() {
     const status = document.getElementById('budget-import-status');
     const file = input.files && input.files[0];
     if (!file) { showToast('Choose the Budget report .xlsx first', 'error'); return; }
+    if (typeof XLSX === 'undefined') { showToast('Spreadsheet parser not loaded — hard-refresh the page', 'error'); return; }
     if (!confirm('Upload this file and REPLACE the current budget data?')) return;
-    btn.disabled = true; status.textContent = 'Uploading & parsing…';
+    btn.disabled = true; status.textContent = 'Reading & parsing in your browser…';
     try {
-      const xlsx_base64 = await fileToBase64(file);
+      const buf = await fileToArrayBuffer(file);
+      const rows = parseBudgetFile(buf);
+      if (!rows.length) throw new Error('No matching rows (Vietnam/Thailand/Malaysia, Jan–Apr 2026, Budget/Actual).');
+      status.textContent = `Parsed ${rows.length} rows — saving…`;
       const r = await fetch('/api/budget/import', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ xlsx_base64 }),
+        body: JSON.stringify({ rows }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'Import failed');
+      const text = await r.text();
+      const d = text ? JSON.parse(text) : {};
+      if (!r.ok) throw new Error(d.error || ('Import failed (HTTP ' + r.status + ')'));
       const by = Object.entries(d.byCountry || {}).map(([k, v]) => `${k} ${v}`).join(', ');
       status.textContent = `✅ Imported ${d.inserted} rows (${by}).`;
       showToast(`Budget imported: ${d.inserted} rows`);
