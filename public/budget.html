@@ -67,8 +67,28 @@
     </div>
 
     <div id="budget-body" style="display:none">
+      <!-- Import / Sync Budget (IT admin only) -->
+      <div class="card" id="import-budget-card" style="display:none">
+        <div class="card-header">
+          <span class="card-title">⬆️ Import Budget .xlsx</span>
+          <span class="text-muted text-sm">IT admin only · uploads the Budget-Actual report</span>
+        </div>
+        <div class="card-body">
+          <p class="text-muted text-sm" style="margin:0 0 12px">
+            Upload the corporate <strong>Budget-Actual report</strong> (.xlsx). It loads
+            <strong>Vietnam / Thailand / Malaysia</strong>, <strong>Jan–April 2026</strong> (Budget vs Actual) and
+            <strong>replaces</strong> the current budget data. The file is parsed in-app — its financial data is never stored in Git.
+          </p>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="budget-import-file" accept=".xlsx" class="form-control" style="max-width:380px">
+            <button class="btn btn-primary" id="budget-import-btn">Upload &amp; Replace</button>
+            <span id="budget-import-status" class="text-muted text-sm"></span>
+          </div>
+        </div>
+      </div>
+
       <!-- Filters -->
-      <div class="card">
+      <div class="card" style="margin-top:16px">
         <div class="card-body" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
           <div>
             <label class="form-label">Country</label>

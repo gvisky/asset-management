@@ -131,13 +131,7 @@ async function loadBudget() {
   if (country) qs.set('country', country);
   if (year) qs.set('year', year);
   const d = await apiGet('/api/budget?' + qs.toString());
-
-  renderSummary(d.summary, d.grand);
-  renderBreakdown('dept-tbody', d.byDepartment);
-  renderBreakdown('cat-tbody', d.byCategory);
-  document.getElementById('chart-timeseries').innerHTML = lineChartTimeseries(d.timeseries);
-  renderInsights('insights-over', d.insights.over, 'over');
-  renderInsights('insights-under', d.insights.under, 'under');
+  renderAll(d);
 
   const ex = new URLSearchParams(); if (year) ex.set('year', year);
   document.getElementById('export-btn').href = '/api/budget/export.xlsx?' + ex.toString() + (year ? '&' : '') + 't=' + Date.now();
@@ -145,9 +139,71 @@ async function loadBudget() {
 
 function populateFilters(meta) {
   const cy = document.getElementById('f-country');
+  cy.innerHTML = '<option value="">All 3 countries</option>';
   meta.countries.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; cy.appendChild(o); });
   const yr = document.getElementById('f-year');
+  yr.innerHTML = '<option value="">All years</option>';
   meta.years.forEach(y => { const o = document.createElement('option'); o.value = y; o.textContent = y; yr.appendChild(o); });
+}
+
+// Render every section from a full /api/budget payload.
+function renderAll(d) {
+  renderSummary(d.summary, d.grand);
+  renderBreakdown('dept-tbody', d.byDepartment);
+  renderBreakdown('cat-tbody', d.byCategory);
+  document.getElementById('chart-timeseries').innerHTML = lineChartTimeseries(d.timeseries);
+  renderInsights('insights-over', d.insights.over, 'over');
+  renderInsights('insights-under', d.insights.under, 'under');
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result).split(',')[1] || '');
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+function wireBudgetImport() {
+  const card = document.getElementById('import-budget-card');
+  if (card) card.style.display = '';
+  const btn = document.getElementById('budget-import-btn');
+  if (!btn || btn.dataset.wired) return;
+  btn.dataset.wired = '1';
+  btn.addEventListener('click', async () => {
+    const input = document.getElementById('budget-import-file');
+    const status = document.getElementById('budget-import-status');
+    const file = input.files && input.files[0];
+    if (!file) { showToast('Choose the Budget report .xlsx first', 'error'); return; }
+    if (!confirm('Upload this file and REPLACE the current budget data?')) return;
+    btn.disabled = true; status.textContent = 'Uploading & parsing…';
+    try {
+      const xlsx_base64 = await fileToBase64(file);
+      const r = await fetch('/api/budget/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ xlsx_base64 }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Import failed');
+      const by = Object.entries(d.byCountry || {}).map(([k, v]) => `${k} ${v}`).join(', ');
+      status.textContent = `✅ Imported ${d.inserted} rows (${by}).`;
+      showToast(`Budget imported: ${d.inserted} rows`);
+      input.value = '';
+      // Reset filters to defaults and reload everything.
+      document.getElementById('f-country').value = '';
+      document.getElementById('f-year').value = '';
+      const fresh = await apiGet('/api/budget');
+      populateFilters(fresh.meta);
+      renderAll(fresh);
+      document.getElementById('export-btn').href = '/api/budget/export.xlsx?t=' + Date.now();
+    } catch (e) {
+      status.textContent = '❌ ' + e.message;
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 async function initBudget() {
@@ -164,13 +220,9 @@ async function initBudget() {
     const d = await apiGet('/api/budget');
     populateFilters(d.meta);
     body.style.display = '';
-    renderSummary(d.summary, d.grand);
-    renderBreakdown('dept-tbody', d.byDepartment);
-    renderBreakdown('cat-tbody', d.byCategory);
-    document.getElementById('chart-timeseries').innerHTML = lineChartTimeseries(d.timeseries);
-    renderInsights('insights-over', d.insights.over, 'over');
-    renderInsights('insights-under', d.insights.under, 'under');
+    renderAll(d);
     document.getElementById('export-btn').href = '/api/budget/export.xlsx?t=' + Date.now();
+    wireBudgetImport();
     document.getElementById('f-country').addEventListener('change', () => loadBudget().catch(err => showToast(err.message, 'error')));
     document.getElementById('f-year').addEventListener('change', () => loadBudget().catch(err => showToast(err.message, 'error')));
   } catch (e) {

@@ -5,8 +5,9 @@
 const express = require('express');
 const router = express.Router();
 const XLSX = require('xlsx');
-const { all, get } = require('../db/database');
+const { all, get, run } = require('../db/database');
 const { requireAuth, requireITAdmin } = require('../middleware/auth');
+const { parseBudgetFromBuffer, COLUMNS } = require('../lib/budget-parse');
 
 router.use(requireAuth);
 router.use(requireITAdmin);
@@ -144,6 +145,34 @@ router.get('/export.xlsx', wrap(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="Budget_Tracking${year ? '_' + year : ''}.xlsx"`);
   res.setHeader('Cache-Control', 'no-store');
   res.send(buf);
+}));
+
+// ── POST /api/budget/import — upload the Budget-Actual report .xlsx ───────────
+// Parses the report (Vietnam/Thailand/Malaysia, Jan–Apr 2026) and REPLACES the
+// budget table. Keeps the financial data out of Git — loaded only via upload.
+router.post('/import', wrap(async (req, res) => {
+  const b64 = req.body && req.body.xlsx_base64;
+  if (!b64) return res.status(400).json({ error: 'No file provided' });
+
+  let rows;
+  try {
+    rows = parseBudgetFromBuffer(Buffer.from(b64, 'base64'));
+  } catch (e) { return res.status(400).json({ error: e.message || 'Could not read the Excel file' }); }
+
+  if (!rows.length) return res.status(400).json({ error: 'No matching rows found (Vietnam/Thailand/Malaysia, Jan–Apr 2026, Budget/Actual).' });
+
+  await run('DELETE FROM budget');
+  const ph = COLUMNS.map(() => '?').join(',');
+  for (const r of rows) {
+    await run(`INSERT INTO budget (${COLUMNS.join(',')}) VALUES (${ph})`, COLUMNS.map(c => r[c] == null ? '' : r[c]));
+  }
+  // Mark the seed version done so the boot migration won't overwrite the upload.
+  await run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ['budget_seed_v2', `imported=${rows.length}`]);
+
+  const byCountry = {};
+  rows.forEach(r => { byCountry[r.country] = (byCountry[r.country] || 0) + 1; });
+  res.json({ inserted: rows.length, byCountry });
 }));
 
 module.exports = router;
