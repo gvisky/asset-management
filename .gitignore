@@ -4,6 +4,8 @@ db/assets.db-shm
 db/assets.db-wal
 npm-debug.log
 .env
+# Corporate financial budget data — kept out of Git (loaded locally only)
+db/budget-seed.json
 .DS_Store
 .claude/
 backups/

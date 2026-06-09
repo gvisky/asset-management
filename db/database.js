@@ -88,6 +88,35 @@ async function setup() {
   await applyHtComputerNoFill();
   await applyPtSerialFill();
   await applyTlTabletFill();
+  await seedBudget();
+}
+
+// Seed the budget table once from budget-seed.json (idempotent via meta key).
+async function seedBudget() {
+  const META_KEY = 'budget_seed_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const seedPath = path.join(__dirname, 'budget-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  // If the table already holds rows (manual load), just mark done.
+  const existing = await backend.get('SELECT COUNT(*) AS c FROM budget');
+  if (existing && Number(existing.c) > 0) {
+    await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `kept=${existing.c}`]);
+    return;
+  }
+  let recs;
+  try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[seed] budget-seed.json parse failed:', e.message); return; }
+
+  const cols = ['country','company','budget_owner','department','version_type','category','fiscal_year',
+    'period','period_month','project_no','project_name','project_category','cost_element','amount_usd','doc_no','description'];
+  const ph = cols.map(() => '?').join(',');
+  let n = 0;
+  for (const r of recs) {
+    await backend.run(`INSERT INTO budget (${cols.join(',')}) VALUES (${ph})`, cols.map(c => r[c] == null ? '' : r[c]));
+    n++;
+  }
+  await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `inserted=${n}`]);
+  console.log(`[seed] budget: ${n} rows`);
 }
 
 // One-time fill from tl.xlsx (tl-fill-seed.json). Each row is a Tablet asset.
@@ -492,6 +521,31 @@ async function initSchema() {
       key   TEXT PRIMARY KEY,
       value TEXT
     );
+
+    -- Budget tracking (IT admin only): translated rows from the corporate
+    -- budget workbook for Vietnam / Thailand / Malaysia. version_type:
+    -- A=Actual, B=Budget, E=Additional Budget, T=Transfer.
+    CREATE TABLE IF NOT EXISTS budget (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      country          TEXT    NOT NULL DEFAULT '',
+      company          TEXT    DEFAULT '',
+      budget_owner     TEXT    DEFAULT '',
+      department       TEXT    DEFAULT '',
+      version_type     TEXT    DEFAULT '',
+      category         TEXT    DEFAULT '',
+      fiscal_year      INTEGER,
+      period           TEXT    DEFAULT '',
+      period_month     INTEGER,
+      project_no       TEXT    DEFAULT '',
+      project_name     TEXT    DEFAULT '',
+      project_category TEXT    DEFAULT '',
+      cost_element     TEXT    DEFAULT '',
+      amount_usd       REAL    NOT NULL DEFAULT 0,
+      doc_no           TEXT    DEFAULT '',
+      description      TEXT    DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_budget_country ON budget(country);
+    CREATE INDEX IF NOT EXISTS idx_budget_year    ON budget(fiscal_year);
 
     CREATE TABLE IF NOT EXISTS personnel (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,

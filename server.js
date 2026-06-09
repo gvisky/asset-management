@@ -19,6 +19,7 @@ app.use('/api/personnel', require('./routes/personnel'));
 app.use('/api/maintenance', require('./routes/maintenance'));
 app.use('/api/licenses', require('./routes/licenses'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/budget', require('./routes/budget'));
 app.use('/api/notifications', require('./routes/notifications'));
 
 // Public files that must load before login (login page + shared CSS/JS)

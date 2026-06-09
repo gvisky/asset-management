@@ -87,6 +87,22 @@ function renderUserChrome() {
     }
   }
 
+  // Budget Tracking — IT admin only, placed right after Reports.
+  if (isITAdmin()) {
+    const nav = document.querySelector('.sidebar nav');
+    if (nav && !document.getElementById('nav-budget')) {
+      const link = document.createElement('a');
+      link.href = '/budget.html';
+      link.id = 'nav-budget';
+      link.className = 'nav-link';
+      link.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Budget Tracking`;
+      const reportsLink = document.getElementById('nav-reports');
+      if (reportsLink) reportsLink.insertAdjacentElement('afterend', link);
+      else nav.appendChild(link);
+      if (window.location.pathname.includes('budget')) link.classList.add('active');
+    }
+  }
+
   // Admin-only nav links (Recycle Bin + Users & Audit) — inject into sidebar
   if (isAdmin()) {
     const nav = document.querySelector('.sidebar nav');
