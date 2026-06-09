@@ -91,22 +91,20 @@ async function setup() {
   await seedBudget();
 }
 
-// Seed the budget table once from budget-seed.json (idempotent via meta key).
+// Seed/refresh the budget table from budget-seed.json. Version-keyed: bumping
+// META_KEY replaces the prior dataset wherever the seed file is present (e.g.
+// local). Environments without the seed file (financial data kept out of Git)
+// are left untouched.
 async function seedBudget() {
-  const META_KEY = 'budget_seed_v1';
+  const META_KEY = 'budget_seed_v2';   // v2 = real Jan–Apr 2026 Budget-Actual report
   if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
   const seedPath = path.join(__dirname, 'budget-seed.json');
-  if (!fs.existsSync(seedPath)) return;
-  // If the table already holds rows (manual load), just mark done.
-  const existing = await backend.get('SELECT COUNT(*) AS c FROM budget');
-  if (existing && Number(existing.c) > 0) {
-    await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `kept=${existing.c}`]);
-    return;
-  }
+  if (!fs.existsSync(seedPath)) return;   // nothing to load here
   let recs;
   try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
   catch (e) { console.error('[seed] budget-seed.json parse failed:', e.message); return; }
 
+  await backend.run('DELETE FROM budget');   // replace any earlier sample
   const cols = ['country','company','budget_owner','department','version_type','category','fiscal_year',
     'period','period_month','project_no','project_name','project_category','cost_element','amount_usd','doc_no','description'];
   const ph = cols.map(() => '?').join(',');
@@ -116,7 +114,7 @@ async function seedBudget() {
     n++;
   }
   await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `inserted=${n}`]);
-  console.log(`[seed] budget: ${n} rows`);
+  console.log(`[seed] budget: ${n} rows (v2)`);
 }
 
 // One-time fill from tl.xlsx (tl-fill-seed.json). Each row is a Tablet asset.
