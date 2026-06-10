@@ -91,22 +91,29 @@ router.post('/import', wrap(async (req, res) => {
   res.json({ inserted: rows.length, byCountry });
 }));
 
-// ── GET /api/budget/export.xlsx ───────────────────────────────────────────────
+// ── GET /api/budget/export.xlsx — round-trippable (re-importable) sheet ────────
+// Uses the parser's expected headers (Şirket Tanımı, Proje Grubu, … MÇ No,
+// PYP Tanım, PYP No) plus monthly B_*-26 / A_*-26 / F_*-26 columns and a
+// 2025_A total, so the downloaded file can be edited and re-uploaded to sync.
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 router.get('/export.xlsx', wrap(async (req, res) => {
   const rows = (await all('SELECT * FROM budget_line ORDER BY country, proj_group, gl_tr_no')).map(rowToItem);
   const glMap = {};
   (await all('SELECT gl_tr_no, local_gl FROM gl_map')).forEach(r => { glMap[r.gl_tr_no] = r.local_gl || ''; });
-  // Columns mirror the page (line-item table order; Local GL next to Turkish GL).
-  const sheet = rows.map(r => ({
-    Country: r.country, 'O/C': r.oc,
-    'Proje Grubu': r.proj_group, 'Proje Kategorisi': r.proj_category, 'Program/Servis': r.program,
-    'Proje/Servis': r.project, 'Alt Proje/Servis': r.sub_project, 'PYP': r.pyp_name,
-    'Turkish GL': r.gl_tr_no, 'Local GL': glMap[r.gl_tr_no] || '', 'GL Name': r.gl_tr_name, WBS: r.wbs,
-    '2025 Actual': r.y2025_actual, '2026 Budget': r.y2026_budget,
-    'Jan-Apr Budget': r.ja_budget, 'Jan-Apr Actual': r.ja_actual,
-    'Variance': round2(r.ja_budget - r.ja_actual),
-    'Used %': r.ja_budget ? round2(r.ja_actual / r.ja_budget * 100) : 0,
-  }));
+  const sheet = rows.map(r => {
+    const o = {
+      'Şirket Tanımı': r.company, 'Müdürlük': r.department, 'O / C': r.oc,
+      'Proje Grubu': r.proj_group, 'Proje Kategorisi': r.proj_category, 'Program / Servis Adı': r.program,
+      'Proje / Servis Adı': r.project, 'Alt Proje / Servis Adı': r.sub_project, 'PYP Tanım': r.pyp_name,
+      'MÇ No': r.gl_tr_no, 'MÇ Tanımı': r.gl_tr_name, 'Local GL': glMap[r.gl_tr_no] || '',
+      'PYP No': r.wbs, 'Proje No': r.proje_no, 'Proje Tanımı': r.proje_name,
+      '2025_A USD': r.y2025_actual,
+    };
+    MON.forEach((m, i) => { o[`B_${m}-26 USD`] = round2(r.m2026_budget[i]); });           // 2026 Budget
+    MON.slice(0, 4).forEach((m, i) => { o[`A_${m}-26 USD`] = round2(r.m2026_af[i]); });    // Jan–Apr Actual
+    MON.slice(4).forEach((m, i) => { o[`F_${m}-26 USD`] = round2(r.m2026_af[i + 4]); });   // May–Dec Forecast
+    return o;
+  });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sheet), 'Budget');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });

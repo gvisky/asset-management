@@ -98,6 +98,27 @@
         </div>
       </div>
     </div>
+
+    <!-- Budget Tracking (IT admin only): download + re-upload to sync -->
+    <div class="card" id="budget-report-card" style="display:none;margin-top:18px">
+      <div class="card-header">
+        <span class="card-title">💰 Budget Tracking</span>
+        <span class="text-muted text-sm">IT admin only · download · edit · re-upload to sync</span>
+      </div>
+      <div class="card-body">
+        <p class="text-muted text-sm" style="margin:0 0 12px">
+          Download the <strong>Budget Tracking</strong> .xlsx (Vietnam/Thailand/Malaysia line items), edit it in Excel,
+          then upload the same file here to <strong>replace</strong> the budget data. Don't rename the column headers.
+          (To load the original corporate workbook instead, use <em>Upload &amp; Replace</em> on the Budget Tracking page.)
+        </p>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <a class="btn btn-primary" id="budget-dl-btn" href="/api/budget/export.xlsx" download>⬇️ Download Budget .xlsx</a>
+          <input type="file" id="budget-rep-file" accept=".xlsx" class="form-control" style="max-width:340px">
+          <button class="btn btn-primary" id="budget-rep-btn">Upload &amp; Sync</button>
+          <span id="budget-rep-status" class="text-muted text-sm"></span>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 

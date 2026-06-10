@@ -64,6 +64,34 @@ async function runSync({ endpoint, inputId, statusId, btnId, label }) {
 const runImport = () => runSync({ endpoint: '/api/assets/import', inputId: 'import-file', statusId: 'import-status', btnId: 'import-btn', label: 'Asset Inventory' });
 const runImportUsers = () => runSync({ endpoint: '/api/personnel/import-sync', inputId: 'import-users-file', statusId: 'import-users-status', btnId: 'import-users-btn', label: 'User Inventory' });
 
+// Budget Tracking sync: upload the (small, round-trippable) Budget .xlsx and replace.
+async function runImportBudget() {
+  const input = document.getElementById('budget-rep-file');
+  const status = document.getElementById('budget-rep-status');
+  const btn = document.getElementById('budget-rep-btn');
+  const file = input.files && input.files[0];
+  if (!file) { showToast('Choose the Budget .xlsx first', 'error'); return; }
+  if (!confirm('Upload this file and REPLACE the budget data?')) return;
+  btn.disabled = true; status.textContent = 'Uploading…';
+  try {
+    const xlsx_base64 = await fileToBase64(file);
+    const r = await fetch('/api/budget/import', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ xlsx_base64 }),
+    });
+    const text = await r.text();
+    const d = text ? JSON.parse(text) : {};
+    if (!r.ok) throw new Error(d.error || ('Import failed (HTTP ' + r.status + ')'));
+    const by = Object.entries(d.byCountry || {}).map(([k, v]) => `${k} ${v}`).join(', ');
+    status.textContent = `✅ Imported ${d.inserted} line items (${by}).`;
+    showToast(`Budget synced: ${d.inserted} line items`);
+    input.value = '';
+  } catch (e) {
+    status.textContent = '❌ ' + e.message;
+    showToast(e.message, 'error');
+  } finally { btn.disabled = false; }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('report-grid').innerHTML = REPORTS.map(card).join('');
 
@@ -78,6 +106,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (ucard) ucard.style.display = '';
     const ubtn = document.getElementById('import-users-btn');
     if (ubtn && !ubtn.dataset.wired) { ubtn.dataset.wired = '1'; ubtn.addEventListener('click', runImportUsers); }
+
+    // Budget Tracking — download (cache-busted) + re-upload to sync.
+    const bcard = document.getElementById('budget-report-card');
+    if (bcard) bcard.style.display = '';
+    const bdl = document.getElementById('budget-dl-btn');
+    if (bdl) bdl.href = '/api/budget/export.xlsx?t=' + Date.now();
+    const bbtn = document.getElementById('budget-rep-btn');
+    if (bbtn && !bbtn.dataset.wired) { bbtn.dataset.wired = '1'; bbtn.addEventListener('click', runImportBudget); }
   };
   if (window.CURRENT_USER) setupImport(window.CURRENT_USER);
   else if (typeof ensureAuth === 'function') ensureAuth().then(setupImport);

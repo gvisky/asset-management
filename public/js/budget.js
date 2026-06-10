@@ -61,8 +61,10 @@ const bNum = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const bSum = (a) => Math.round(a.reduce((s, x) => s + (Number(x) || 0), 0) * 100) / 100;
 function bMapColumns(h) {
   const dim = {}, m2025 = Array(12).fill(-1), m2026b = Array(12).fill(-1), m2026af = Array(12).fill(-1);
+  let y2025col = -1;
   h.forEach((c, i) => {
     const n = bNorm(c); if (B_DIM[n] && dim[B_DIM[n]] === undefined) dim[B_DIM[n]] = i;
+    if ((n === '2025 a usd' || n === '2025 actual') && y2025col < 0) y2025col = i;
     let m;
     if ((m = n.match(/^a ([a-z]{3}) 25/)) && B_MONTHS[m[1]] !== undefined) m2025[B_MONTHS[m[1]]] = i;
     else if ((m = n.match(/^b ([a-z]{3}) 26/)) && B_MONTHS[m[1]] !== undefined) m2026b[B_MONTHS[m[1]]] = i;
@@ -70,13 +72,14 @@ function bMapColumns(h) {
     else if ((m = n.match(/^f ([a-z]{3}) 26/)) && B_MONTHS[m[1]] !== undefined) m2026af[B_MONTHS[m[1]]] = i;
   });
   if (dim.company === undefined || dim.proj_group === undefined || !m2026b.some(i => i >= 0)) return null;
-  return { dim, m2025, m2026b, m2026af };
+  return { dim, m2025, m2026b, m2026af, y2025col };
 }
 function bRowsToLines(rows) {
   let map = null, hr = -1;
   for (let h = 0; h < Math.min(6, rows.length); h++) { map = bMapColumns(rows[h] || []); if (map) { hr = h; break; } }
   if (!map) return null;
-  const { dim, m2026b, m2026af } = map, at = (r, i) => (i >= 0 ? r[i] : ''), ser = (r, idx) => idx.map(i => bNum(at(r, i)));
+  const { dim, m2026b, m2026af, y2025col } = map, at = (r, i) => (i >= 0 ? r[i] : ''), ser = (r, idx) => idx.map(i => bNum(at(r, i)));
+  const has2025 = map.m2025.some(i => i >= 0);
   const out = [];
   for (let i = hr + 1; i < rows.length; i++) {
     const r = rows[i]; const country = bCountryOf(at(r, dim.company)); if (!country) continue;
@@ -89,7 +92,7 @@ function bRowsToLines(rows) {
       oc: String(at(r, dim.oc)).trim().toUpperCase(), gl_tr_no: String(at(r, dim.gl_tr_no)).trim(),
       gl_tr_name: String(at(r, dim.gl_tr_name)).trim(), wbs: String(at(r, dim.wbs)).trim(),
       proje_no: String(at(r, dim.proje_no)).trim(), proje_name: String(at(r, dim.proje_name)).trim(),
-      y2025_actual: bSum(ser(r, map.m2025)), y2026_budget: bSum(b2026),
+      y2025_actual: has2025 ? bSum(ser(r, map.m2025)) : bNum(at(r, y2025col)), y2026_budget: bSum(b2026),
       ja_budget: bSum(b2026.slice(0, 4)), ja_actual: bSum(af.slice(0, 4)),
       m2026_budget: b2026, m2026_af: af,
     });
@@ -217,7 +220,6 @@ async function loadData() {
   for (const f of FILTERS) selections[f.field] = '';
   rebuildSelects();
   render();
-  document.getElementById('export-btn').href = '/api/budget/export.xlsx?t=' + Date.now();
 }
 
 async function initBudget() {
