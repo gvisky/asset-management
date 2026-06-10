@@ -3,6 +3,7 @@
 
 let ALL_ITEMS = [];
 let GL_MAP = {};         // Turkish GL (MÇ No) -> Local GL
+let searchTerm = '';     // free-text quick search
 const selections = {};   // field -> selected value ('' = all)
 
 const FILTERS = [
@@ -131,7 +132,15 @@ function rebuildSelects() {
     sel.value = selections[f.field] || '';
   }
 }
-function filteredItems() { return ALL_ITEMS.filter(it => FILTERS.every(f => !selections[f.field] || it[f.field] === selections[f.field])); }
+function itemMatchesSearch(it, q) {
+  return [it.country, it.company, it.department, it.proj_group, it.proj_category, it.program, it.project,
+    it.sub_project, it.pyp_name, it.oc, it.gl_tr_no, it.gl_tr_name, GL_MAP[it.gl_tr_no] || '', it.wbs,
+    it.proje_no, it.proje_name].some(v => String(v).toLowerCase().includes(q));
+}
+function filteredItems() {
+  const q = searchTerm.trim().toLowerCase();
+  return ALL_ITEMS.filter(it => FILTERS.every(f => !selections[f.field] || it[f.field] === selections[f.field]) && (!q || itemMatchesSearch(it, q)));
+}
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 function render() {
@@ -218,6 +227,8 @@ async function loadData() {
   ALL_ITEMS = d.items || [];
   GL_MAP = d.glMap || {};
   for (const f of FILTERS) selections[f.field] = '';
+  searchTerm = '';
+  const se = document.getElementById('f-search'); if (se) se.value = '';
   rebuildSelects();
   render();
 }
@@ -231,7 +242,9 @@ async function initBudget() {
     body.style.display = '';
     await loadData();
     FILTERS.forEach(f => { const sel = document.getElementById(f.id); if (sel) sel.addEventListener('change', () => onFilterChange(f.field, sel.value)); });
-    document.getElementById('reset-filters').addEventListener('click', () => { for (const f of FILTERS) selections[f.field] = ''; rebuildSelects(); render(); });
+    const searchEl = document.getElementById('f-search');
+    if (searchEl) searchEl.addEventListener('input', () => { searchTerm = searchEl.value; render(); });
+    document.getElementById('reset-filters').addEventListener('click', () => { for (const f of FILTERS) selections[f.field] = ''; searchTerm = ''; if (searchEl) searchEl.value = ''; rebuildSelects(); render(); });
     wireBudgetImport();
   } catch (e) { gate.style.display = ''; gateMsg.textContent = 'Could not load budget data: ' + e.message; }
 }
