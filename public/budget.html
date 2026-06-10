@@ -46,21 +46,8 @@
     <div class="card" id="gate-card" style="display:none"><div class="card-body"><p class="text-muted" id="gate-msg">Loading…</p></div></div>
 
     <div id="budget-body" style="display:none">
-      <!-- Import (IT admin) -->
-      <div class="card" id="import-budget-card" style="display:none">
-        <div class="card-header"><span class="card-title">⬆️ Import Budget .xlsx</span><span class="text-muted text-sm">IT admin only · uploads budget 2026.xlsx (Sheet1)</span></div>
-        <div class="card-body">
-          <p class="text-muted text-sm" style="margin:0 0 12px">Upload the budget workbook (.xlsx). It's parsed in your browser (only Vietnam/Thailand/Malaysia line items are sent) and <strong>replaces</strong> the current data. Financial data is never stored in Git.</p>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <input type="file" id="budget-import-file" accept=".xlsx" class="form-control" style="max-width:380px">
-            <button class="btn btn-primary" id="budget-import-btn">Upload &amp; Replace</button>
-            <span id="budget-import-status" class="text-muted text-sm"></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filters -->
-      <div class="card" style="margin-top:16px">
+      <!-- 1) Filters -->
+      <div class="card">
         <div class="card-header"><span class="card-title">Filters</span><button class="btn btn-ghost btn-sm" id="reset-filters">Reset</button></div>
         <div class="card-body">
           <div class="bdg-filters">
@@ -81,33 +68,7 @@
         </div>
       </div>
 
-      <!-- Overall Summary -->
-      <div class="card" style="margin-top:16px">
-        <div class="card-header"><span class="card-title">Overall Summary — by Country (USD)</span><span class="text-muted text-sm">Jan–Apr 2026 · Variance = Budget − Actual</span></div>
-        <div class="card-body">
-          <div class="bdg-scroll"><table>
-            <thead><tr><th>Country</th><th class="num">2025 Actual</th><th class="num">2026 Budget</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th><th class="num">Variance</th><th class="num">Used %</th></tr></thead>
-            <tbody id="summary-tbody"></tbody>
-          </table></div>
-          <div style="margin-top:16px"><div class="text-muted text-sm" style="margin-bottom:6px">📊 Jan–Apr Budget vs Actual by country</div><div id="chart-summary"></div></div>
-        </div>
-      </div>
-
-      <!-- Monthly burn -->
-      <div class="card" style="margin-top:16px">
-        <div class="card-header"><span class="card-title">2026 Monthly — Budget vs Actual (burn rate)</span><span class="text-muted text-sm">Actual Jan–Apr; later months are budget only</span></div>
-        <div class="card-body"><div id="chart-monthly"></div></div>
-      </div>
-
-      <!-- GL tables -->
-      <div class="twocol" style="margin-top:16px">
-        <div class="card"><div class="card-header"><span class="card-title">🇹🇷 Turkish GL (MÇ No)</span><span class="text-muted text-sm">from current filter</span></div>
-          <div class="card-body bdg-scroll"><table><thead><tr><th>Turkish GL</th><th>Name</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th></tr></thead><tbody id="gl-tr-tbody"></tbody></table></div></div>
-        <div class="card"><div class="card-header"><span class="card-title">🌐 Local GL</span><span class="text-muted text-sm">to be mapped later</span></div>
-          <div class="card-body bdg-scroll"><table><thead><tr><th>Turkish GL</th><th>Local GL</th></tr></thead><tbody id="gl-local-tbody"></tbody></table></div></div>
-      </div>
-
-      <!-- Line items -->
+      <!-- 2) Line items -->
       <div class="card" style="margin-top:16px">
         <div class="card-header"><span class="card-title">Budget Line Items</span><span class="text-muted text-sm" id="line-count"></span></div>
         <div class="card-body bdg-scroll">
@@ -119,6 +80,45 @@
             </tr></thead>
             <tbody id="line-tbody"></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- 3) GL tables -->
+      <div class="twocol" style="margin-top:16px">
+        <div class="card"><div class="card-header"><span class="card-title">🇹🇷 Turkish GL (MÇ No)</span><span class="text-muted text-sm">from current filter</span></div>
+          <div class="card-body bdg-scroll"><table><thead><tr><th>Turkish GL</th><th>Name</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th></tr></thead><tbody id="gl-tr-tbody"></tbody></table></div></div>
+        <div class="card"><div class="card-header"><span class="card-title">🌐 Local GL</span><span class="text-muted text-sm">to be mapped later</span></div>
+          <div class="card-body bdg-scroll"><table><thead><tr><th>Turkish GL</th><th>Local GL</th></tr></thead><tbody id="gl-local-tbody"></tbody></table></div></div>
+      </div>
+
+      <!-- 4) Overall Summary -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><span class="card-title">Overall Summary — by Country (USD)</span><span class="text-muted text-sm">Jan–Apr 2026 · Variance = Budget − Actual</span></div>
+        <div class="card-body">
+          <div class="bdg-scroll"><table>
+            <thead><tr><th>Country</th><th class="num">2025 Actual</th><th class="num">2026 Budget</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th><th class="num">Variance</th><th class="num">Used %</th></tr></thead>
+            <tbody id="summary-tbody"></tbody>
+          </table></div>
+          <div style="margin-top:16px"><div class="text-muted text-sm" style="margin-bottom:6px">📊 Jan–Apr Budget vs Actual by country</div><div id="chart-summary"></div></div>
+        </div>
+      </div>
+
+      <!-- 5) Monthly burn -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><span class="card-title">2026 Monthly — Budget vs Actual (burn rate)</span><span class="text-muted text-sm">Actual Jan–Apr; later months are budget only</span></div>
+        <div class="card-body"><div id="chart-monthly"></div></div>
+      </div>
+
+      <!-- 6) Import (IT admin) -->
+      <div class="card" id="import-budget-card" style="display:none;margin-top:16px">
+        <div class="card-header"><span class="card-title">⬆️ Import Budget .xlsx</span><span class="text-muted text-sm">IT admin only · uploads budget 2026.xlsx (Sheet1)</span></div>
+        <div class="card-body">
+          <p class="text-muted text-sm" style="margin:0 0 12px">Upload the budget workbook (.xlsx). It's parsed in your browser (only Vietnam/Thailand/Malaysia line items are sent) and <strong>replaces</strong> the current data. Financial data is never stored in Git.</p>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="budget-import-file" accept=".xlsx" class="form-control" style="max-width:380px">
+            <button class="btn btn-primary" id="budget-import-btn">Upload &amp; Replace</button>
+            <span id="budget-import-status" class="text-muted text-sm"></span>
+          </div>
         </div>
       </div>
     </div>
