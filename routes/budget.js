@@ -94,11 +94,14 @@ router.post('/import', wrap(async (req, res) => {
 // ── GET /api/budget/export.xlsx ───────────────────────────────────────────────
 router.get('/export.xlsx', wrap(async (req, res) => {
   const rows = (await all('SELECT * FROM budget_line ORDER BY country, proj_group, gl_tr_no')).map(rowToItem);
+  const glMap = {};
+  (await all('SELECT gl_tr_no, local_gl FROM gl_map')).forEach(r => { glMap[r.gl_tr_no] = r.local_gl || ''; });
+  // Columns mirror the page (line-item table order; Local GL next to Turkish GL).
   const sheet = rows.map(r => ({
-    Country: r.country, Department: r.department, 'O/C': r.oc,
+    Country: r.country, 'O/C': r.oc,
     'Proje Grubu': r.proj_group, 'Proje Kategorisi': r.proj_category, 'Program/Servis': r.program,
     'Proje/Servis': r.project, 'Alt Proje/Servis': r.sub_project, 'PYP': r.pyp_name,
-    'Turkish GL': r.gl_tr_no, 'GL Name': r.gl_tr_name, 'Local GL': '', WBS: r.wbs,
+    'Turkish GL': r.gl_tr_no, 'Local GL': glMap[r.gl_tr_no] || '', 'GL Name': r.gl_tr_name, WBS: r.wbs,
     '2025 Actual': r.y2025_actual, '2026 Budget': r.y2026_budget,
     'Jan-Apr Budget': r.ja_budget, 'Jan-Apr Actual': r.ja_actual,
     'Variance': round2(r.ja_budget - r.ja_actual),
