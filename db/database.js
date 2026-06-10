@@ -91,12 +91,15 @@ async function setup() {
   await seedBudget();
 }
 
-// Seed/refresh the budget table from budget-seed.json. Version-keyed: bumping
-// META_KEY replaces the prior dataset wherever the seed file is present (e.g.
-// local). Environments without the seed file (financial data kept out of Git)
-// are left untouched.
+// Seed/refresh budget_line from budget-seed.json. Version-keyed: bumping
+// META_KEY replaces the prior dataset wherever the seed file is present (local).
+// Environments without the seed file (financial data kept out of Git) are left
+// untouched.
+const BUDGET_COLS = ['country', 'company', 'department', 'proj_group', 'proj_category', 'program', 'project',
+  'sub_project', 'pyp_name', 'oc', 'gl_tr_no', 'gl_tr_name', 'wbs', 'proje_no', 'proje_name',
+  'y2025_actual', 'y2026_budget', 'ja_budget', 'ja_actual', 'm2026_budget', 'm2026_af'];
 async function seedBudget() {
-  const META_KEY = 'budget_seed_v2';   // v2 = real Jan–Apr 2026 Budget-Actual report
+  const META_KEY = 'budget_seed_v3';   // v3 = Sheet1 line-item format
   if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
   const seedPath = path.join(__dirname, 'budget-seed.json');
   if (!fs.existsSync(seedPath)) return;   // nothing to load here
@@ -104,17 +107,20 @@ async function seedBudget() {
   try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
   catch (e) { console.error('[seed] budget-seed.json parse failed:', e.message); return; }
 
-  await backend.run('DELETE FROM budget');   // replace any earlier sample
-  const cols = ['country','company','budget_owner','department','version_type','category','fiscal_year',
-    'period','period_month','project_no','project_name','project_category','cost_element','amount_usd','doc_no','description'];
-  const ph = cols.map(() => '?').join(',');
+  await backend.run('DELETE FROM budget_line');
+  const ph = BUDGET_COLS.map(() => '?').join(',');
   let n = 0;
   for (const r of recs) {
-    await backend.run(`INSERT INTO budget (${cols.join(',')}) VALUES (${ph})`, cols.map(c => r[c] == null ? '' : r[c]));
+    const vals = BUDGET_COLS.map(c => {
+      const v = r[c];
+      if (c === 'm2026_budget' || c === 'm2026_af') return JSON.stringify(Array.isArray(v) ? v : []);
+      return v == null ? '' : v;
+    });
+    await backend.run(`INSERT INTO budget_line (${BUDGET_COLS.join(',')}) VALUES (${ph})`, vals);
     n++;
   }
   await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `inserted=${n}`]);
-  console.log(`[seed] budget: ${n} rows (v2)`);
+  console.log(`[seed] budget_line: ${n} rows (v3)`);
 }
 
 // One-time fill from tl.xlsx (tl-fill-seed.json). Each row is a Tablet asset.
@@ -520,30 +526,35 @@ async function initSchema() {
       value TEXT
     );
 
-    -- Budget tracking (IT admin only): translated rows from the corporate
-    -- budget workbook for Vietnam / Thailand / Malaysia. version_type:
-    -- A=Actual, B=Budget, E=Additional Budget, T=Transfer.
-    CREATE TABLE IF NOT EXISTS budget (
+    -- Budget tracking (IT admin only): one row per budget line item for
+    -- Vietnam / Thailand / Malaysia (from budget 2026.xlsx → Sheet1), with the
+    -- category hierarchy, GL/WBS codes, yearly totals and monthly 2026
+    -- Budget / Actual+Forecast series (stored as JSON arrays).
+    CREATE TABLE IF NOT EXISTS budget_line (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,
       country          TEXT    NOT NULL DEFAULT '',
       company          TEXT    DEFAULT '',
-      budget_owner     TEXT    DEFAULT '',
       department       TEXT    DEFAULT '',
-      version_type     TEXT    DEFAULT '',
-      category         TEXT    DEFAULT '',
-      fiscal_year      INTEGER,
-      period           TEXT    DEFAULT '',
-      period_month     INTEGER,
-      project_no       TEXT    DEFAULT '',
-      project_name     TEXT    DEFAULT '',
-      project_category TEXT    DEFAULT '',
-      cost_element     TEXT    DEFAULT '',
-      amount_usd       REAL    NOT NULL DEFAULT 0,
-      doc_no           TEXT    DEFAULT '',
-      description      TEXT    DEFAULT ''
+      proj_group       TEXT    DEFAULT '',   -- F  (main category)
+      proj_category    TEXT    DEFAULT '',   -- G
+      program          TEXT    DEFAULT '',   -- H
+      project          TEXT    DEFAULT '',   -- I
+      sub_project      TEXT    DEFAULT '',   -- J
+      pyp_name         TEXT    DEFAULT '',   -- T
+      oc               TEXT    DEFAULT '',   -- K  CAPEX / OPEX
+      gl_tr_no         TEXT    DEFAULT '',   -- L  Turkish GL (MÇ No)
+      gl_tr_name       TEXT    DEFAULT '',   -- M
+      wbs              TEXT    DEFAULT '',   -- S  PYP No
+      proje_no         TEXT    DEFAULT '',
+      proje_name       TEXT    DEFAULT '',
+      y2025_actual     REAL    NOT NULL DEFAULT 0,   -- AG
+      y2026_budget     REAL    NOT NULL DEFAULT 0,   -- AT
+      ja_budget        REAL    NOT NULL DEFAULT 0,   -- AU (Jan–Apr 2026 budget)
+      ja_actual        REAL    NOT NULL DEFAULT 0,   -- AV (Jan–Apr 2026 actual)
+      m2026_budget     TEXT    DEFAULT '[]',         -- JSON[12]
+      m2026_af         TEXT    DEFAULT '[]'          -- JSON[12] actual(Jan-Apr)+forecast
     );
-    CREATE INDEX IF NOT EXISTS idx_budget_country ON budget(country);
-    CREATE INDEX IF NOT EXISTS idx_budget_year    ON budget(fiscal_year);
+    CREATE INDEX IF NOT EXISTS idx_budget_line_country ON budget_line(country);
 
     CREATE TABLE IF NOT EXISTS personnel (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,

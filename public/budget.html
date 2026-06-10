@@ -7,12 +7,17 @@
   <link rel="stylesheet" href="/css/style.css">
   <style>
     #budget-body th.num, #budget-body td.num { text-align: right; white-space: nowrap; }
-    #budget-body td.neg { color: #b91c1c; }
-    #budget-body td.pos { color: #15803d; }
-    .bdg-row { display:flex; align-items:center; gap:8px; margin:6px 0; font-size:13px; }
-    .bdg-row .bdg-name { flex:0 0 auto; min-width:0; }
-    .bdg-bar-wrap { flex:1 1 auto; background:#f1f5f9; border-radius:4px; height:14px; position:relative; overflow:hidden; }
+    #budget-body td.neg { color: #b91c1c; } #budget-body td.pos { color: #15803d; }
+    .bdg-filters { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+    .bdg-filters .fg { display:flex; flex-direction:column; gap:3px; }
+    .bdg-filters label { font-size:11px; color:var(--muted); font-weight:600; }
+    .bdg-filters select { min-width:150px; padding:6px 8px; }
+    .bdg-bar-wrap { background:#f1f5f9; border-radius:4px; height:13px; overflow:hidden; min-width:80px; }
     .bdg-bar { height:100%; border-radius:4px; }
+    .bdg-scroll { overflow-x:auto; }
+    #line-table th, #line-table td { white-space:nowrap; font-size:12px; }
+    .twocol { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    @media (max-width: 900px){ .twocol { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -24,61 +29,28 @@
   </div>
   <nav>
     <div class="nav-section-label">Menu</div>
-    <a href="/" class="nav-link" id="nav-dashboard">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Dashboard
-    </a>
-    <a href="/inventory.html" class="nav-link">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg>
-      Asset Inventory
-    </a>
-    <a href="/server-inventory.html" class="nav-link" id="nav-servers">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-      Server Inventory
-    </a>
-    <a href="/maintenance.html" class="nav-link" id="nav-maintenance">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg>
-      Maintenance
-    </a>
-    <a href="/licenses.html" class="nav-link" id="nav-licenses">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M9 11l3 3L22 4"/></svg>
-      Licenses
-    </a>
-    <a href="/reports.html" class="nav-link" id="nav-reports">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
-      Reports
-    </a>
-    <a href="/budget.html" class="nav-link active" id="nav-budget">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      Budget Tracking
-    </a>
+    <a href="/" class="nav-link" id="nav-dashboard"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Dashboard</a>
+    <a href="/inventory.html" class="nav-link"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg> Asset Inventory</a>
+    <a href="/server-inventory.html" class="nav-link" id="nav-servers"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg> Server Inventory</a>
+    <a href="/maintenance.html" class="nav-link" id="nav-maintenance"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg> Maintenance</a>
+    <a href="/licenses.html" class="nav-link" id="nav-licenses"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M9 11l3 3L22 4"/></svg> Licenses</a>
+    <a href="/reports.html" class="nav-link" id="nav-reports"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg> Reports</a>
+    <a href="/budget.html" class="nav-link active" id="nav-budget"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg> Budget Tracking</a>
   </nav>
 </aside>
 
 <div class="main-wrap">
-  <header class="topbar">
-    <span class="topbar-title">💰 Budget Tracking</span>
-  </header>
+  <header class="topbar"><span class="topbar-title">💰 Budget Tracking</span></header>
 
-  <main class="content" id="budget-content">
-    <!-- Access gate / loading -->
-    <div class="card" id="gate-card" style="display:none">
-      <div class="card-body"><p class="text-muted" id="gate-msg">Loading…</p></div>
-    </div>
+  <main class="content">
+    <div class="card" id="gate-card" style="display:none"><div class="card-body"><p class="text-muted" id="gate-msg">Loading…</p></div></div>
 
     <div id="budget-body" style="display:none">
-      <!-- Import / Sync Budget (IT admin only) -->
+      <!-- Import (IT admin) -->
       <div class="card" id="import-budget-card" style="display:none">
-        <div class="card-header">
-          <span class="card-title">⬆️ Import Budget .xlsx</span>
-          <span class="text-muted text-sm">IT admin only · uploads the Budget-Actual report</span>
-        </div>
+        <div class="card-header"><span class="card-title">⬆️ Import Budget .xlsx</span><span class="text-muted text-sm">IT admin only · uploads budget 2026.xlsx (Sheet1)</span></div>
         <div class="card-body">
-          <p class="text-muted text-sm" style="margin:0 0 12px">
-            Upload the corporate <strong>Budget-Actual report</strong> (.xlsx). It loads
-            <strong>Vietnam / Thailand / Malaysia</strong>, <strong>Jan–April 2026</strong> (Budget vs Actual) and
-            <strong>replaces</strong> the current budget data. The file is parsed in-app — its financial data is never stored in Git.
-          </p>
+          <p class="text-muted text-sm" style="margin:0 0 12px">Upload the budget workbook (.xlsx). It's parsed in your browser (only Vietnam/Thailand/Malaysia line items are sent) and <strong>replaces</strong> the current data. Financial data is never stored in Git.</p>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
             <input type="file" id="budget-import-file" accept=".xlsx" class="form-control" style="max-width:380px">
             <button class="btn btn-primary" id="budget-import-btn">Upload &amp; Replace</button>
@@ -89,84 +61,66 @@
 
       <!-- Filters -->
       <div class="card" style="margin-top:16px">
-        <div class="card-body" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-          <div>
-            <label class="form-label">Country</label>
-            <select class="form-control" id="f-country" style="min-width:160px"><option value="">All 3 countries</option></select>
+        <div class="card-header"><span class="card-title">Filters</span><button class="btn btn-ghost btn-sm" id="reset-filters">Reset</button></div>
+        <div class="card-body">
+          <div class="bdg-filters">
+            <div class="fg"><label>Country</label><select class="form-control" id="f-country"></select></div>
+            <div class="fg"><label>CapEx / OpEx</label><select class="form-control" id="f-oc"></select></div>
+            <div class="fg"><label>WBS code</label><select class="form-control" id="f-wbs"></select></div>
           </div>
-          <div>
-            <label class="form-label">Fiscal Year</label>
-            <select class="form-control" id="f-year" style="min-width:140px"><option value="">All years</option></select>
+          <div class="bdg-filters" style="margin-top:12px">
+            <div class="fg"><label>Proje Grubu</label><select class="form-control" id="f-proj_group"></select></div>
+            <div class="fg"><label>Proje Kategorisi</label><select class="form-control" id="f-proj_category"></select></div>
+            <div class="fg"><label>Program / Servis</label><select class="form-control" id="f-program"></select></div>
+            <div class="fg"><label>Proje / Servis</label><select class="form-control" id="f-project"></select></div>
+            <div class="fg"><label>Alt Proje / Servis</label><select class="form-control" id="f-sub_project"></select></div>
+            <div class="fg"><label>PYP</label><select class="form-control" id="f-pyp_name"></select></div>
+            <div class="fg" style="margin-left:auto"><label>&nbsp;</label><a class="btn btn-primary" id="export-btn" href="#" download>⬇️ Export .xlsx</a></div>
           </div>
-          <div style="margin-left:auto">
-            <a class="btn btn-primary" id="export-btn" href="#" download>⬇️ Export .xlsx</a>
-          </div>
+          <div class="text-muted text-sm" style="margin-top:10px" id="filter-count"></div>
         </div>
       </div>
 
       <!-- Overall Summary -->
       <div class="card" style="margin-top:16px">
-        <div class="card-header">
-          <span class="card-title">Overall Summary — by Country (USD)</span>
-          <span class="text-muted text-sm">Variance = Budget − Actual</span>
-        </div>
+        <div class="card-header"><span class="card-title">Overall Summary — by Country (USD)</span><span class="text-muted text-sm">Jan–Apr 2026 · Variance = Budget − Actual</span></div>
         <div class="card-body">
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Country</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Forecast</th><th class="num">Variance</th><th class="num">Utilization</th></tr></thead>
-              <tbody id="summary-tbody"></tbody>
-            </table>
-          </div>
-          <div style="margin-top:18px">
-            <div class="text-muted text-sm" style="margin-bottom:6px">📊 Budget vs Actual by country (bar chart)</div>
-            <div id="chart-summary"></div>
-          </div>
+          <div class="bdg-scroll"><table>
+            <thead><tr><th>Country</th><th class="num">2025 Actual</th><th class="num">2026 Budget</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th><th class="num">Variance</th><th class="num">Used %</th></tr></thead>
+            <tbody id="summary-tbody"></tbody>
+          </table></div>
+          <div style="margin-top:16px"><div class="text-muted text-sm" style="margin-bottom:6px">📊 Jan–Apr Budget vs Actual by country</div><div id="chart-summary"></div></div>
         </div>
       </div>
 
-      <!-- Breakdown: Department & Category -->
-      <div class="stat-grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px" id="breakdown-grid">
-        <div class="card">
-          <div class="card-header"><span class="card-title">By Department (Budget Owner)</span></div>
-          <div class="card-body"><div class="table-wrap"><table>
-            <thead><tr><th>Department</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead>
-            <tbody id="dept-tbody"></tbody>
-          </table></div></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">By Project Category</span></div>
-          <div class="card-body"><div class="table-wrap"><table>
-            <thead><tr><th>Project Category</th><th class="num">Budget</th><th class="num">Actual</th><th class="num">Variance</th></tr></thead>
-            <tbody id="cat-tbody"></tbody>
-          </table></div></div>
-        </div>
-      </div>
-
-      <!-- Time series -->
+      <!-- Monthly burn -->
       <div class="card" style="margin-top:16px">
-        <div class="card-header">
-          <span class="card-title">Period Analysis — Monthly Burn Rate</span>
-          <span class="text-muted text-sm">Line: monthly Actual & cumulative Actual</span>
-        </div>
-        <div class="card-body"><div id="chart-timeseries"></div></div>
+        <div class="card-header"><span class="card-title">2026 Monthly — Budget vs Actual (burn rate)</span><span class="text-muted text-sm">Actual Jan–Apr; later months are budget only</span></div>
+        <div class="card-body"><div id="chart-monthly"></div></div>
       </div>
 
-      <!-- Key Insights -->
-      <div class="stat-grid" style="grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
-        <div class="card">
-          <div class="card-header"><span class="card-title">🔴 Top 3 Over Budget</span><span class="text-muted text-sm">Actual &gt; Budget</span></div>
-          <div class="card-body"><div id="insights-over"></div></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">🟢 Top 3 Under Budget</span><span class="text-muted text-sm">Largest unspent</span></div>
-          <div class="card-body"><div id="insights-under"></div></div>
-        </div>
+      <!-- GL tables -->
+      <div class="twocol" style="margin-top:16px">
+        <div class="card"><div class="card-header"><span class="card-title">🇹🇷 Turkish GL (MÇ No)</span><span class="text-muted text-sm">from current filter</span></div>
+          <div class="card-body bdg-scroll"><table><thead><tr><th>Turkish GL</th><th>Name</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th></tr></thead><tbody id="gl-tr-tbody"></tbody></table></div></div>
+        <div class="card"><div class="card-header"><span class="card-title">🌐 Local GL</span><span class="text-muted text-sm">to be mapped later</span></div>
+          <div class="card-body bdg-scroll"><table><thead><tr><th>Turkish GL</th><th>Local GL</th></tr></thead><tbody id="gl-local-tbody"></tbody></table></div></div>
       </div>
 
-      <p class="text-muted text-sm" style="margin-top:14px">
-        Chart guide: <strong>Bar chart</strong> for Budget vs Actual / Variance comparisons,
-        <strong>Line chart</strong> for the period burn-rate trend.
-      </p>
+      <!-- Line items -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header"><span class="card-title">Budget Line Items</span><span class="text-muted text-sm" id="line-count"></span></div>
+        <div class="card-body bdg-scroll">
+          <table id="line-table">
+            <thead><tr>
+              <th>Country</th><th>O/C</th><th>Proje Grubu</th><th>Kategorisi</th><th>Program</th><th>Proje</th><th>Alt Proje</th><th>PYP</th>
+              <th>Turkish GL</th><th>WBS</th>
+              <th class="num">2025 Actual</th><th class="num">2026 Budget</th><th class="num">Jan–Apr B</th><th class="num">Jan–Apr A</th><th class="num">+/- %</th>
+            </tr></thead>
+            <tbody id="line-tbody"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </main>
 </div>
