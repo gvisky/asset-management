@@ -59,7 +59,9 @@ function rowToItem(r) {
 router.get('/', wrap(async (req, res) => {
   const rows = await all('SELECT * FROM budget_line ORDER BY country, proj_group, proj_category, gl_tr_no');
   const items = rows.map(rowToItem);
-  res.json({ items, count: items.length, meta: { countries: COUNTRIES, ocs: ['CAPEX', 'OPEX'] } });
+  const glMap = {};
+  (await all('SELECT gl_tr_no, local_gl FROM gl_map')).forEach(r => { glMap[r.gl_tr_no] = r.local_gl || ''; });
+  res.json({ items, count: items.length, glMap, meta: { countries: COUNTRIES, ocs: ['CAPEX', 'OPEX'] } });
 }));
 
 // ── POST /api/budget/import — replace from browser-parsed rows (or .xlsx) ─────

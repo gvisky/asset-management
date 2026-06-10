@@ -89,6 +89,29 @@ async function setup() {
   await applyPtSerialFill();
   await applyTlTabletFill();
   await seedBudget();
+  await seedGlMap();
+}
+
+// Seed/refresh the Turkish GL → Local GL map from gl-map-seed.json. Version-keyed.
+async function seedGlMap() {
+  const META_KEY = 'gl_map_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const seedPath = path.join(__dirname, 'gl-map-seed.json');
+  if (!fs.existsSync(seedPath)) return;
+  let recs;
+  try { recs = JSON.parse(fs.readFileSync(seedPath, 'utf8')); }
+  catch (e) { console.error('[seed] gl-map-seed.json parse failed:', e.message); return; }
+  await backend.run('DELETE FROM gl_map');
+  let n = 0;
+  for (const r of recs) {
+    const k = String(r.gl_tr_no || '').trim();
+    if (!k) continue;
+    await backend.run('INSERT INTO gl_map (gl_tr_no, local_gl) VALUES (?, ?) ON CONFLICT(gl_tr_no) DO UPDATE SET local_gl = excluded.local_gl',
+      [k, String(r.local_gl || '').trim()]);
+    n++;
+  }
+  await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `inserted=${n}`]);
+  console.log(`[seed] gl_map: ${n} rows`);
 }
 
 // Seed/refresh budget_line from budget-seed.json. Version-keyed: bumping
@@ -555,6 +578,12 @@ async function initSchema() {
       m2026_af         TEXT    DEFAULT '[]'          -- JSON[12] actual(Jan-Apr)+forecast
     );
     CREATE INDEX IF NOT EXISTS idx_budget_line_country ON budget_line(country);
+
+    -- Turkish GL (MÇ No) → Local GL mapping (from GL.xlsx).
+    CREATE TABLE IF NOT EXISTS gl_map (
+      gl_tr_no TEXT PRIMARY KEY,
+      local_gl TEXT DEFAULT ''
+    );
 
     CREATE TABLE IF NOT EXISTS personnel (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
