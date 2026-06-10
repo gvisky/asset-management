@@ -159,8 +159,10 @@ function render() {
   const byGL = {};
   items.forEach(it => { const k = it.gl_tr_no || '(none)'; (byGL[k] = byGL[k] || { alts: new Set(), jb: 0, ja: 0 }); if (it.pyp_name) byGL[k].alts.add(it.pyp_name); byGL[k].jb += it.ja_budget; byGL[k].ja += it.ja_actual; });
   const glKeys = Object.keys(byGL).sort();
-  document.getElementById('gl-tr-tbody').innerHTML = glKeys.length ? glKeys.map(k => `<tr><td><code>${escB(k)}</code></td><td class="text-sm">${escB([...byGL[k].alts].join(', ')) || '—'}</td><td class="num">${USD(byGL[k].jb)}</td><td class="num">${USD(byGL[k].ja)}</td></tr>`).join('') : '<tr><td colspan="4" class="text-muted">No data.</td></tr>';
-  document.getElementById('gl-local-tbody').innerHTML = glKeys.length ? glKeys.map(k => { const lg = GL_MAP[k]; return `<tr><td><code>${escB(k)}</code></td><td>${lg ? '<code>' + escB(lg) + '</code>' : '<span class="text-muted">— to map —</span>'}</td></tr>`; }).join('') : '<tr><td colspan="2" class="text-muted">No data.</td></tr>';
+  document.getElementById('gl-tr-tbody').innerHTML = glKeys.length ? glKeys.map(k => {
+    const lg = GL_MAP[k];
+    return `<tr><td><code>${escB(k)}</code></td><td>${lg ? '<code>' + escB(lg) + '</code>' : '<span class="text-muted">— to map —</span>'}</td><td class="text-sm">${escB([...byGL[k].alts].join(', ')) || '—'}</td><td class="num">${USD(byGL[k].jb)}</td><td class="num">${USD(byGL[k].ja)}</td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="text-muted">No data.</td></tr>';
 
   // Line items
   document.getElementById('line-tbody').innerHTML = items.length ? items.map(it => {
