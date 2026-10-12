@@ -1,15 +1,140 @@
 /* Dashboard page logic */
 
+const COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+const COUNTRY_SHORT = { Vietnam: 'VN', Thailand: 'TH', Malaysia: 'MY' };
+const STATUSES = [
+  { key: 'Active', color: '#16a34a' },
+  { key: 'Broken', color: '#dc2626' },
+  { key: 'Stock',  color: '#d97706' },
+];
+let dashScope = '';          // '' = all countries, else one country
+let allBreakdown = null;     // unfiltered country × type × status rows (for "Assets by Country")
+
+const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+const escHtml = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const invLink = (params) => '/inventory.html?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+
+// Sum breakdown rows into { total, Active, Broken, Stock } per key (country / asset type).
+function tally(rows, keyFn) {
+  const out = new Map();
+  rows.forEach(r => {
+    const k = keyFn(r);
+    if (!out.has(k)) out.set(k, { total: 0, Active: 0, Broken: 0, Stock: 0 });
+    const t = out.get(k);
+    t.total += r.cnt;
+    if (r.status in t) t[r.status] += r.cnt;
+  });
+  return out;
+}
+
+// Stacked status bar (Active / Broken / Stock) — tooltip per segment.
+function statusBar(t) {
+  if (!t.total) return '<div class="sbar sbar-empty"></div>';
+  return '<div class="sbar">' + STATUSES.filter(s => t[s.key]).map(s => {
+    const pct = (t[s.key] / t.total) * 100;
+    return `<span style="width:${pct}%;background:${s.color}" title="${s.key}: ${fmt(t[s.key])} (${pct.toFixed(0)}%)"></span>`;
+  }).join('') + '</div>';
+}
+
+function renderScopeSwitch(scopedTo) {
+  const el = document.getElementById('dash-scope');
+  if (!el) return;
+  if (scopedTo) { el.innerHTML = `<span class="seg-fixed">${escHtml(scopedTo)}</span>`; return; }
+  el.innerHTML = [['', 'All countries'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
+    `<button type="button" role="tab" class="seg-btn${v === dashScope ? ' active' : ''}" data-country="${v}" aria-selected="${v === dashScope}">${label}</button>`).join('');
+  el.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
+    dashScope = btn.dataset.country;
+    loadStats();
+  }));
+}
+
+// KPI tiles: Total / Active / Broken / Stock — each split by country (all-countries view)
+// or shown as a share of the country total (single-country view).
+function renderKpis(stats, scopedTo) {
+  const grid = document.getElementById('kpi-grid');
+  const byCountry = tally(allBreakdown || stats.breakdown, r => r.country);
+  const scope = scopedTo || dashScope;
+  const tiles = [
+    { label: 'Total Assets', key: 'total', color: '#1a56db', status: '' },
+    ...STATUSES.map(s => ({ label: s.key, key: s.key, color: s.color, status: s.key })),
+  ];
+  const total = stats.total || 0;
+  grid.innerHTML = tiles.map(t => {
+    const value = t.key === 'total' ? total : (stats.byStatus[t.key] || 0);
+    let sub;
+    if (scope) {
+      sub = t.key === 'total' ? escHtml(scope)
+        : `${total ? ((value / total) * 100).toFixed(1) : '0.0'}% of ${escHtml(scope)}`;
+    } else {
+      sub = COUNTRIES.map(c => {
+        const ct = byCountry.get(c) || { total: 0, Active: 0, Broken: 0, Stock: 0 };
+        return `<a class="kpi-split" href="${invLink({ country: c, status: t.status })}" title="${c}">${COUNTRY_SHORT[c]} <b>${fmt(ct[t.key])}</b></a>`;
+      }).join('');
+    }
+    return `<div class="kpi" style="--kpi-color:${t.color}">
+      <a class="kpi-main" href="${invLink({ country: scope, status: t.status })}">
+        <div class="kpi-label"><span class="kpi-dot"></span>${t.label}</div>
+        <div class="kpi-value">${fmt(value)}</div>
+      </a>
+      <div class="kpi-sub">${sub}</div>
+    </div>`;
+  }).join('');
+}
+
+function breakdownTable(firstCol, entries, linkFor, totalRow) {
+  const head = `<thead><tr><th>${firstCol}</th><th class="num">Total</th>${STATUSES.map(s => `<th class="num">${s.key}</th>`).join('')}<th style="width:32%">Status mix</th></tr></thead>`;
+  const row = ([name, t], cls = '') => `<tr class="${cls}">
+      <td>${linkFor ? `<a href="${linkFor(name)}">${escHtml(name)}</a>` : escHtml(name)}</td>
+      <td class="num"><b>${fmt(t.total)}</b></td>
+      ${STATUSES.map(s => `<td class="num${t[s.key] ? '' : ' zero'}">${fmt(t[s.key])}</td>`).join('')}
+      <td>${statusBar(t)}</td>
+    </tr>`;
+  return head + '<tbody>' + (entries.length ? entries.map(e => row(e)).join('') : '<tr><td colspan="6" class="empty-state">No assets.</td></tr>')
+    + (totalRow ? row(totalRow, 'total-row') : '') + '</tbody>';
+}
+
+function renderBreakdowns(stats, scopedTo) {
+  // By country — always all countries the user can see.
+  const rowsAll = allBreakdown || stats.breakdown;
+  const byCountry = tally(rowsAll, r => r.country);
+  const countryList = scopedTo ? [scopedTo] : COUNTRIES;
+  const cEntries = countryList.map(c => [c, byCountry.get(c) || { total: 0, Active: 0, Broken: 0, Stock: 0 }]);
+  const grand = tally(rowsAll, () => 'Total').get('Total') || { total: 0, Active: 0, Broken: 0, Stock: 0 };
+  document.getElementById('bd-country').innerHTML =
+    breakdownTable('Country', cEntries, c => invLink({ country: c }), countryList.length > 1 ? ['Total', grand] : null);
+
+  // By asset type — follows the selected country.
+  const byType = tally(stats.breakdown, r => r.asset_type || 'Not set');
+  const tEntries = [...byType.entries()].sort((x, y) => {
+    if (x[0] === 'Not set') return 1;
+    if (y[0] === 'Not set') return -1;
+    return y[1].total - x[1].total;
+  });
+  const scope = scopedTo || dashScope;
+  document.getElementById('bd-type-scope').textContent = scope ? `· ${scope}` : '· all countries';
+  document.getElementById('bd-type').innerHTML = breakdownTable('Asset Type', tEntries,
+    t => t === 'Not set' ? '' : invLink({ asset_type: t, country: scope }));
+}
+
+function renderLegends() {
+  const html = STATUSES.map(s => `<span><i style="background:${s.color}"></i>${s.key}</span>`).join('');
+  document.querySelectorAll('.status-legend').forEach(el => { el.innerHTML = html; });
+}
+
 async function loadStats() {
   try {
-    const stats = await apiGet('/api/assets/stats');
+    const stats = await apiGet('/api/assets/stats' + (dashScope ? '?country=' + encodeURIComponent(dashScope) : ''));
+    const scopedTo = stats.scope || '';
+    if (!dashScope) allBreakdown = stats.breakdown;
+    else if (!allBreakdown) allBreakdown = (await apiGet('/api/assets/stats')).breakdown;
 
-    document.getElementById('s-total').textContent   = stats.total;
-    document.getElementById('s-active').textContent  = stats.byStatus.Active  || 0;
-    document.getElementById('s-broken').textContent  = stats.byStatus.Broken  || 0;
-    document.getElementById('s-stock').textContent   = stats.byStatus.Stock  || 0;
-    document.getElementById('s-factory').textContent = stats.byLocation.Factory || 0;
-    document.getElementById('s-office').textContent  = stats.byLocation.Office  || 0;
+    renderScopeSwitch(scopedTo);
+    renderKpis(stats, scopedTo);
+    renderBreakdowns(stats, scopedTo);
+    renderLegends();
+
+    document.getElementById('s-factory').textContent = fmt(stats.byLocation.Factory);
+    document.getElementById('s-office').textContent  = fmt(stats.byLocation.Office);
     const warrEl = document.getElementById('s-warranty');
     const repEl  = document.getElementById('s-repairs');
     if (warrEl) warrEl.textContent = stats.warrantyExpiring || 0;
@@ -30,9 +155,6 @@ async function loadStats() {
         .then(ss => { srvEl.textContent = ss.total || 0; })
         .catch(() => { srvEl.textContent = '0'; });
     }
-
-    // By-country cards (Vietnam / Thailand / Malaysia) — appended to the stat grid.
-    renderCountryCards(stats.byCountry || {});
 
     // Top Models — by selected Asset Type, split by country (loaded separately).
     loadTopModels();
@@ -78,7 +200,7 @@ async function loadPersonnelSummary() {
         ? `/user-inventory.html?user_type=${encodeURIComponent(statusFilter)}`
         : statusFilter ? `/user-inventory.html?status=${encodeURIComponent(statusFilter)}`
         : `/user-inventory.html`;
-      return `<a class="stat-card" href="${href}">
+      return `<a class="stat-card stat-mini" href="${href}">
         <div class="stat-icon" style="background:${bg}">
           <svg width="22" height="22" fill="none" stroke="${fg}" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
         </div>
@@ -91,10 +213,11 @@ async function loadPersonnelSummary() {
   }
 }
 
-// Render one clickable card per country, appended to the stat grid.
 // ── Top Models box — models + per-country quantity for a chosen Asset Type ────
 // Each model has a 🔒 lock-delete checkbox at the front (IT admin only).
 let _tmInited = false;
+const TM_SHOW = 6;          // rows shown before "Show all"
+let _tmExpanded = false;
 async function loadTopModels(assetType) {
   const body = document.getElementById('tm-body');
   const sel = document.getElementById('tm-type');
@@ -116,19 +239,28 @@ async function loadTopModels(assetType) {
       ${canLock ? '<div class="text-muted text-sm" style="margin-bottom:6px">🔒 Tick a model to lock its assets from deletion (editors can edit but not delete).</div>' : ''}
       <div class="table-wrap"><table>
         <thead><tr>${canLock ? '<th title="Lock from deletion">🔒</th>' : ''}<th>Model</th>${countries.map(c => `<th style="text-align:right">${c}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead>
-        <tbody>${d.models.map(m => {
+        <tbody>${d.models.map((m, i) => {
           const locked = lockedSet.has(String(m.brand_model).toLowerCase());
           const lockCell = canLock
             ? `<td style="text-align:center"><input type="checkbox" class="tm-lock-cb" data-model="${escAttr(m.brand_model)}" ${locked ? 'checked' : ''} title="Lock '${escAttr(m.brand_model)}' from deletion"></td>`
             : '';
-          return `<tr${locked ? ' style="background:#fff7ed"' : ''}>
+          const hidden = !_tmExpanded && i >= TM_SHOW;
+          return `<tr class="${i >= TM_SHOW ? 'tm-more' : ''}" style="${locked ? 'background:#fff7ed;' : ''}${hidden ? 'display:none' : ''}">
             ${lockCell}
             <td>${locked ? '🔒 ' : ''}<a href="/inventory.html?asset_type=${encodeURIComponent(d.selected)}&brand=${encodeURIComponent(m.brand_model)}" title="View these assets">${escD(m.brand_model)}</a></td>
             ${countries.map(c => `<td style="text-align:right">${m.byCountry[c] || 0}</td>`).join('')}
             <td style="text-align:right"><strong>${m.total}</strong></td>
           </tr>`;
         }).join('')}</tbody>
-      </table></div>`;
+      </table></div>
+      ${d.models.length > TM_SHOW ? `<button type="button" class="btn btn-ghost btn-sm" id="tm-toggle" style="margin-top:10px">${_tmExpanded ? 'Show less' : `Show all ${d.models.length} models`}</button>` : ''}`;
+
+    const toggle = document.getElementById('tm-toggle');
+    if (toggle) toggle.addEventListener('click', () => {
+      _tmExpanded = !_tmExpanded;
+      body.querySelectorAll('tr.tm-more').forEach(tr => { tr.style.display = _tmExpanded ? '' : 'none'; });
+      toggle.textContent = _tmExpanded ? 'Show less' : `Show all ${d.models.length} models`;
+    });
 
     // Wire each model lock checkbox.
     body.querySelectorAll('.tm-lock-cb').forEach(cb => cb.addEventListener('change', async () => {
@@ -143,39 +275,10 @@ async function loadTopModels(assetType) {
     body.innerHTML = '<div class="text-muted text-sm">Could not load models.</div>';
   }
 
-  if (!_tmInited) { _tmInited = true; sel.addEventListener('change', () => loadTopModels(sel.value)); }
+  if (!_tmInited) { _tmInited = true; sel.addEventListener('change', () => { _tmExpanded = false; loadTopModels(sel.value); }); }
 }
 function escD(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
-
-function renderCountryCards(byCountry) {
-  const grid = document.getElementById('stat-grid');
-  if (!grid) return;
-  // Remove any previously-rendered country cards (avoid duplicates on reload).
-  grid.querySelectorAll('.country-card').forEach(el => el.remove());
-
-  const colors = {
-    Vietnam:  ['#fef2f2', '#dc2626'],
-    Thailand: ['#eff6ff', '#2563eb'],
-    Malaysia: ['#fefce8', '#ca8a04'],
-  };
-  // Always show the three countries (0 if none), unless the user is scoped to one.
-  const scoped = window.CURRENT_USER && window.CURRENT_USER.country;
-  const list = scoped ? [scoped] : ['Vietnam', 'Thailand', 'Malaysia'];
-
-  list.forEach(country => {
-    const [bg, fg] = colors[country] || ['#f3f4f6', '#374151'];
-    const a = document.createElement('a');
-    a.className = 'stat-card country-card';
-    a.href = `/inventory.html?country=${encodeURIComponent(country)}`;
-    a.innerHTML = `
-      <div class="stat-icon" style="background:${bg}">
-        <svg width="22" height="22" fill="none" stroke="${fg}" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      </div>
-      <div><div class="stat-label">${country}</div><div class="stat-value">${byCountry[country] || 0}</div></div>`;
-    grid.appendChild(a);
-  });
-}
 
 // ── Missing-info alerts table ─────────────────────────────────────────────────
 async function loadAlerts() {
