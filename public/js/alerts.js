@@ -37,3 +37,64 @@ async function markAlertsRead(containerId, scope) {
     loadAlertBox(containerId, scope);
   } catch (e) { /* ignore */ }
 }
+
+// ── Compact alerts: a 🔔 button (with unread count) that opens a pop-up list ──
+// Used on Asset Inventory / User Inventory so alerts don't take page space.
+async function loadAlertButton(slotId, scope) {
+  const slot = document.getElementById(slotId);
+  if (!slot) return;
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let data = [], unread = 0;
+  try {
+    const q = scope ? ('?scope=' + encodeURIComponent(scope)) : '';
+    ({ unread, data } = await apiGet('/api/notifications' + q));
+  } catch (e) { slot.innerHTML = ''; return; }   // no access → no button
+
+  slot.innerHTML = `
+    <div class="alert-pop-wrap">
+      <button type="button" class="btn btn-ghost btn-sm alert-btn" aria-haspopup="dialog" aria-expanded="false">
+        🔔 Alerts${unread ? ` <span class="badge badge-broken">${unread}</span>` : ''}
+      </button>
+      <div class="alert-pop" role="dialog" aria-label="Alerts" hidden>
+        <div class="alert-pop-head">
+          <b>🔔 Alerts</b>
+          ${unread ? `<span class="badge badge-broken">${unread} new</span>` : ''}
+          <span style="flex:1"></span>
+          ${data.length ? '<button type="button" class="btn btn-ghost btn-sm" data-act="read">Mark all read</button>' : ''}
+          <button type="button" class="btn btn-ghost btn-sm" data-act="close" aria-label="Close">✕</button>
+        </div>
+        <div class="alert-pop-body">
+          ${data.length ? data.map(n => `
+            <div class="alert-pop-item">
+              <span style="color:${n.level === 'warning' ? '#dc2626' : '#1a56db'};font-size:10px;line-height:18px">${n.read ? '○' : '●'}</span>
+              <div style="flex:1">
+                <div style="font-size:13px">${esc(n.message)}</div>
+                <div class="text-muted text-sm" style="margin-top:2px">${esc(n.created_at)} · ${esc(n.scope)}</div>
+              </div>
+            </div>`).join('') : '<div class="text-muted text-sm" style="padding:14px 4px">No alerts.</div>'}
+        </div>
+      </div>
+    </div>`;
+
+  const btn = slot.querySelector('.alert-btn');
+  const pop = slot.querySelector('.alert-pop');
+  const close = () => { pop.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    pop.hidden = !pop.hidden;
+    btn.setAttribute('aria-expanded', String(!pop.hidden));
+  });
+  pop.addEventListener('click', (e) => e.stopPropagation());
+  document.addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  pop.querySelector('[data-act="close"]').addEventListener('click', close);
+  const readBtn = pop.querySelector('[data-act="read"]');
+  if (readBtn) readBtn.addEventListener('click', async () => {
+    try {
+      await apiPost('/api/notifications/read-all', scope ? { scope } : {});
+      await loadAlertButton(slotId, scope);
+      const again = document.querySelector(`#${slotId} .alert-pop`);
+      if (again) { again.hidden = false; document.querySelector(`#${slotId} .alert-btn`).setAttribute('aria-expanded', 'true'); }
+    } catch (e) { /* ignore */ }
+  });
+}

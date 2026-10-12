@@ -366,7 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('adduser-save').addEventListener('click', saveAddUser);
   document.getElementById('au-country').addEventListener('change', onAddUserCountry);
   linkDeptCc('au-department', 'au-cost_center');
-  if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'personnel');
+  if (typeof loadAlertButton === 'function') loadAlertButton('alert-btn-slot', 'personnel');
   document.getElementById('assets-close').addEventListener('click', () => document.getElementById('assets-overlay').classList.remove('open'));
 
   // Edit User (Department / Cost Center) modal — linked fields.
