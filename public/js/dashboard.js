@@ -155,7 +155,7 @@ function renderBreakdowns(stats, scopedTo) {
     if (x[0] === 'Not set') return 1;
     if (y[0] === 'Not set') return -1;
     return typeRank(x[0]) - typeRank(y[0]) || y[1].total - x[1].total;
-  }).map(([name, t]) => ({ name, t, href: name === 'Not set' ? '' : invLink({ asset_type: name, country: scope, location: dashSite }) }));
+  }).map(([name, t]) => ({ name, t, href: invLink({ asset_type: name === 'Not set' ? '__none' : name, country: scope, location: dashSite }) }));
   document.getElementById('bd-type-scope').textContent = scope ? `· ${scope}${dashSite ? ' · ' + dashSite : ''}` : '· all countries';
   document.getElementById('bd-type').innerHTML = breakdownTable('Asset Type', tEntries);
 }
