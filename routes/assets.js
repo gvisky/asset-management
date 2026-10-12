@@ -20,6 +20,16 @@ const NO_FLAG_TYPES = ['camera', 'data center', 'ip phone', 'license', 'live str
 const NOT_FLAGGED_SQL =
   `(asset_type IS NULL OR asset_type = '' OR LOWER(asset_type) NOT IN (${NO_FLAG_TYPES.map(() => '?').join(',')}))`;
 
+// PC No (computer_no) and AD Name are only required for laptops and desktops.
+const NEEDS_PC_AD_SQL = `LOWER(COALESCE(asset_type, '')) IN ('laptop', 'desktop')`;
+const MISSING_PC_AD_SQL = `(${NEEDS_PC_AD_SQL} AND (
+      computer_no IS NULL OR computer_no = '' OR
+      (status = 'Active' AND (ad_name IS NULL OR ad_name = ''))))`;
+
+// Asset types listed first everywhere (then the rest).
+const TYPE_ORDER_SQL = `CASE LOWER(asset_type) WHEN 'laptop' THEN 0 WHEN 'desktop' THEN 1
+  WHEN 'mobile phone' THEN 2 WHEN 'phone' THEN 2 WHEN 'ip phone' THEN 3 ELSE 9 END`;
+
 const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
 // Only this account may edit the History Usage audit log (configurable via env).
@@ -84,8 +94,7 @@ router.get('/', wrap(async (req, res) => {
     conditions.push(`(
       serial_no   IS NULL OR serial_no   = '' OR
       asset_code  IS NULL OR asset_code  = '' OR
-      computer_no IS NULL OR computer_no = '' OR
-      (status = 'Active' AND (ad_name IS NULL OR ad_name = '')) OR
+      ${MISSING_PC_AD_SQL} OR
       serial_no IN (SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${dupCountry} GROUP BY serial_no HAVING COUNT(*) > 1)
     )`);
     if (cf.clause) params.push(...cf.params);
@@ -98,7 +107,7 @@ router.get('/', wrap(async (req, res) => {
       (ad_name <> '' AND NOT EXISTS (SELECT 1 FROM personnel p WHERE instr(p.email,'@') > 0
           AND LOWER(substr(p.email, 1, instr(p.email,'@') - 1)) = LOWER(assets.ad_name)))
       OR
-      (status = 'Active' AND (ad_name IS NULL OR ad_name = '') AND ${NOT_FLAGGED_SQL})
+      (status = 'Active' AND (ad_name IS NULL OR ad_name = '') AND ${NEEDS_PC_AD_SQL} AND ${NOT_FLAGGED_SQL})
     )`);
     params.push(...NO_FLAG_TYPES);
   }
@@ -111,7 +120,7 @@ router.get('/', wrap(async (req, res) => {
   const adReasonSel = ad_issue ? `, CASE
       WHEN ad_name <> '' AND NOT EXISTS (SELECT 1 FROM personnel p WHERE instr(p.email,'@') > 0
           AND LOWER(substr(p.email, 1, instr(p.email,'@') - 1)) = LOWER(assets.ad_name)) THEN 'unmatched'
-      WHEN (ad_name IS NULL OR ad_name = '') THEN 'missing'
+      WHEN (ad_name IS NULL OR ad_name = '') AND ${NEEDS_PC_AD_SQL} THEN 'missing'
       ELSE '' END AS ad_issue_reason` : '';
 
   const totalRow = await get(`SELECT COUNT(*) as cnt FROM assets ${where}`, params);
@@ -167,8 +176,7 @@ router.get('/stats', wrap(async (req, res) => {
   const incCond = [...liveCond, `(
       serial_no   IS NULL OR serial_no   = '' OR
       asset_code  IS NULL OR asset_code  = '' OR
-      computer_no IS NULL OR computer_no = '' OR
-      (status = 'Active' AND (ad_name IS NULL OR ad_name = ''))
+      ${MISSING_PC_AD_SQL}
     )`, NOT_FLAGGED_SQL];
   const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, [...lp, ...NO_FLAG_TYPES])).cnt);
 
@@ -201,7 +209,7 @@ router.get('/top-models', wrap(async (req, res) => {
 
   const assetTypes = (await all(
     `SELECT asset_type AS type, COUNT(*) AS cnt FROM assets ${baseWhere} AND asset_type <> ''
-       GROUP BY asset_type ORDER BY cnt DESC`, bp)).map(r => ({ type: r.type, count: Number(r.cnt) }));
+       GROUP BY asset_type ORDER BY ${TYPE_ORDER_SQL}, cnt DESC`, bp)).map(r => ({ type: r.type, count: Number(r.cnt) }));
 
   const names = assetTypes.map(t => t.type);
   let selected = (req.query.asset_type || '').trim();
@@ -261,7 +269,7 @@ router.get('/filters', wrap(async (req, res) => {
   // Asset types (grouped) with their count.
   const assetTypes = (await all(
     `SELECT asset_type AS v, COUNT(*) AS cnt FROM assets WHERE deleted_at IS NULL AND asset_type <> ''${extra}
-       GROUP BY asset_type ORDER BY asset_type COLLATE NOCASE`, cf.params
+       GROUP BY asset_type ORDER BY ${TYPE_ORDER_SQL}, asset_type COLLATE NOCASE`, cf.params
   )).map(r => ({ type: r.v, count: Number(r.cnt) }));
   // Global users get the full country list; scoped users get only their own.
   const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
@@ -280,12 +288,11 @@ router.get('/incomplete', wrap(async (req, res) => {
   const dupSet = new Set(dups);
 
   // Assets missing a key identifier, OR an Active asset with no AD Name.
-  // (Broken/Stock assets don't need an AD Name.)
+  // PC No / AD Name only count for laptops & desktops; Broken/Stock assets don't need an AD Name.
   const cond = ['deleted_at IS NULL', `(
       serial_no IS NULL OR serial_no='' OR
       asset_code IS NULL OR asset_code='' OR
-      computer_no IS NULL OR computer_no='' OR
-      (status = 'Active' AND (ad_name IS NULL OR ad_name=''))
+      ${MISSING_PC_AD_SQL}
     )`];
   if (cf.clause) cond.push(cf.clause);
   cond.push(NOT_FLAGGED_SQL);

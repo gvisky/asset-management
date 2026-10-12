@@ -154,7 +154,7 @@ function renderBreakdowns(stats, scopedTo) {
   const tEntries = [...byType.entries()].sort((x, y) => {
     if (x[0] === 'Not set') return 1;
     if (y[0] === 'Not set') return -1;
-    return y[1].total - x[1].total;
+    return typeRank(x[0]) - typeRank(y[0]) || y[1].total - x[1].total;
   }).map(([name, t]) => ({ name, t, href: name === 'Not set' ? '' : invLink({ asset_type: name, country: scope, location: dashSite }) }));
   document.getElementById('bd-type-scope').textContent = scope ? `· ${scope}${dashSite ? ' · ' + dashSite : ''}` : '· all countries';
   document.getElementById('bd-type').innerHTML = breakdownTable('Asset Type', tEntries);
@@ -377,14 +377,11 @@ function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').r
 let _naRows = null;
 let _naCountry = null;     // null = follow the dashboard country switch
 let _naIssue = '';         // '' = all issues
+let _naSite = '';          // '' = all sites, else 'Office' / 'Factory' (Vietnam)
+let _naType = '';          // '' = all asset types
 
-const naMissing = (v) => (v === null || v === undefined || String(v).trim() === '');
 function naIssues(a) {
-  const tags = [];
-  if (naMissing(a.serial_no))   tags.push('Serial');
-  if (naMissing(a.asset_code))  tags.push('Code');
-  if (naMissing(a.computer_no)) tags.push('PC No');
-  if (a.status === 'Active' && naMissing(a.ad_name)) tags.push('AD Name');
+  const tags = missingInfoTags(a);
   if (a.dup_serial) tags.push('Dup Serial');
   return tags;
 }
@@ -395,7 +392,7 @@ async function loadAlerts() {
   try {
     const order = (c) => { const i = COUNTRIES.indexOf(c); return i < 0 ? COUNTRIES.length : i; };
     _naRows = (await apiGet('/api/assets/incomplete')).map(a => ({ ...a, _issues: naIssues(a) }))
-      .sort((x, y) => order(x.country) - order(y.country) || x.id - y.id);
+      .sort((x, y) => order(x.country) - order(y.country) || typeRank(x.asset_type) - typeRank(y.asset_type) || x.id - y.id);
     renderNeedsAttention();
   } catch (err) {
     console.error(err);
@@ -422,12 +419,39 @@ function renderNeedsAttention() {
     tabs.innerHTML = [['', 'All'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
       `<button type="button" role="tab" class="seg-btn${v === country ? ' active' : ''}" data-country="${v}" aria-selected="${v === country}">${label}<span class="seg-count">${fmt(inCountry(v).length)}</span></button>`).join('');
     tabs.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
-      _naCountry = btn.dataset.country; _naIssue = ''; renderNeedsAttention();
+      _naCountry = btn.dataset.country; _naIssue = '';
+      if (_naCountry && _naCountry !== SITE_COUNTRY) _naSite = '';
+      renderNeedsAttention();
     }));
   }
 
-  // Issue chips (counts within the selected country) — click to filter.
-  const rowsC = inCountry(country);
+  // Office / Factory buttons (Vietnam only — shown for All and Vietnam).
+  const siteEl = document.getElementById('na-site');
+  const showSite = !country || country === SITE_COUNTRY;
+  if (!showSite) _naSite = '';
+  const inSite = (rows, site) => rows.filter(a => !site || (a.country === SITE_COUNTRY && a.location === site));
+  const rowsCountry = inCountry(country);
+  siteEl.style.display = showSite ? '' : 'none';
+  siteEl.innerHTML = showSite ? [['', 'All sites'], ...SITES.map(x => [x, 'VN ' + x])].map(([v, label]) =>
+    `<button type="button" role="tab" class="seg-btn${v === _naSite ? ' active' : ''}" data-site="${v}" aria-selected="${v === _naSite}">${label}<span class="seg-count">${fmt(inSite(rowsCountry, v).length)}</span></button>`).join('') : '';
+  siteEl.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
+    _naSite = btn.dataset.site; renderNeedsAttention();
+  }));
+
+  // Asset type filter — Laptop / Desktop / Phone first, counts within country + site.
+  const rowsSite = inSite(rowsCountry, _naSite);
+  const typeCounts = tally(rowsSite.map(a => ({ ...a, cnt: 1 })), a => a.asset_type || '');
+  const types = [...typeCounts.keys()].filter(Boolean)
+    .sort((x, y) => typeRank(x) - typeRank(y) || typeCounts.get(y).total - typeCounts.get(x).total);
+  if (_naType && !typeCounts.has(_naType === '__none' ? '' : _naType)) _naType = '';
+  const typeSel = document.getElementById('na-type');
+  typeSel.innerHTML = `<option value="">All asset types (${fmt(rowsSite.length)})</option>` +
+    types.map(t => `<option value="${escHtml(t)}"${t === _naType ? ' selected' : ''}>${escHtml(t)} (${fmt(typeCounts.get(t).total)})</option>`).join('') +
+    (typeCounts.has('') ? `<option value="__none"${_naType === '__none' ? ' selected' : ''}>Type not set (${fmt(typeCounts.get('').total)})</option>` : '');
+  typeSel.onchange = () => { _naType = typeSel.value; _naIssue = ''; renderNeedsAttention(); };
+
+  // Issue chips (counts within country + site + type) — click to filter.
+  const rowsC = rowsSite.filter(a => !_naType || (_naType === '__none' ? !a.asset_type : a.asset_type === _naType));
   const issueCount = (t) => rowsC.filter(a => a._issues.includes(t)).length;
   const issuesEl = document.getElementById('na-issues');
   issuesEl.innerHTML = NA_ISSUES.filter(t => issueCount(t)).map(t =>
@@ -436,7 +460,8 @@ function renderNeedsAttention() {
   issuesEl.querySelectorAll('.na-chip').forEach(btn => btn.addEventListener('click', () => {
     _naIssue = _naIssue === btn.dataset.issue ? '' : btn.dataset.issue; renderNeedsAttention();
   }));
-  document.getElementById('na-open').href = invLink({ incomplete: '1', country });
+  document.getElementById('na-open').href = invLink({ incomplete: '1', country: _naSite ? SITE_COUNTRY : country,
+    location: _naSite, asset_type: _naType === '__none' ? '' : _naType });
 
   const rows = _naIssue ? rowsC.filter(a => a._issues.includes(_naIssue)) : rowsC;
   if (!rows.length) {
