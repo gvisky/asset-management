@@ -7,5 +7,7 @@ npm-debug.log
 # Corporate financial budget data — kept out of Git (loaded locally only)
 db/budget-seed.json
 .DS_Store
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 backups/
