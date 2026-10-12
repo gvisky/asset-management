@@ -148,6 +148,12 @@ router.get('/stats', wrap(async (req, res) => {
 
   const recentlyAdded = await all(`SELECT * FROM assets ${live} ORDER BY id DESC LIMIT 5`, lp);
 
+  // Country × Asset Type × Status counts — the Dashboard builds its breakdown tables from this.
+  const breakdown = (await all(
+    `SELECT country, COALESCE(asset_type, '') AS asset_type, status, COUNT(*) as cnt
+       FROM assets ${live} GROUP BY country, COALESCE(asset_type, ''), status`, lp
+  )).map(r => ({ country: r.country || '', asset_type: r.asset_type || '', status: r.status || '', cnt: Number(r.cnt) }));
+
   // Deleted + incomplete counts respect the same country scope.
   const delCond = ['deleted_at IS NOT NULL']; const dp = [];
   if (cf.clause) { delCond.push(cf.clause); dp.push(...cf.params); }
@@ -170,7 +176,7 @@ router.get('/stats', wrap(async (req, res) => {
   if (cf.clause) { repCond.push(cf.clause); rp.push(...cf.params); }
   const openRepairs = Number((await get(`SELECT COUNT(*) as cnt FROM maintenance_log WHERE ${repCond.join(' AND ')}`, rp)).cnt);
 
-  res.json({ total, byStatus, byLocation, byCountry, byBrand, recentlyAdded, deletedCount, incompleteCount,
+  res.json({ total, byStatus, byLocation, byCountry, byBrand, breakdown, recentlyAdded, deletedCount, incompleteCount,
              warrantyExpiring, openRepairs, scope: scopeOf(req) });
 }));
 
