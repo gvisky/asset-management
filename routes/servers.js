@@ -50,7 +50,7 @@ router.get('/', wrap(async (req, res) => {
   const where = 'WHERE ' + conditions.join(' AND ');
   const offset = (Number(page) - 1) * Number(limit);
   const totalRow = await get(`SELECT COUNT(*) as cnt FROM servers ${where}`, params);
-  const rows = await all(`SELECT * FROM servers ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+  const rows = await all(`SELECT * FROM servers ${where} ORDER BY id ASC LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]);
   res.json({ total: Number(totalRow.cnt), page: Number(page), limit: Number(limit), data: rows });
 }));
