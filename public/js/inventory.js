@@ -153,7 +153,7 @@ async function loadAssets(page = 1) {
 function renderTable(rows) {
   const tbody = document.getElementById('assets-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="13"><div class="empty-state">
       <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
       <p>No assets found.</p>
     </div></td></tr>`;
@@ -174,6 +174,7 @@ function renderTable(rows) {
       <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${a.user_name || '—'}</td>
       <td class="text-muted text-sm">${adNameCell(a)}</td>
       <td class="text-muted text-sm">${a.serial_no || '—'}</td>
+      <td class="text-sm" title="${a.purchase_date ? 'Purchased ' + esc(a.purchase_date) : 'No purchase date'}">${yearsInUse(a.purchase_date) || '—'}</td>
       <td>${statusBadge(a.status)}</td>
       <td>
         <div style="display:flex;gap:6px">
@@ -190,6 +191,16 @@ function renderTable(rows) {
       </td>
     </tr>
   `).join('');
+}
+
+// Years in use = Purchase Date (YYYY-MM-DD) → today, e.g. "4.3 yrs". '' when no valid date.
+function yearsInUse(purchaseDate) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(purchaseDate || '');
+  if (!m) return '';
+  const bought = new Date(+m[1], +m[2] - 1, +m[3]);
+  const years = (Date.now() - bought.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+  if (isNaN(years) || years < 0) return '';
+  return `${years.toFixed(1)} yrs`;
 }
 
 function esc(str) {
@@ -267,6 +278,7 @@ async function onView(id) {
       ['AD Name',       a.ad_name],
       ['Date Assigned', a.date_assigned],
       ['Purchase Date', a.purchase_date],
+      ['Years in Use',  yearsInUse(a.purchase_date)],
       ['Warranty',      warrantyBadge(a.warranty_expiry) || a.warranty_expiry],
       ['Vendor',        a.vendor],
       ['Cost',          a.cost],
