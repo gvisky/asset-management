@@ -178,28 +178,8 @@ async function loadStats() {
     renderBreakdowns(stats, scopedTo);
     renderLegends();
 
-    document.getElementById('s-factory').textContent = fmt(stats.byLocation.Factory);
-    document.getElementById('s-office').textContent  = fmt(stats.byLocation.Office);
-    const warrEl = document.getElementById('s-warranty');
-    const repEl  = document.getElementById('s-repairs');
-    if (warrEl) warrEl.textContent = stats.warrantyExpiring || 0;
-    if (repEl)  repEl.textContent  = stats.openRepairs || 0;
-
-    // Licenses metric comes from its own endpoint (separate module).
-    const licEl = document.getElementById('s-licenses');
-    if (licEl) {
-      apiGet('/api/licenses/stats')
-        .then(ls => { licEl.textContent = ls.expiring || 0; })
-        .catch(() => { licEl.textContent = '0'; });
-    }
-
-    // Server count from the server-inventory module.
-    const srvEl = document.getElementById('s-servers');
-    if (srvEl) {
-      apiGet('/api/servers/stats')
-        .then(ss => { srvEl.textContent = ss.total || 0; })
-        .catch(() => { srvEl.textContent = '0'; });
-    }
+    renderOps(stats, scopedTo);
+    renderPersonnel();
 
     // Top Models — by selected Asset Type, split by country (loaded separately).
     loadTopModels();
@@ -227,35 +207,100 @@ async function loadStats() {
   }
 }
 
-// Load the User Inventory (personnel) summary cards for the dashboard.
+// Shared tile (same look as the asset KPI tiles). `sub` is ready-made HTML.
+function kpiTile({ label, color, value, href, sub }) {
+  return `<div class="kpi" style="--kpi-color:${color}">
+    <a class="kpi-main" href="${href}">
+      <div class="kpi-label"><span class="kpi-dot"></span>${label}</div>
+      <div class="kpi-value">${fmt(value)}</div>
+    </a>
+    <div class="kpi-sub kpi-note">${sub}</div>
+  </div>`;
+}
+const statusNote = (t) => STATUSES.map(s => `<b>${fmt(t[s.key])}</b> ${s.key.toLowerCase()}`).join(' · ');
+
+// ── Location & Operations: VN Office / VN Factory (status split) + warranty, repairs, licenses, servers ──
+let _opsExtra = { lic: null, srv: null };
+function renderOps(stats, scopedTo) {
+  const grid = document.getElementById('ops-grid');
+  if (!grid) return;
+  const scope = scopedTo || dashScope;
+  const showSites = !scope || scope === SITE_COUNTRY;
+  const sites = showSites ? siteEntries(SITE_COUNTRY) : [];
+  const site = (name) => (sites.find(([s]) => s === name) || [name, EMPTY()])[1];
+  const lic = _opsExtra.lic, srv = _opsExtra.srv;
+  const tiles = [];
+  if (showSites) {
+    tiles.push({ label: 'VN Office',  color: '#0284c7', value: site('Office').total,
+      href: invLink({ country: SITE_COUNTRY, location: 'Office' }),  sub: statusNote(site('Office')) });
+    tiles.push({ label: 'VN Factory', color: '#7c3aed', value: site('Factory').total,
+      href: invLink({ country: SITE_COUNTRY, location: 'Factory' }), sub: statusNote(site('Factory')) });
+  }
+  tiles.push({ label: 'Warranty ≤90d', color: '#d97706', value: stats.warrantyExpiring || 0, href: '/maintenance.html',
+    sub: srv ? `assets · servers <b>${fmt(srv.warrantyExpiring)}</b>` : 'assets' });
+  tiles.push({ label: 'Open Repairs', color: '#dc2626', value: stats.openRepairs || 0, href: '/maintenance.html',
+    sub: 'in maintenance log' });
+  tiles.push({ label: 'Licenses ≤30d', color: '#0891b2', value: lic ? lic.expiring : 0, href: '/licenses.html',
+    sub: lic ? `of <b>${fmt(lic.total)}</b> licenses` : '' });
+  tiles.push({ label: 'Servers', color: '#1a56db', value: srv ? srv.total : 0, href: '/server-inventory.html',
+    sub: srv ? (Object.entries(srv.byStatus || {}).map(([k, v]) => `<b>${fmt(v)}</b> ${escHtml(k).toLowerCase()}`).join(' · ') || '—') : '…' });
+  grid.innerHTML = tiles.map(kpiTile).join('');
+
+  // Licenses / servers come from their own modules — fetch, then re-render once.
+  const want = scope || '';
+  if (!lic && !_opsExtra.licPending) {
+    _opsExtra.licPending = true;
+    apiGet('/api/licenses/stats').then(r => { _opsExtra.lic = r; renderOps(stats, scopedTo); }).catch(() => {});
+  }
+  if ((!srv || srv._scope !== want) && _opsExtra.srvPending !== want) {
+    _opsExtra.srvPending = want;
+    apiGet('/api/servers/stats' + (want ? '?country=' + encodeURIComponent(want) : ''))
+      .then(r => { r._scope = want; _opsExtra.srv = r; if (want === (scopedTo || dashScope || '')) renderOps(stats, scopedTo); })
+      .catch(() => {});
+  }
+}
+
+// ── User Inventory (personnel) tiles — split by country, follow the country switch ──
+let _personnel = null;
 async function loadPersonnelSummary() {
   try {
-    const s = await apiGet('/api/personnel/summary');
-    const grid = document.getElementById('personnel-grid');
-    const cards = [
-      ['Total People',   s.total,                      '#e0e7ff', '#4338ca', 'all'],
-      ['Hayat: No',      s.noHayat || 0,               '#fee2e2', '#dc2626', 'No Hayat Member'],
-      ['Leaving set',    s.leaving || 0,               '#fef3c7', '#d97706', ''],
-      ['To Be Delete',   s.byStatus['to be delete'] || 0,   '#fef9c3', '#ca8a04', 'to be delete'],
-      ['Confirmed Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c', 'pending delete'],
-      ['Deleted',        s.byStatus['deleted'] || 0,        '#fee2e2', '#b91c1c', 'deleted'],
-    ];
-    grid.innerHTML = cards.map(([label, val, bg, fg, statusFilter]) => {
-      const href = statusFilter === 'No Hayat Member'
-        ? `/user-inventory.html?user_type=${encodeURIComponent(statusFilter)}`
-        : statusFilter ? `/user-inventory.html?status=${encodeURIComponent(statusFilter)}`
-        : `/user-inventory.html`;
-      return `<a class="stat-card stat-mini" href="${href}">
-        <div class="stat-icon" style="background:${bg}">
-          <svg width="22" height="22" fill="none" stroke="${fg}" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-        </div>
-        <div><div class="stat-label">${label}</div><div class="stat-value">${val}</div></div>
-      </a>`;
-    }).join('');
+    _personnel = await apiGet('/api/personnel/summary');
     document.getElementById('personnel-section').style.display = '';
+    renderPersonnel();
   } catch (e) {
     // user without personnel access — leave the section hidden
   }
+}
+
+function renderPersonnel() {
+  const grid = document.getElementById('personnel-grid');
+  if (!grid || !_personnel) return;
+  const rows = _personnel.breakdown || [];
+  const scope = (window.CURRENT_USER && window.CURRENT_USER.country) || dashScope;
+  const metrics = [
+    { label: 'Total People',     color: '#4338ca', test: () => true,                              params: {} },
+    { label: 'Hayat: No',        color: '#dc2626', test: r => r.user_type === 'No Hayat Member', params: { user_type: 'No Hayat Member' } },
+    { label: 'Leaving set',      color: '#d97706', test: r => r.leaving === 1,                    params: {} },
+    { label: 'To Be Delete',     color: '#ca8a04', test: r => r.status === 'to be delete',        params: { status: 'to be delete' } },
+    { label: 'Confirmed Delete', color: '#ea580c', test: r => r.status === 'pending delete',      params: { status: 'pending delete' } },
+    { label: 'Deleted',          color: '#b91c1c', test: r => r.status === 'deleted',             params: { status: 'deleted' } },
+  ];
+  const count = (m, country) => rows.filter(r => (!country || r.country === country) && m.test(r)).reduce((n, r) => n + r.cnt, 0);
+  const uiLink = (params) => '/user-inventory.html' + (Object.values(params).some(Boolean)
+    ? '?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString() : '');
+  const totalIn = (country) => count(metrics[0], country);
+
+  grid.innerHTML = metrics.map(m => {
+    const value = count(m, scope);
+    let sub;
+    if (scope) {
+      const tot = totalIn(scope);
+      sub = m === metrics[0] ? escHtml(scope) : `${tot ? ((value / tot) * 100).toFixed(1) : '0.0'}% of ${escHtml(scope)}`;
+    } else {
+      sub = COUNTRIES.map(c => `<a class="kpi-split" href="${uiLink({ ...m.params, country: c })}" title="${c}">${COUNTRY_SHORT[c]} <b>${fmt(count(m, c))}</b></a>`).join('');
+    }
+    return kpiTile({ label: m.label, color: m.color, value, href: uiLink({ ...m.params, country: scope }), sub });
+  }).join('');
 }
 
 // ── Top Models box — models + per-country quantity for a chosen Asset Type ────

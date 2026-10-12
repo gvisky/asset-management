@@ -193,7 +193,13 @@ router.get('/summary', wrap(async (req, res) => {
   const leaving = Number((await get(
     `SELECT COUNT(*) AS c FROM personnel ${cond ? cond + ' AND' : 'WHERE'} leaving_date <> ''`, params)).c);
 
-  res.json({ total, byStatus, byCountry, noHayat, leaving });
+  // Country × Status × User Type × Leaving counts — the Dashboard splits its tiles by country from this.
+  const breakdown = (await all(
+    `SELECT country, status, user_type, CASE WHEN leaving_date <> '' THEN 1 ELSE 0 END AS leaving, COUNT(*) AS c
+       FROM personnel ${cond} GROUP BY 1, 2, 3, 4`, params
+  )).map(r => ({ country: r.country || '', status: r.status || '', user_type: r.user_type || '', leaving: Number(r.leaving), cnt: Number(r.c) }));
+
+  res.json({ total, byStatus, byCountry, noHayat, leaving, breakdown });
 }));
 
 // ── GET /api/personnel/meta — last import + monthly reminder (for IT) ──────────
