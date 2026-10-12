@@ -215,6 +215,11 @@ a.bar-item:hover .bar-fill { filter: brightness(1.1); }
 .na-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; border-bottom: 1px solid var(--border); background: #fafbfc; }
 .seg-sm .seg-btn { padding: 4px 10px; font-size: 12px; }
 #na-type { min-width: 170px; }
+.na-fields { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.na-field { display: inline-flex; align-items: center; border: 1px solid #fca5a5; border-radius: 6px; overflow: hidden; background: #fff; }
+.na-field span { background: #fee2e2; color: #991b1b; font-size: 11px; font-weight: 600; padding: 5px 7px; white-space: nowrap; }
+.na-field input { border: 0; outline: 0; font: inherit; font-size: 12.5px; padding: 4px 8px; width: 130px; }
+.na-field:focus-within { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(26,86,219,.15); }
 .na-issues { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
 .na-chip { border: 1px solid var(--border); background: var(--card-bg); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; }
 .na-chip b { color: var(--text); margin-left: 3px; }

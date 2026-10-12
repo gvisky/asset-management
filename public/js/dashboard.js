@@ -385,11 +385,48 @@ function naIssues(a) {
   if (a.dup_serial) tags.push('Dup Serial');
   return tags;
 }
-const NA_ISSUES = ['Code', 'Serial', 'PC No', 'AD Name', 'Dup Serial'];
+const NA_ISSUES = ['Asset code', 'Serial', 'PC No', 'AD Name', 'Dup Serial'];
+// Missing-info tag → asset field, for in-place editing.
+const NA_FIELDS = { 'Serial': 'serial_no', 'Asset code': 'asset_code', 'PC No': 'computer_no', 'AD Name': 'ad_name' };
+const NA_PROTECTED = ['serial_no', 'asset_code'];   // IT-only fields (server: PROTECTED_FIELDS)
+
+// Can the current user fill this field in place? Mirrors the server's edit rules.
+function naEditable(a, field) {
+  if (!canEdit()) return { ok: false, why: 'View only' };
+  if (NA_PROTECTED.includes(field)) {
+    if (!isIT()) return { ok: false, why: 'Only IT members can edit Serial / Asset code' };
+    if (a.fields_locked) return { ok: false, why: 'Locked — an IT admin must unlock this record first' };
+  }
+  if (field === 'ad_name' && a.user_locked) return { ok: false, why: 'Locked — an IT admin must unlock via History Usage' };
+  return { ok: true };
+}
+
+// Save the values typed in one Needs Attention row (merged into the full record → normal PUT rules apply).
+async function naSaveRow(tr) {
+  const id = tr.dataset.id;
+  const inputs = [...tr.querySelectorAll('input[data-field]')].filter(i => i.value.trim());
+  if (!inputs.length) { showToast('Type the missing value first', 'error'); return; }
+  const btn = tr.querySelector('.na-save');
+  btn.disabled = true;
+  try {
+    const row = await apiGet(`/api/assets/${id}`);
+    inputs.forEach(i => { row[i.dataset.field] = i.value.trim(); });
+    await apiPut(`/api/assets/${id}`, row);
+    showToast(`Saved #${id}`);
+    await loadAlerts();
+  } catch (err) {
+    let msg = 'Could not save';
+    try { msg = JSON.parse(err.message).error || msg; } catch {}
+    showToast(msg, 'error');
+    btn.disabled = false;
+  }
+}
 
 async function loadAlerts() {
   const tbody = document.getElementById('alert-tbody');
   try {
+    // Edit rights decide which missing fields are editable in place — make sure the user is known.
+    if (!window.CURRENT_USER && typeof ensureAuth === 'function') await ensureAuth();
     const order = (c) => { const i = COUNTRIES.indexOf(c); return i < 0 ? COUNTRIES.length : i; };
     _naRows = (await apiGet('/api/assets/incomplete')).map(a => ({ ...a, _issues: naIssues(a) }))
       .sort((x, y) => order(x.country) - order(y.country) || typeRank(x.asset_type) - typeRank(y.asset_type) || x.id - y.id);
@@ -473,27 +510,46 @@ function renderNeedsAttention() {
   }
 
   tbody.innerHTML = rows.map(a => {
-    let tagHtml = a._issues.filter(t => t !== 'Dup Serial').map(t =>
-      `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
+    // Each missing field is an input you can fill right here (or a red tag when you can't edit it).
+    let tagHtml = a._issues.filter(t => t !== 'Dup Serial').map(t => {
+      const field = NA_FIELDS[t];
+      const can = naEditable(a, field);
+      return can.ok
+        ? `<label class="na-field"><span>${t}</span><input data-field="${field}" placeholder="Enter ${t}" autocomplete="off"></label>`
+        : `<span class="badge badge-broken" title="${escHtml(can.why)}" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`;
+    }).join('');
     if (a.dup_serial) {
       const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');
       const title = others ? `Same serial "${a.serial_no}" as: ${others}` : `Duplicate serial "${a.serial_no}"`;
       tagHtml += `<span class="badge" title="${escHtml(title)}" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial: ${escHtml(a.serial_no || '?')}</span>`;
     }
+    const hasInputs = tagHtml.includes('data-field=');
     const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
     const site = a.country === SITE_COUNTRY && SITES.includes(a.location) ? ` · ${a.location}` : '';
     return `
-      <tr>
+      <tr data-id="${a.id}">
         <td style="min-width:140px">
           <div class="truncate" title="${escHtml(label)}" style="max-width:220px">${escHtml(label)}</div>
           <span class="text-muted text-sm">#${a.id}${a.asset_type ? ' · ' + escHtml(a.asset_type) : ''}</span>
         </td>
         <td class="text-sm">${escHtml(a.country || '—')}<span class="text-muted">${site}</span></td>
         <td class="text-sm">${escHtml(a.user_name || '—')}</td>
-        <td>${tagHtml}</td>
-        <td style="text-align:right"><a class="btn btn-primary btn-sm" href="/inventory.html?edit=${a.id}" title="Fill in missing info">Fill</a></td>
+        <td><div class="na-fields">${tagHtml}</div></td>
+        <td style="text-align:right;white-space:nowrap">
+          ${hasInputs ? '<button type="button" class="btn btn-primary btn-sm na-save">Save</button>' : ''}
+          <a class="btn btn-ghost btn-sm" href="/inventory.html?edit=${a.id}" title="Open the full edit form">Details</a>
+        </td>
       </tr>`;
   }).join('');
+
+  tbody.querySelectorAll('tr[data-id]').forEach(tr => {
+    const btn = tr.querySelector('.na-save');
+    if (!btn) return;
+    btn.addEventListener('click', () => naSaveRow(tr));
+    tr.querySelectorAll('input[data-field]').forEach(i => i.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); naSaveRow(tr); }
+    }));
+  });
 }
 
 // ── Save handler (modal save on dashboard page) ───────────────────────────────

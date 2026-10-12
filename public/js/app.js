@@ -35,7 +35,7 @@ function missingInfoTags(a) {
   const miss = (v) => (v === null || v === undefined || String(v).trim() === '');
   const tags = [];
   if (miss(a.serial_no))  tags.push('Serial');
-  if (miss(a.asset_code)) tags.push('Code');
+  if (miss(a.asset_code)) tags.push('Asset code');
   if (needsPcAd(a.asset_type)) {
     if (miss(a.computer_no)) tags.push('PC No');
     if (a.status === 'Active' && miss(a.ad_name)) tags.push('AD Name');
