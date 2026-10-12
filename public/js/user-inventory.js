@@ -340,8 +340,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load the table independently of the filter dropdown — a slow/failed
   // /filters call must never leave the page stuck on "Loading…".
+  // Filters passed in the URL (e.g. from the Dashboard tiles): ?status= ?user_type= ?country=
+  const urlP = new URLSearchParams(window.location.search);
+  if (urlP.get('status'))    document.getElementById('filter-status').value = urlP.get('status');
+  if (urlP.get('user_type')) document.getElementById('filter-usertype').value = urlP.get('user_type');
   loadPeople();
-  loadCountries();
+  loadCountries().then(() => {
+    const c = urlP.get('country');
+    if (c) { document.getElementById('filter-country').value = c; loadPeople(1); }
+  });
   loadMeta();
   loadSummary();
 
