@@ -130,7 +130,7 @@ router.get('/stats', wrap(async (req, res) => {
   const lp = [];
   if (cf.clause) { liveCond.push(cf.clause); lp.push(...cf.params); }
   // Optional site filter (Dashboard: Vietnam → Office / Factory).
-  const site = ['Office', 'Factory'].includes(req.query.location) ? req.query.location : '';
+  const site = SITES.includes(req.query.location) ? req.query.location : '';
   if (site) { liveCond.push('location = ?'); lp.push(site); }
   const live = 'WHERE ' + liveCond.join(' AND ');
 
@@ -426,6 +426,10 @@ router.get('/:id', wrap(async (req, res) => {
   res.json(row);
 }));
 
+// Office / Factory sites — Vietnam only.
+const SITE_COUNTRY = 'Vietnam';
+const SITES = ['Office', 'Factory'];
+
 // Resolve the country to store for a create/update, honouring the user's scope.
 function resolveCountry(req, requested) {
   const scope = scopeOf(req);
@@ -447,6 +451,8 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   } = req.body;
 
   const finalCountry = resolveCountry(req, country);
+  // Office / Factory sites exist only in Vietnam.
+  const loc = finalCountry === SITE_COUNTRY ? location : '';
 
   // Record creation in the history log so the new asset shows up as a pending SAP update.
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -460,7 +466,7 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
        purchase_date, warranty_expiry, vendor, cost, po_number, sap_confirmed,
        cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc, asset_type)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`,
-    [location, finalCountry, department, computer_no, brand_model, date_assigned,
+    [loc, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, hist, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number,
      cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc, normalizeAssetType(asset_type)]);
@@ -558,6 +564,9 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 
   // Scoped users can't move an asset out of their country.
   const finalCountry = scope ? scope : resolveCountry(req, country !== undefined ? country : existing.country);
+  // Office / Factory sites exist only in Vietnam: outside Vietnam clear a site value, otherwise keep what's stored.
+  const loc = finalCountry === SITE_COUNTRY ? location
+    : (SITES.includes(existing.location) ? '' : existing.location);
 
   // ── Edit audit trail baked into history_usage ──────────────────────────────
   // Compare tracked fields and append a timestamped change line. The history
@@ -574,7 +583,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     cost_center: 'Cost Center', ecc_cc: 'ECC CC', asset_s4: 'Asset S4', asset_description: 'Asset Description', cost_center_desc: 'Cost Center Desc',
     asset_type: 'Asset Type',
   };
-  const incoming = { location, country: finalCountry, department, computer_no, brand_model, date_assigned,
+  const incoming = { location: loc, country: finalCountry, department, computer_no, brand_model, date_assigned,
     serial_no, mk, asset_code, user_name, ad_name, status, remark, purchase_date, warranty_expiry, vendor, cost, po_number,
     cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc,
     asset_type: asset_type !== undefined ? normalizeAssetType(asset_type) : undefined };
@@ -659,7 +668,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
       purchase_date = ?, warranty_expiry = ?, vendor = ?, cost = ?, po_number = ?, sap_confirmed = ?, fields_locked = ?,
       cost_center = ?, ecc_cc = ?, asset_s4 = ?, asset_description = ?, cost_center_desc = ?, asset_type = ?, user_locked = ?
     WHERE id = ? AND deleted_at IS NULL`,
-    [location, finalCountry, department, computer_no, brand_model, date_assigned,
+    [loc, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, newHistory, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number, sapConfirmed, lockNow,
      keep(cost_center, existing.cost_center), keep(ecc_cc, existing.ecc_cc), keep(asset_s4, existing.asset_s4),

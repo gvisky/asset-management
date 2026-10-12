@@ -8,7 +8,7 @@ const STATUSES = [
   { key: 'Stock',  color: '#d97706' },
 ];
 let dashScope = '';          // '' = all countries, else one country
-let dashSite = '';           // '' = all sites, else 'Office' / 'Factory' (countries that have sites, e.g. Vietnam)
+let dashSite = '';           // '' = all sites, else 'Office' / 'Factory' (Vietnam only)
 let allBreakdown = null;     // unfiltered country × site × type × status rows (for "Assets by Country")
 
 const SITES = ['Office', 'Factory'];
@@ -30,10 +30,8 @@ function tally(rows, keyFn) {
   return out;
 }
 
-// Does this country split its assets into Office / Factory sites?
-function hasSites(country) {
-  return (allBreakdown || []).some(r => r.country === country && SITES.includes(r.site));
-}
+// Only Vietnam has Office / Factory sites.
+function hasSites(country) { return country === SITE_COUNTRY; }
 // Site buckets for one country: Office, Factory, then "Site not set" (only if any).
 function siteEntries(country) {
   const bySite = tally((allBreakdown || []).filter(r => r.country === country), r => r.site);
@@ -405,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   saveBtn.addEventListener('click', async () => {
     const data = getFormData();
-    if (!data.location) { showToast('Please select a location', 'error'); return; }
+    if (locationApplies(data.country) && !data.location) { showToast('Please select a location (Office / Factory)', 'error'); return; }
     try {
       if (_saveMode === 'add') {
         await apiPost(API, data);

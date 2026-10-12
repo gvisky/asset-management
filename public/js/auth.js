@@ -181,6 +181,7 @@ function applyRoleGates() {
     const fc = document.getElementById('f-country');
     if (fc) { fc.value = myCountry; fc.disabled = true; }
   }
+  if (typeof syncLocationField === 'function') syncLocationField();
 
   if (canEdit()) return;
   // Viewers: hide all "add asset" buttons

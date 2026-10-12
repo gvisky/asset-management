@@ -108,6 +108,7 @@ async function loadFilters() {
       countrySel.style.display = 'none';
       const fc = document.getElementById('f-country');
       if (fc) { fc.value = myCountry; fc.disabled = true; }
+      if (!locationApplies(myCountry)) document.getElementById('filter-location').style.display = 'none';
     }
   } catch (err) {
     console.error('Failed to load filter options', err);
@@ -636,7 +637,16 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => loadAssets(1), 320);
   });
-  document.getElementById('filter-country').addEventListener('change',    () => loadAssets(1));
+  // Location (Office / Factory) only exists in Vietnam — hide that filter for Thailand / Malaysia.
+  const syncLocationFilter = () => {
+    const c = document.getElementById('filter-country').value || (window.CURRENT_USER && window.CURRENT_USER.country) || '';
+    const lf = document.getElementById('filter-location');
+    const applies = locationApplies(c);
+    lf.style.display = applies ? '' : 'none';
+    if (!applies) lf.value = '';
+  };
+  syncLocationFilter();
+  document.getElementById('filter-country').addEventListener('change',    () => { syncLocationFilter(); loadAssets(1); });
   document.getElementById('filter-location').addEventListener('change',   () => loadAssets(1));
   document.getElementById('filter-status').addEventListener('change',     () => loadAssets(1));
   document.getElementById('filter-brand').addEventListener('change',      () => loadAssets(1));
@@ -692,7 +702,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const saveBtn = document.getElementById('modal-save');
   saveBtn.addEventListener('click', async () => {
     const data = getFormData();
-    if (!data.location) { showToast('Please select a location', 'error'); return; }
+    if (locationApplies(data.country) && !data.location) { showToast('Please select a location (Office / Factory)', 'error'); return; }
     try {
       const id = document.getElementById('asset-id').value;
       if (editMode && id) {
