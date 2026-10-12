@@ -23,9 +23,29 @@ function statusBadge(status) {
 
 // Location badge HTML
 function locationBadge(loc) {
+  if (loc !== 'Office' && loc !== 'Factory') return '<span class="text-muted">—</span>';
   const cls = loc === 'Factory' ? 'badge-factory' : 'badge-office';
   return `<span class="badge ${cls}">${loc}</span>`;
 }
+
+// Office / Factory sites exist only in Vietnam — the asset form's Location field
+// is shown (and required) only when the asset's country is Vietnam.
+const SITE_COUNTRY = 'Vietnam';
+function locationApplies(country) { return !country || country === SITE_COUNTRY; }
+function syncLocationField() {
+  const loc = document.getElementById('f-location');
+  const fc = document.getElementById('f-country');
+  if (!loc) return;
+  const applies = locationApplies(fc ? fc.value : '');
+  const group = loc.closest('.form-group');
+  if (group) group.style.display = applies ? '' : 'none';
+  loc.required = applies;
+  if (!applies) loc.value = '';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const fc = document.getElementById('f-country');
+  if (fc) fc.addEventListener('change', syncLocationField);
+});
 
 // ── Modal helpers (shared form fields) ────────────────────────────────────────
 const FIELDS = [
@@ -53,6 +73,7 @@ function getFormData() {
     const el = document.getElementById('f-' + f);
     if (el) data[f] = el.value.trim();
   });
+  if (!locationApplies(data.country)) data.location = '';
   return data;
 }
 
@@ -63,6 +84,7 @@ function setFormData(asset) {
     if (!el) return;
     el.value = asset[f] !== undefined ? asset[f] : '';
   });
+  syncLocationField();
 }
 
 function clearForm() {
@@ -72,6 +94,11 @@ function clearForm() {
     if (!el) return;
     el.value = (f === 'status') ? 'Active' : (f === 'location') ? '' : '';
   });
+  // Country is a select without an empty option — keep the scoped user's country, else the first option.
+  const fc = document.getElementById('f-country');
+  const myCountry = window.CURRENT_USER && window.CURRENT_USER.country;
+  if (fc && myCountry) fc.value = myCountry;
+  syncLocationField();
 }
 
 // ── API helpers ────────────────────────────────────────────────────────────────
