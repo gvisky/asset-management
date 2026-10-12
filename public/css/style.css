@@ -212,6 +212,16 @@ a.bar-item:hover .bar-fill { filter: brightness(1.1); }
 .kpi-note { line-height: 1.45; }
 #ops-grid .kpi-note { min-height: 52px; align-content: flex-start; }
 .kpi-note b { color: var(--text); font-weight: 600; }
+.na-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; border-bottom: 1px solid var(--border); background: #fafbfc; }
+.na-issues { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; }
+.na-chip { border: 1px solid var(--border); background: var(--card-bg); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; }
+.na-chip b { color: var(--text); margin-left: 3px; }
+.na-chip:hover { border-color: var(--brand); }
+.na-chip.active { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.na-chip.active b { color: #991b1b; }
+.seg-btn .seg-count { font-size: 11px; color: var(--muted); margin-left: 4px; font-weight: 500; }
+#alert-box .card { margin-bottom: 0 !important; }
+#alert-box .card-body { max-height: 470px !important; }
 .stat-grid-mini { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
 .stat-mini { padding: 14px 16px; gap: 12px; align-items: center; }
 .stat-mini .stat-icon { width: 36px; height: 36px; }

@@ -97,8 +97,36 @@
       <div class="kpi-grid kpi-6" id="personnel-grid"></div>
     </div>
 
-    <!-- Charts row -->
-    <div class="grid-2" style="margin-bottom:20px">
+    <!-- Needs Attention — missing info, split by country -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">⚠️ Needs Attention — Missing Info <span class="badge badge-broken" id="alert-count" style="display:none;margin-left:6px"></span></span>
+        <div class="seg" id="na-country" role="tablist" aria-label="Country"></div>
+      </div>
+      <div class="na-bar">
+        <div class="na-issues" id="na-issues"></div>
+        <a class="btn btn-ghost btn-sm" id="na-open" href="/inventory.html?incomplete=1">Open in Asset Inventory →</a>
+      </div>
+      <div class="table-wrap" style="max-height:380px;overflow-y:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Asset</th>
+              <th>Country / Site</th>
+              <th>User</th>
+              <th>Missing</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="alert-tbody">
+            <tr><td colspan="5" class="empty-state">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Top Models + Alerts -->
+    <div class="grid-2" style="margin-bottom:20px;align-items:start">
       <!-- Top Models by Asset Type -->
       <div class="card">
         <div class="card-header" style="flex-wrap:wrap;gap:8px">
@@ -110,27 +138,8 @@
         </div>
       </div>
 
-      <!-- Missing info alerts -->
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">⚠️ Needs Attention — Missing Info</span>
-          <span class="badge badge-broken" id="alert-count" style="display:none"></span>
-        </div>
-        <div class="table-wrap" style="max-height:340px;overflow-y:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Asset</th>
-                <th>Missing</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="alert-tbody">
-              <tr><td colspan="3" class="empty-state">Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <!-- Consolidated alerts -->
+      <div id="alert-box"></div>
     </div>
 
     <!-- Recent additions -->
@@ -157,9 +166,6 @@
         </table>
       </div>
     </div>
-
-    <!-- Consolidated alerts (bottom of the dashboard) -->
-    <div id="alert-box" style="margin-top:20px"></div>
 
   </main>
 </div>
