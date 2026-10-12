@@ -129,6 +129,9 @@ router.get('/stats', wrap(async (req, res) => {
   const liveCond = ['deleted_at IS NULL'];
   const lp = [];
   if (cf.clause) { liveCond.push(cf.clause); lp.push(...cf.params); }
+  // Optional site filter (Dashboard: Vietnam → Office / Factory).
+  const site = ['Office', 'Factory'].includes(req.query.location) ? req.query.location : '';
+  if (site) { liveCond.push('location = ?'); lp.push(site); }
   const live = 'WHERE ' + liveCond.join(' AND ');
 
   const total = Number((await get(`SELECT COUNT(*) as cnt FROM assets ${live}`, lp)).cnt);
@@ -148,11 +151,13 @@ router.get('/stats', wrap(async (req, res) => {
 
   const recentlyAdded = await all(`SELECT * FROM assets ${live} ORDER BY id DESC LIMIT 5`, lp);
 
-  // Country × Asset Type × Status counts — the Dashboard builds its breakdown tables from this.
+  // Country × Site × Asset Type × Status counts — the Dashboard builds its breakdown tables from this.
+  // Site is 'Office' / 'Factory', or '' when not set.
   const breakdown = (await all(
-    `SELECT country, COALESCE(asset_type, '') AS asset_type, status, COUNT(*) as cnt
-       FROM assets ${live} GROUP BY country, COALESCE(asset_type, ''), status`, lp
-  )).map(r => ({ country: r.country || '', asset_type: r.asset_type || '', status: r.status || '', cnt: Number(r.cnt) }));
+    `SELECT country, CASE WHEN location IN ('Office', 'Factory') THEN location ELSE '' END AS site,
+            COALESCE(asset_type, '') AS asset_type, status, COUNT(*) as cnt
+       FROM assets ${live} GROUP BY 1, 2, 3, 4`, lp
+  )).map(r => ({ country: r.country || '', site: r.site || '', asset_type: r.asset_type || '', status: r.status || '', cnt: Number(r.cnt) }));
 
   // Deleted + incomplete counts respect the same country scope.
   const delCond = ['deleted_at IS NOT NULL']; const dp = [];
