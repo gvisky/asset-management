@@ -180,6 +180,8 @@ async function loadStats() {
 
     renderOps(stats, scopedTo);
     renderPersonnel();
+    _naCountry = null; _naIssue = '';
+    renderNeedsAttention();
 
     // Top Models — by selected Asset Type, split by country (loaded separately).
     loadTopModels();
@@ -371,57 +373,102 @@ function escD(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repl
 function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 // ── Missing-info alerts table ─────────────────────────────────────────────────
+// ── Needs Attention — Missing Info: split by country (tabs) and by issue (chips) ──
+let _naRows = null;
+let _naCountry = null;     // null = follow the dashboard country switch
+let _naIssue = '';         // '' = all issues
+
+const naMissing = (v) => (v === null || v === undefined || String(v).trim() === '');
+function naIssues(a) {
+  const tags = [];
+  if (naMissing(a.serial_no))   tags.push('Serial');
+  if (naMissing(a.asset_code))  tags.push('Code');
+  if (naMissing(a.computer_no)) tags.push('PC No');
+  if (a.status === 'Active' && naMissing(a.ad_name)) tags.push('AD Name');
+  if (a.dup_serial) tags.push('Dup Serial');
+  return tags;
+}
+const NA_ISSUES = ['Code', 'Serial', 'PC No', 'AD Name', 'Dup Serial'];
+
 async function loadAlerts() {
   const tbody = document.getElementById('alert-tbody');
   try {
-    const rows = await apiGet('/api/assets/incomplete');
-
-    const badge = document.getElementById('alert-count');
-    if (rows.length) {
-      badge.textContent = `${rows.length} to fix`;
-      badge.style.display = '';
-    } else {
-      badge.style.display = 'none';
-    }
-
-    if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="3"><div class="empty-state">
-        <svg width="36" height="36" fill="none" stroke="#22c55e" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <p>All assets have their key info. 🎉</p>
-      </div></td></tr>`;
-      return;
-    }
-
-    const miss = (v) => (v === null || v === undefined || String(v).trim() === '');
-
-    tbody.innerHTML = rows.map(a => {
-      const tags = [];
-      if (miss(a.serial_no))   tags.push('Serial');
-      if (miss(a.asset_code))  tags.push('Code');
-      if (miss(a.computer_no)) tags.push('PC No');
-      if (a.status === 'Active' && miss(a.ad_name)) tags.push('AD Name');
-      let tagHtml = tags.map(t =>
-        `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
-      if (a.dup_serial) {
-        const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');
-        const title = others ? `Same serial "${a.serial_no}" as: ${others}` : `Duplicate serial "${a.serial_no}"`;
-        tagHtml += `<span class="badge" title="${title.replace(/"/g,'&quot;')}" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial: ${a.serial_no || '?'}</span>`;
-      }
-      const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
-      return `
-        <tr>
-          <td style="min-width:120px">
-            <div class="truncate" title="${(label).replace(/"/g,'&quot;')}" style="max-width:140px">${label}</div>
-            <span class="text-muted text-sm">#${a.id} · ${a.location}</span>
-          </td>
-          <td>${tagHtml}</td>
-          <td><a class="btn btn-primary btn-sm" href="/inventory.html?edit=${a.id}" title="Fill in missing info">Fill</a></td>
-        </tr>`;
-    }).join('');
+    const order = (c) => { const i = COUNTRIES.indexOf(c); return i < 0 ? COUNTRIES.length : i; };
+    _naRows = (await apiGet('/api/assets/incomplete')).map(a => ({ ...a, _issues: naIssues(a) }))
+      .sort((x, y) => order(x.country) - order(y.country) || x.id - y.id);
+    renderNeedsAttention();
   } catch (err) {
     console.error(err);
-    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Failed to load alerts</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Failed to load alerts</td></tr>`;
   }
+}
+
+function renderNeedsAttention() {
+  if (!_naRows) return;
+  const tbody = document.getElementById('alert-tbody');
+  const userCountry = window.CURRENT_USER && window.CURRENT_USER.country;
+  const country = userCountry || (_naCountry !== null ? _naCountry : dashScope);
+
+  const badge = document.getElementById('alert-count');
+  badge.textContent = `${_naRows.length} to fix`;
+  badge.style.display = _naRows.length ? '' : 'none';
+
+  // Country tabs with counts.
+  const tabs = document.getElementById('na-country');
+  const inCountry = (c) => _naRows.filter(a => !c || a.country === c);
+  if (userCountry) {
+    tabs.innerHTML = `<span class="seg-fixed">${escHtml(userCountry)}</span>`;
+  } else {
+    tabs.innerHTML = [['', 'All'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
+      `<button type="button" role="tab" class="seg-btn${v === country ? ' active' : ''}" data-country="${v}" aria-selected="${v === country}">${label}<span class="seg-count">${fmt(inCountry(v).length)}</span></button>`).join('');
+    tabs.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
+      _naCountry = btn.dataset.country; _naIssue = ''; renderNeedsAttention();
+    }));
+  }
+
+  // Issue chips (counts within the selected country) — click to filter.
+  const rowsC = inCountry(country);
+  const issueCount = (t) => rowsC.filter(a => a._issues.includes(t)).length;
+  const issuesEl = document.getElementById('na-issues');
+  issuesEl.innerHTML = NA_ISSUES.filter(t => issueCount(t)).map(t =>
+    `<button type="button" class="na-chip${t === _naIssue ? ' active' : ''}" data-issue="${t}">${t}<b>${fmt(issueCount(t))}</b></button>`).join('')
+    || '<span class="text-muted text-sm">No missing info here.</span>';
+  issuesEl.querySelectorAll('.na-chip').forEach(btn => btn.addEventListener('click', () => {
+    _naIssue = _naIssue === btn.dataset.issue ? '' : btn.dataset.issue; renderNeedsAttention();
+  }));
+  document.getElementById('na-open').href = invLink({ incomplete: '1', country });
+
+  const rows = _naIssue ? rowsC.filter(a => a._issues.includes(_naIssue)) : rowsC;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">
+      <svg width="36" height="36" fill="none" stroke="#22c55e" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <p>All assets${country ? ' in ' + escHtml(country) : ''} have their key info. 🎉</p>
+    </div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(a => {
+    let tagHtml = a._issues.filter(t => t !== 'Dup Serial').map(t =>
+      `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
+    if (a.dup_serial) {
+      const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');
+      const title = others ? `Same serial "${a.serial_no}" as: ${others}` : `Duplicate serial "${a.serial_no}"`;
+      tagHtml += `<span class="badge" title="${escHtml(title)}" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial: ${escHtml(a.serial_no || '?')}</span>`;
+    }
+    const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
+    const site = a.country === SITE_COUNTRY && SITES.includes(a.location) ? ` · ${a.location}` : '';
+    return `
+      <tr>
+        <td style="min-width:140px">
+          <div class="truncate" title="${escHtml(label)}" style="max-width:220px">${escHtml(label)}</div>
+          <span class="text-muted text-sm">#${a.id}${a.asset_type ? ' · ' + escHtml(a.asset_type) : ''}</span>
+        </td>
+        <td class="text-sm">${escHtml(a.country || '—')}<span class="text-muted">${site}</span></td>
+        <td class="text-sm">${escHtml(a.user_name || '—')}</td>
+        <td>${tagHtml}</td>
+        <td style="text-align:right"><a class="btn btn-primary btn-sm" href="/inventory.html?edit=${a.id}" title="Fill in missing info">Fill</a></td>
+      </tr>`;
+  }).join('');
 }
 
 // ── Save handler (modal save on dashboard page) ───────────────────────────────
@@ -431,7 +478,13 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStats();
   loadAlerts();                         // missing-info table (asset data quality)
   loadPersonnelSummary();               // User Inventory summary cards
-  loadAlertBox('alert-box', '');        // consolidated notifications (all scopes)
+  // Consolidated notifications (all scopes) — next to Top Models; keep the box when there are none.
+  Promise.resolve(loadAlertBox('alert-box', '')).then(() => {
+    const box = document.getElementById('alert-box');
+    if (box && !box.innerHTML.trim()) {
+      box.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">🔔 Alerts</span></div><div class="card-body"><div class="text-muted text-sm">No alerts.</div></div></div>';
+    }
+  });
 
   const saveBtn = document.getElementById('modal-save');
   if (!saveBtn) return;
