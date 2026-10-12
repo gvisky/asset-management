@@ -164,7 +164,7 @@
         st.issue = st.issue === btn.dataset.v ? '' : btn.dataset.v; render();
       }));
       if ($('open')) $('open').href = link({ [cfg.link]: '1', country: st.site ? SITE_COUNTRY : country,
-        location: st.site, asset_type: st.type === '__none' ? '' : st.type });
+        location: st.site, asset_type: st.type });
 
       const rows = st.issue ? rowsC.filter(a => a._issues.includes(st.issue)) : rowsC;
       if (!rows.length) {

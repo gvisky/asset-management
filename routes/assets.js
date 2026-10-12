@@ -26,6 +26,10 @@ const MISSING_PC_AD_SQL = `(${NEEDS_PC_AD_SQL} AND (
       computer_no IS NULL OR computer_no = '' OR
       (status = 'Active' AND (ad_name IS NULL OR ad_name = ''))))`;
 
+// Asset-type filter value meaning "no type set" (asset_type empty / NULL).
+const NO_TYPE = '__none';
+const NO_TYPE_SQL = "(asset_type IS NULL OR asset_type = '')";
+
 // Asset types listed first everywhere (then the rest).
 const TYPE_ORDER_SQL = `CASE LOWER(asset_type) WHEN 'laptop' THEN 0 WHEN 'desktop' THEN 1
   WHEN 'mobile phone' THEN 2 WHEN 'phone' THEN 2 WHEN 'ip phone' THEN 3 ELSE 9 END`;
@@ -87,7 +91,8 @@ router.get('/', wrap(async (req, res) => {
   if (brand)      { conditions.push('brand_model = ?'); params.push(brand); }
   if (department) { conditions.push('department = ?');  params.push(department); }
   if (cost_center){ conditions.push('cost_center = ?'); params.push(cost_center); }
-  if (asset_type) { conditions.push('asset_type = ?');  params.push(asset_type); }
+  if (asset_type === NO_TYPE) conditions.push(NO_TYPE_SQL);
+  else if (asset_type) { conditions.push('asset_type = ?');  params.push(asset_type); }
   if (incomplete) {
     // Must mirror GET /incomplete exactly: missing key field, Active-without-AD, or duplicate serial.
     const dupCountry = cf.clause ? ` AND ${cf.clause}` : '';
@@ -250,8 +255,8 @@ router.get('/filters', wrap(async (req, res) => {
   // Brands can be narrowed to a single asset type (so the model dropdown follows
   // the selected Asset Type filter).
   const at = (req.query.asset_type || '').trim();
-  const brandExtra = extra + (at ? ' AND asset_type = ?' : '');
-  const brandParams = at ? [...cf.params, at] : cf.params;
+  const brandExtra = extra + (at === NO_TYPE ? ` AND ${NO_TYPE_SQL}` : at ? ' AND asset_type = ?' : '');
+  const brandParams = at && at !== NO_TYPE ? [...cf.params, at] : cf.params;
   const brands = (await all(
     `SELECT DISTINCT brand_model AS v FROM assets WHERE deleted_at IS NULL AND brand_model <> ''${brandExtra} ORDER BY brand_model COLLATE NOCASE`,
     brandParams
@@ -271,9 +276,12 @@ router.get('/filters', wrap(async (req, res) => {
     `SELECT asset_type AS v, COUNT(*) AS cnt FROM assets WHERE deleted_at IS NULL AND asset_type <> ''${extra}
        GROUP BY asset_type ORDER BY ${TYPE_ORDER_SQL}, asset_type COLLATE NOCASE`, cf.params
   )).map(r => ({ type: r.v, count: Number(r.cnt) }));
+  // Assets with no type — offered as "Type not set" in the filter.
+  const noTypeCount = Number((await get(
+    `SELECT COUNT(*) AS cnt FROM assets WHERE deleted_at IS NULL AND ${NO_TYPE_SQL}${extra}`, cf.params)).cnt);
   // Global users get the full country list; scoped users get only their own.
   const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
-  res.json({ brands, departments, countries, costCenters, assetTypes });
+  res.json({ brands, departments, countries, costCenters, assetTypes, noTypeCount });
 }));
 
 // ── GET /api/assets/incomplete — missing key identifiers OR duplicate serial ──

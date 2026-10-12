@@ -70,7 +70,7 @@ async function loadSummary() {
 // Populate the Brand Model and Department dropdowns with distinct values.
 async function loadFilters() {
   try {
-    const { brands, departments, countries, costCenters, assetTypes } = await apiGet('/api/assets/filters');
+    const { brands, departments, countries, costCenters, assetTypes, noTypeCount } = await apiGet('/api/assets/filters');
     const brandSel   = document.getElementById('filter-brand');
     const deptSel     = document.getElementById('filter-department');
     const countrySel = document.getElementById('filter-country');
@@ -89,7 +89,8 @@ async function loadFilters() {
         return `<option value="${String(cc.code).replace(/"/g,'&quot;')}">${lbl}</option>`;
       }).join('');
     if (atSel) atSel.innerHTML = '<option value="">All Asset Types</option>' +
-      (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}">${t.type} (${t.count})</option>`).join('');
+      (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}">${t.type} (${t.count})</option>`).join('') +
+      (noTypeCount ? `<option value="__none">Type not set (${noTypeCount})</option>` : '');
     if (atList) atList.innerHTML = (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}"></option>`).join('');
 
     // Build the cost-center linkage maps for the edit form.
