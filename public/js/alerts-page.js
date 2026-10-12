@@ -1,39 +1,5 @@
-/* Needs Attention page: missing-info/dup-serial table, HR-changes box, all alerts. */
-
-function naEsc(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
-
-async function loadNeedsAttention() {
-  const tbody = document.getElementById('na-tbody');
-  try {
-    const rows = await apiGet('/api/assets/incomplete');
-    const badge = document.getElementById('na-count');
-    if (rows.length) { badge.textContent = `${rows.length}`; badge.style.display = ''; }
-    if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="4"><div class="empty-state">
-        <svg width="36" height="36" fill="none" stroke="#22c55e" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <p>Nothing needs attention. 🎉</p></div></td></tr>`;
-      return;
-    }
-    tbody.innerHTML = rows.map(a => {
-      const tags = missingInfoTags(a);
-      let html = tags.map(t => `<span class="badge badge-broken" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`).join('');
-      if (a.dup_serial) {
-        const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');
-        const title = others ? `Same serial "${a.serial_no}" as: ${others}` : `Duplicate serial "${a.serial_no}"`;
-        html += `<span class="badge" title="${naEsc(title)}" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial: ${naEsc(a.serial_no) || '?'}${others ? ` (also ${naEsc(others)})` : ''}</span>`;
-      }
-      const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
-      return `<tr>
-        <td><div class="truncate" title="${naEsc(label)}" style="max-width:200px">${label}</div><span class="text-muted text-sm">#${a.id} · ${a.location}</span></td>
-        <td><span class="badge badge-factory">${a.country}</span></td>
-        <td>${html}</td>
-        <td><a class="btn btn-primary btn-sm" href="/inventory.html?edit=${a.id}">Fix</a></td>
-      </tr>`;
-    }).join('');
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Could not load.</td></tr>`;
-  }
-}
+/* Needs Attention page: Missing Info + Missing AD & Asset panels (shared with the
+   Dashboard / Asset Inventory), the HR-changes box, and the 🔔 Alerts button. */
 
 async function loadHrChanges() {
   const box = document.getElementById('hr-box');
@@ -53,7 +19,11 @@ async function loadHrChanges() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  loadNeedsAttention();
+  // Fixing one problem can clear the other list too, so a save in either panel reloads both.
+  const panels = {};
+  const reloadOther = (key) => () => { const other = panels[key === 'missing' ? 'ad' : 'missing']; if (other) other.reload(); };
+  panels.missing = NeedsAttention({ root: document.getElementById('na-missing'), mode: 'missing', maxHeight: 480, onSaved: reloadOther('missing') });
+  panels.ad = NeedsAttention({ root: document.getElementById('na-ad'), mode: 'ad', maxHeight: 420, onSaved: reloadOther('ad') });
   loadHrChanges();
-  if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', '');
+  if (typeof loadAlertButton === 'function') loadAlertButton('alert-btn-slot', '');
 });
