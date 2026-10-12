@@ -25,22 +25,12 @@
 </aside>
 
 <div class="main-wrap">
-  <header class="topbar"><span class="topbar-title">⚠️ Needs Attention</span></header>
+  <header class="topbar"><span class="topbar-title">⚠️ Needs Attention</span><span id="alert-btn-slot"></span></header>
   <main class="content">
 
-    <!-- Missing info / duplicate serials -->
-    <div class="card" style="margin-bottom:18px">
-      <div class="card-header">
-        <span class="card-title">⚠️ Needs Attention — Missing Info &amp; Duplicate Serials</span>
-        <span class="badge badge-broken" id="na-count" style="display:none"></span>
-      </div>
-      <div class="table-wrap" style="max-height:360px;overflow-y:auto">
-        <table>
-          <thead><tr><th>Asset</th><th>Country</th><th>Problem</th><th></th></tr></thead>
-          <tbody id="na-tbody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+    <!-- Missing Info & duplicate serials / Missing AD & Asset — js/needs-attention.js -->
+    <div id="na-missing" style="margin-bottom:18px"></div>
+    <div id="na-ad" style="margin-bottom:18px"></div>
 
     <!-- Changes by HR (separate box) -->
     <div class="card" style="margin-bottom:18px">
@@ -50,8 +40,6 @@
       </div>
     </div>
 
-    <!-- All other alerts -->
-    <div id="alert-box"></div>
   </main>
 </div>
 
@@ -59,6 +47,7 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
+<script src="/js/needs-attention.js"></script>
 <script src="/js/alerts-page.js"></script>
 </body>
 </html>
