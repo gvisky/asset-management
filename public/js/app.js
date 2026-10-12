@@ -28,6 +28,24 @@ function locationBadge(loc) {
   return `<span class="badge ${cls}">${loc}</span>`;
 }
 
+// ── Missing-info rules (mirror routes/assets.js) ──────────────────────────────
+// PC No and AD Name are only required for laptops and desktops.
+function needsPcAd(assetType) { return ['laptop', 'desktop'].includes(String(assetType || '').trim().toLowerCase()); }
+function missingInfoTags(a) {
+  const miss = (v) => (v === null || v === undefined || String(v).trim() === '');
+  const tags = [];
+  if (miss(a.serial_no))  tags.push('Serial');
+  if (miss(a.asset_code)) tags.push('Code');
+  if (needsPcAd(a.asset_type)) {
+    if (miss(a.computer_no)) tags.push('PC No');
+    if (a.status === 'Active' && miss(a.ad_name)) tags.push('AD Name');
+  }
+  return tags;
+}
+// Laptop, Desktop, Phone are listed first wherever asset types are listed.
+const TYPE_FIRST = ['laptop', 'desktop', 'mobile phone', 'phone', 'ip phone'];
+function typeRank(t) { const i = TYPE_FIRST.indexOf(String(t || '').trim().toLowerCase()); return i < 0 ? TYPE_FIRST.length : i; }
+
 // Office / Factory sites exist only in Vietnam — the asset form's Location field
 // is shown (and required) only when the asset's country is Vietnam.
 const SITE_COUNTRY = 'Vietnam';
