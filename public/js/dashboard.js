@@ -8,24 +8,40 @@ const STATUSES = [
   { key: 'Stock',  color: '#d97706' },
 ];
 let dashScope = '';          // '' = all countries, else one country
-let allBreakdown = null;     // unfiltered country × type × status rows (for "Assets by Country")
+let dashSite = '';           // '' = all sites, else 'Office' / 'Factory' (countries that have sites, e.g. Vietnam)
+let allBreakdown = null;     // unfiltered country × site × type × status rows (for "Assets by Country")
 
+const SITES = ['Office', 'Factory'];
+const EMPTY = () => ({ total: 0, Active: 0, Broken: 0, Stock: 0 });
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 const escHtml = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const invLink = (params) => '/inventory.html?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
 
-// Sum breakdown rows into { total, Active, Broken, Stock } per key (country / asset type).
+// Sum breakdown rows into { total, Active, Broken, Stock } per key (country / asset type / site).
 function tally(rows, keyFn) {
   const out = new Map();
   rows.forEach(r => {
     const k = keyFn(r);
-    if (!out.has(k)) out.set(k, { total: 0, Active: 0, Broken: 0, Stock: 0 });
+    if (!out.has(k)) out.set(k, EMPTY());
     const t = out.get(k);
     t.total += r.cnt;
     if (r.status in t) t[r.status] += r.cnt;
   });
   return out;
 }
+
+// Does this country split its assets into Office / Factory sites?
+function hasSites(country) {
+  return (allBreakdown || []).some(r => r.country === country && SITES.includes(r.site));
+}
+// Site buckets for one country: Office, Factory, then "Site not set" (only if any).
+function siteEntries(country) {
+  const bySite = tally((allBreakdown || []).filter(r => r.country === country), r => r.site);
+  const list = SITES.map(s => [s, bySite.get(s) || EMPTY()]);
+  if (bySite.get('')) list.push(['', bySite.get('')]);
+  return list;
+}
+const siteLabel = (s) => s || 'Site not set';
 
 // Stacked status bar (Active / Broken / Stock) — tooltip per segment.
 function statusBar(t) {
@@ -36,24 +52,45 @@ function statusBar(t) {
   }).join('') + '</div>';
 }
 
+function segButtons(options, current, attr) {
+  return options.map(([v, label]) =>
+    `<button type="button" role="tab" class="seg-btn${v === current ? ' active' : ''}" data-${attr}="${v}" aria-selected="${v === current}">${label}</button>`).join('');
+}
+
 function renderScopeSwitch(scopedTo) {
   const el = document.getElementById('dash-scope');
+  const siteEl = document.getElementById('dash-site');
   if (!el) return;
-  if (scopedTo) { el.innerHTML = `<span class="seg-fixed">${escHtml(scopedTo)}</span>`; return; }
-  el.innerHTML = [['', 'All countries'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
-    `<button type="button" role="tab" class="seg-btn${v === dashScope ? ' active' : ''}" data-country="${v}" aria-selected="${v === dashScope}">${label}</button>`).join('');
-  el.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
-    dashScope = btn.dataset.country;
+  if (scopedTo) {
+    el.innerHTML = `<span class="seg-fixed">${escHtml(scopedTo)}</span>`;
+  } else {
+    el.innerHTML = segButtons([['', 'All countries'], ...COUNTRIES.map(c => [c, c])], dashScope, 'country');
+    el.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
+      dashScope = btn.dataset.country;
+      dashSite = '';
+      loadStats();
+    }));
+  }
+  // Second switch: Office / Factory, for a country that has sites (e.g. Vietnam).
+  const country = scopedTo || dashScope;
+  if (!siteEl) return;
+  if (!country || !hasSites(country)) { siteEl.style.display = 'none'; siteEl.innerHTML = ''; return; }
+  siteEl.style.display = '';
+  siteEl.innerHTML = segButtons([['', 'All sites'], ...SITES.map(s => [s, s])], dashSite, 'site');
+  siteEl.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
+    dashSite = btn.dataset.site;
     loadStats();
   }));
 }
 
-// KPI tiles: Total / Active / Broken / Stock — each split by country (all-countries view)
-// or shown as a share of the country total (single-country view).
+// KPI tiles: Total / Active / Broken / Stock.
+//   All countries → split by country.  One country with sites → split by site.  Otherwise → share of the total.
 function renderKpis(stats, scopedTo) {
   const grid = document.getElementById('kpi-grid');
   const byCountry = tally(allBreakdown || stats.breakdown, r => r.country);
   const scope = scopedTo || dashScope;
+  const scopeName = scope + (dashSite ? ' · ' + dashSite : '');
+  const sites = scope && !dashSite && hasSites(scope) ? siteEntries(scope) : null;
   const tiles = [
     { label: 'Total Assets', key: 'total', color: '#1a56db', status: '' },
     ...STATUSES.map(s => ({ label: s.key, key: s.key, color: s.color, status: s.key })),
@@ -62,17 +99,21 @@ function renderKpis(stats, scopedTo) {
   grid.innerHTML = tiles.map(t => {
     const value = t.key === 'total' ? total : (stats.byStatus[t.key] || 0);
     let sub;
-    if (scope) {
-      sub = t.key === 'total' ? escHtml(scope)
-        : `${total ? ((value / total) * 100).toFixed(1) : '0.0'}% of ${escHtml(scope)}`;
-    } else {
+    if (!scope) {
       sub = COUNTRIES.map(c => {
-        const ct = byCountry.get(c) || { total: 0, Active: 0, Broken: 0, Stock: 0 };
+        const ct = byCountry.get(c) || EMPTY();
         return `<a class="kpi-split" href="${invLink({ country: c, status: t.status })}" title="${c}">${COUNTRY_SHORT[c]} <b>${fmt(ct[t.key])}</b></a>`;
       }).join('');
+    } else if (sites) {
+      sub = sites.map(([site, st]) => site
+        ? `<a class="kpi-split" href="${invLink({ country: scope, location: site, status: t.status })}" title="${escHtml(scope)} · ${site}">${site} <b>${fmt(st[t.key])}</b></a>`
+        : `<span class="kpi-split" title="${escHtml(scope)} · site not set">Not set <b>${fmt(st[t.key])}</b></span>`).join('');
+    } else {
+      sub = t.key === 'total' ? escHtml(scopeName)
+        : `${total ? ((value / total) * 100).toFixed(1) : '0.0'}% of ${escHtml(scopeName)}`;
     }
     return `<div class="kpi" style="--kpi-color:${t.color}">
-      <a class="kpi-main" href="${invLink({ country: scope, status: t.status })}">
+      <a class="kpi-main" href="${invLink({ country: scope, location: dashSite, status: t.status })}">
         <div class="kpi-label"><span class="kpi-dot"></span>${t.label}</div>
         <div class="kpi-value">${fmt(value)}</div>
       </a>
@@ -81,39 +122,44 @@ function renderKpis(stats, scopedTo) {
   }).join('');
 }
 
-function breakdownTable(firstCol, entries, linkFor, totalRow) {
+function breakdownTable(firstCol, entries, totalRow) {
   const head = `<thead><tr><th>${firstCol}</th><th class="num">Total</th>${STATUSES.map(s => `<th class="num">${s.key}</th>`).join('')}<th style="width:32%">Status mix</th></tr></thead>`;
-  const row = ([name, t], cls = '') => `<tr class="${cls}">
-      <td>${linkFor ? `<a href="${linkFor(name)}">${escHtml(name)}</a>` : escHtml(name)}</td>
+  const row = ({ name, t, href, cls = '' }) => `<tr class="${cls}">
+      <td>${href ? `<a href="${href}">${escHtml(name)}</a>` : escHtml(name)}</td>
       <td class="num"><b>${fmt(t.total)}</b></td>
       ${STATUSES.map(s => `<td class="num${t[s.key] ? '' : ' zero'}">${fmt(t[s.key])}</td>`).join('')}
       <td>${statusBar(t)}</td>
     </tr>`;
-  return head + '<tbody>' + (entries.length ? entries.map(e => row(e)).join('') : '<tr><td colspan="6" class="empty-state">No assets.</td></tr>')
-    + (totalRow ? row(totalRow, 'total-row') : '') + '</tbody>';
+  return head + '<tbody>' + (entries.length ? entries.map(row).join('') : '<tr><td colspan="6" class="empty-state">No assets.</td></tr>')
+    + (totalRow ? row({ ...totalRow, cls: 'total-row' }) : '') + '</tbody>';
 }
 
 function renderBreakdowns(stats, scopedTo) {
-  // By country — always all countries the user can see.
+  // By country — always all countries the user can see; countries with sites get Office / Factory sub-rows.
   const rowsAll = allBreakdown || stats.breakdown;
   const byCountry = tally(rowsAll, r => r.country);
   const countryList = scopedTo ? [scopedTo] : COUNTRIES;
-  const cEntries = countryList.map(c => [c, byCountry.get(c) || { total: 0, Active: 0, Broken: 0, Stock: 0 }]);
-  const grand = tally(rowsAll, () => 'Total').get('Total') || { total: 0, Active: 0, Broken: 0, Stock: 0 };
+  const cEntries = [];
+  countryList.forEach(c => {
+    cEntries.push({ name: c, t: byCountry.get(c) || EMPTY(), href: invLink({ country: c }) });
+    if (hasSites(c)) siteEntries(c).forEach(([site, t]) => cEntries.push({
+      name: siteLabel(site), t, cls: 'sub-row', href: site ? invLink({ country: c, location: site }) : '',
+    }));
+  });
+  const grand = tally(rowsAll, () => 'Total').get('Total') || EMPTY();
   document.getElementById('bd-country').innerHTML =
-    breakdownTable('Country', cEntries, c => invLink({ country: c }), countryList.length > 1 ? ['Total', grand] : null);
+    breakdownTable('Country / Site', cEntries, countryList.length > 1 ? { name: 'Total', t: grand } : null);
 
-  // By asset type — follows the selected country.
+  // By asset type — follows the selected country / site.
   const byType = tally(stats.breakdown, r => r.asset_type || 'Not set');
+  const scope = scopedTo || dashScope;
   const tEntries = [...byType.entries()].sort((x, y) => {
     if (x[0] === 'Not set') return 1;
     if (y[0] === 'Not set') return -1;
     return y[1].total - x[1].total;
-  });
-  const scope = scopedTo || dashScope;
-  document.getElementById('bd-type-scope').textContent = scope ? `· ${scope}` : '· all countries';
-  document.getElementById('bd-type').innerHTML = breakdownTable('Asset Type', tEntries,
-    t => t === 'Not set' ? '' : invLink({ asset_type: t, country: scope }));
+  }).map(([name, t]) => ({ name, t, href: name === 'Not set' ? '' : invLink({ asset_type: name, country: scope, location: dashSite }) }));
+  document.getElementById('bd-type-scope').textContent = scope ? `· ${scope}${dashSite ? ' · ' + dashSite : ''}` : '· all countries';
+  document.getElementById('bd-type').innerHTML = breakdownTable('Asset Type', tEntries);
 }
 
 function renderLegends() {
@@ -123,9 +169,10 @@ function renderLegends() {
 
 async function loadStats() {
   try {
-    const stats = await apiGet('/api/assets/stats' + (dashScope ? '?country=' + encodeURIComponent(dashScope) : ''));
+    const q = new URLSearchParams(Object.entries({ country: dashScope, location: dashSite }).filter(([, v]) => v)).toString();
+    const stats = await apiGet('/api/assets/stats' + (q ? '?' + q : ''));
     const scopedTo = stats.scope || '';
-    if (!dashScope) allBreakdown = stats.breakdown;
+    if (!dashScope && !dashSite) allBreakdown = stats.breakdown;
     else if (!allBreakdown) allBreakdown = (await apiGet('/api/assets/stats')).breakdown;
 
     renderScopeSwitch(scopedTo);
