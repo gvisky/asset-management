@@ -1,61 +1,56 @@
 # Hayat Communication Tools — Project Status
 
-_Last synced: 29 May 2026 (commit 42e79cf). Keep this file updated when modules change._
+_Last synced: 12 Oct 2026 (commit 53c0e6b). Keep this file updated when modules change._
 
 ## Where everything lives
 | Thing | Location |
 |-------|----------|
-| **Live app** | https://asset-management-b5qd.onrender.com |
+| **Live app** | https://asset.hayat.io.vn (custom domain → Render service `asset-management-b5qd.onrender.com`) |
 | **Code** | github.com/gvisky/asset-management (branch `main`) |
 | **Host** | Render (free plan, auto-deploys on every push to `main`) |
 | **Database** | Turso (libSQL) cloud — shared live data, no credit card |
-| **Local dev** | This PC: `…\Desktop\Code\Asset control\asset-management` (Node 24, Git) |
+| **Development** | GitHub-based (Claude Code cloud sessions). The old local PC copy is no longer the main workspace. |
 
 ## Stack
 Node + Express · Turso/libSQL (built-in node:sqlite locally) · vanilla HTML/CSS/JS · auth via scrypt + httpOnly session cookies.
 
-## Accounts (change passwords after first login)
+## Accounts (as of 12 Oct 2026)
 | User | Role | Region | Team | Notes |
 |------|------|--------|------|-------|
 | viet | admin (global) | all | IT | owner; only one who edits History Usage log |
-| hiep | editor | all | IT | |
-| quocviet | editor | all | IT | |
+| hiep | admin (global) | all | IT | |
+| quocviet | admin (global) | all | IT | |
 | somrutai | editor | Thailand | HR | |
 | izzati | editor | Malaysia | HR | |
 | hatran | editor | Vietnam | HR | **no Asset Inventory access** |
+| yen | editor | Vietnam | HR | **no Asset Inventory access** |
+| test | admin (global) | all | IT | test account used by Claude Code to verify changes on the live site |
 
-Roles: **admin / editor / viewer** (+ region scope). Teams: **IT / HR** (drive the User Inventory page). Global = no region (sees all countries); regional = limited to their country.
+Roles: **admin / editor / viewer** (+ region scope). Teams: **IT / HR** (drive the User Inventory page). Global = no region (sees all countries); regional = limited to their country. **IT admin** = team IT + role admin (needed for Budget, User Inventory editing/import, report import, unlocking).
 
 ## Modules
-1. **Asset Inventory** — 3 countries (Vietnam/Thailand/Malaysia); search + filters (country, location, brand, department, status); clickable dashboard cards; missing-info alerts; **Recycle Bin** (soft delete + restore, admin); audit log. Asset status = **Active / Broken / Stock** (Stock was formerly "Retired").
-2. **Auth & Access Control** — login, roles, region scoping, regional admins (admin + a country can restore their region only), global-admin-only user management.
-3. **User Inventory (HR/IT offboarding)** — VN/TH/MY personnel; HR sets **User Type** (Hayat / No Hayat Member) + **Leaving Date**; IT sets **Status** (to be delete / pending delete / deleted) — *only after HR sets User Type*; "to be delete" auto-→ "pending delete" after 1 month. **IT CSV import** of the raw Azure export (auto-filters to the 3 countries, upserts by email, never overwrites edited rows). Monthly re-import reminder for IT.
-4. **Server Inventory** — server assets, separate from the main asset list _(added on phone)_.
-5. **Warranty & Maintenance** — purchase date, warranty expiry, vendor, cost, PO; maintenance logs linked to assets & servers _(phone)_.
-6. **Software & License Management** _(phone)_.
-7. **Reports & Export Center** _(phone)_.
-8. **Notifications / Alerts** — alert boxes on Dashboard / Asset Inventory / User Inventory; audience-aware (IT/HR/all) + region-scoped; events for HR/IT changes, asset delete/restore, imports.
-9. **Dashboard** — asset stats, per-country cards, User Inventory summary cards, consolidated alerts.
-10. **Mobile / phone UI** — off-canvas hamburger sidebar, card-view tables, iPhone safe-area support (desktop layout unchanged) _(phone)_.
+1. **Asset Inventory** — 3 countries (Vietnam/Thailand/Malaysia); search + filters (country, location, brand, department, status, **Asset Type** — landing view defaults to Laptop); clickable dashboard cards; **Needs Attention** (missing info, Active without AD Name, duplicate serials; some asset types exempt); **Missing AD & Asset** inline filter; AD Name column; department / cost center / ECC CC linked dropdowns; **Print Delivery Form** (company .xlsx) from Edit / View Detail; **Recycle Bin** (soft delete + restore, admin; permanent delete for IT admin); audit log. Asset status = **Active / Broken / Stock**.
+   - **Locks:** Serial / Brand-Model / Asset Code are IT-only to edit, IT admin unlocks. **History Usage** = holder lock (User Name / AD Name changes) feeding the SAP update list. **Locked models** (Dashboard Top Models) block delete and freeze Asset Type / Brand-Model / Serial for everyone until unlocked.
+2. **Auth & Access Control** — login, roles, region scoping, regional admins (admin + a country can restore their region only), global-admin-only user management (with team selector). HR-only users (`asset_access = 0`) are redirected away from all asset pages.
+3. **User Inventory (HR/IT offboarding)** — VN/TH/MY personnel; HR sets **User Type** (Hayat / No Hayat Member) + **Leaving Date**; **Status is manual-only** (to be delete / pending delete — shown as "Confirmed Delete" / deleted); editing is IT-admin only. Department + Cost Center (linked to assets via AD Name = email local-part, with linked-assets modal). Add User, **IT CSV import / sync** of the raw Azure export (auto-filters to the 3 countries, upserts by email, never overwrites edited rows). Monthly re-import reminder for IT.
+4. **Server Inventory** — 150 servers, separate from the main asset list; Producer + Category columns/filters.
+5. **Warranty & Maintenance** — purchase date, warranty expiry, vendor, cost, PO; maintenance logs linked to assets & servers.
+6. **Software & License Management** — department + current seat users.
+7. **Reports & Export Center** — Full Asset Inventory report + re-upload sync (import is IT-admin only), Locked Items report, **Budget export** (round-trippable). Downloads are no-store / cache-busted.
+8. **Budget Tracking** _(IT admin only)_ — built around `budget 2026.xlsx` Sheet1 line items; IT-admin **Import Budget .xlsx** (parsed in the browser); Turkish GL (MÇ No) → Local GL mapping from `GL.xlsx` (`db/gl-map-seed.json`); filters + quick search.
+9. **Notifications / Alerts** — alert boxes on Dashboard / Asset Inventory / User Inventory + Needs Attention alerts page; audience-aware (IT/HR/all) + region-scoped; events for HR/IT changes, asset delete/restore, imports.
+10. **Dashboard** — asset stats, per-country cards, Top Models by Asset Type (with delete-lock), User Inventory summary cards, consolidated alerts.
+11. **Mobile / phone UI** — off-canvas hamburger sidebar, card-view tables, iPhone safe-area support (desktop layout unchanged).
+12. **Backup / restore** — `npm run backup` (all tables → timestamped JSON), `npm run restore` (see `DISASTER-RECOVERY.md`).
 
-## ⚠️ Two-device working rule (avoid conflicts)
-The project is **one repo + one live site + one database**, shared by every device. But the PC and phone are separate chat sessions that only sync through Git.
+## Working rule (avoid conflicts)
+The project is **one repo + one live site + one database**. Every push to `main` goes live immediately and works on real data.
 
-**Rule: build on ONE device at a time, and `git pull` before starting.**
-
-Files edited by *both* PC and phone (highest conflict risk if not synced first):
-`db/database.js`, `server.js`, `routes/assets.js`, `public/js/app.js`, `public/js/dashboard.js`, `public/js/inventory.js`, `public/css/style.css`, and all page HTML (`index`, `inventory`, `user-inventory`, `users`, `deleted`, `login`).
-
-Phone-only module files (low risk — pure additions):
-`routes/{maintenance,licenses,reports,servers}.js` and `public/{maintenance,licenses,reports,server-inventory}.{html,js}`.
-
-## Common commands (run on PC)
-```powershell
-cd "…\Desktop\Code\Asset control\asset-management"
-git pull origin main      # ALWAYS before starting work
-git add . ; git commit -m "..." ; git push origin main   # deploys to Render automatically
-```
+- Make changes on a **feature branch** (e.g. `claude/...`), review, then merge to `main` to deploy.
+- Work in **one place at a time**. If a local copy is still used, `git pull origin main` before touching it.
+- After a deploy, verify on https://asset.hayat.io.vn (the `test` account is available for this).
 
 ## Open items
-- **Malaysia/Thailand asset data**: the `Asset_List_Organized MY.xlsx` / `TL.xlsx` files are empty templates (only Vietnam sample rows) — real data still needed before importing.
-- Default seeded passwords should be changed by each user.
+- **User Inventory re-import overdue** — last Azure CSV import was 29 May 2026.
+- **Malaysia/Thailand asset data** — Thailand has 46 assets and Malaysia 34 in the live DB; check whether the full lists still need importing.
+- **Account security** — default seeded passwords should be changed by each user; the `test` account (global IT admin) has a weak password — change it or lower its role when not testing.
