@@ -5,8 +5,6 @@ const PAGE_SIZE = 25;
 let deleteTargetId = null;
 let viewAsset = null;
 let editMode = false;
-let incompleteMode = false;   // "Needs Attention — Missing Info" filter toggle
-let adIssueMode = false;      // "Needs Attention — Missing AD & Asset" filter toggle
 // Cost-center linkage maps (Department ⇄ Cost Center ⇄ ECC CC ⇄ Description are 1:1).
 let CC_BY_CODE = {};   // cost_center code → { code, descr, ecc }
 let CC_BY_DESC = {};   // cost_center description (=department) → { code, descr, ecc }
@@ -136,8 +134,6 @@ async function loadAssets(page = 1) {
   if (department)    params.set('department', department);
   if (costCenter)    params.set('cost_center', costCenter);
   if (assetType)     params.set('asset_type', assetType);
-  if (incompleteMode) params.set('incomplete', '1');
-  if (adIssueMode)   params.set('ad_issue', '1');
 
   try {
     const result = await apiGet(`${API}?${params}`);
@@ -594,8 +590,38 @@ function applyUrlFilters() {
   if (country)    document.getElementById('filter-country').value = country;
   if (costCenter) { const el = document.getElementById('filter-cost-center'); if (el) el.value = costCenter; }
   if (assetType)  { const el = document.getElementById('filter-asset-type'); if (el) el.value = assetType; }
-  if (p.get('incomplete')) { incompleteMode = true; setIncompleteButton(true); }
-  if (p.get('ad_issue'))   { adIssueMode = true; setAdIssueButton(true); }
+  // Needs Attention links (e.g. from the Dashboard) open the panel with the same country / site / type.
+  const naInitial = { country: country || null, site: location, type: assetType };
+  if (p.get('incomplete'))    openNeedsAttention('missing', naInitial);
+  else if (p.get('ad_issue')) openNeedsAttention('ad', naInitial);
+}
+
+// ── Needs Attention panel — same look as the Dashboard (country tabs, site, type, fill in place) ──
+let naPanel = null;
+let naMode = '';
+function openNeedsAttention(mode, initial) {
+  if (naMode === mode) { closeNeedsAttention(); return; }
+  naMode = mode;
+  const root = document.getElementById('na-root');
+  root.style.display = '';
+  document.getElementById('inv-card').style.display = 'none';
+  naPanel = NeedsAttention({
+    root, mode, initial, maxHeight: 640,
+    onDetails: (id) => onEdit(id),
+    onSaved: () => { if (typeof loadSummary === 'function') loadSummary(); },
+    onClose: closeNeedsAttention,
+  });
+  setIncompleteButton(mode === 'missing');
+  setAdIssueButton(mode === 'ad');
+}
+function closeNeedsAttention() {
+  naMode = ''; naPanel = null;
+  const root = document.getElementById('na-root');
+  root.style.display = 'none'; root.innerHTML = '';
+  document.getElementById('inv-card').style.display = '';
+  setIncompleteButton(false);
+  setAdIssueButton(false);
+  loadAssets(currentPage);
 }
 
 // Visual state of the "Needs Attention" toggle button.
@@ -628,7 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const editId = new URLSearchParams(window.location.search).get('edit');
     if (editId) onEdit(editId);
   });
-  if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'asset');
+  if (typeof loadAlertButton === 'function') loadAlertButton('alert-btn-slot', 'asset');
   loadSummary();
 
   // Search & filter with debounce
@@ -662,24 +688,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const fCC = document.getElementById('f-cost_center');
   if (fCC) fCC.addEventListener('change', linkFromCostCenter);
 
-  // "Needs Attention — Missing Info" toggle
-  document.getElementById('btn-incomplete').addEventListener('click', () => {
-    incompleteMode = !incompleteMode;
-    setIncompleteButton(incompleteMode);
-    loadAssets(1);
-  });
+  // "Needs Attention — Missing Info" → open the Needs Attention panel
+  document.getElementById('btn-incomplete').addEventListener('click', () => openNeedsAttention('missing'));
 
   // "History Usage" — opens pending-SAP modal
   document.getElementById('btn-history').addEventListener('click', openHistory);
   document.getElementById('history-close').addEventListener('click', () =>
     document.getElementById('history-overlay').classList.remove('open'));
 
-  // "Missing AD & Asset" — toggle filter (editable in place)
-  document.getElementById('btn-adaudit').addEventListener('click', () => {
-    adIssueMode = !adIssueMode;
-    setAdIssueButton(adIssueMode);
-    loadAssets(1);
-  });
+  // "Missing AD & Asset" → open the Needs Attention panel (AD mode)
+  document.getElementById('btn-adaudit').addEventListener('click', () => openNeedsAttention('ad'));
 
   // Reset
   document.getElementById('btn-reset').addEventListener('click', () => {
@@ -691,10 +709,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filter-department').value = '';
     const ccr = document.getElementById('filter-cost-center'); if (ccr) ccr.value = '';
     const atr = document.getElementById('filter-asset-type'); if (atr) atr.value = '';
-    incompleteMode = false;
-    setIncompleteButton(false);
-    adIssueMode = false;
-    setAdIssueButton(false);
+    if (naMode) { naMode = ''; closeNeedsAttention(); }
     loadAssets(1);
   });
 
@@ -715,6 +730,7 @@ document.addEventListener('DOMContentLoaded', () => {
       closeModal();
       editMode = false;
       loadAssets(currentPage);
+      if (naPanel) naPanel.reload();
     } catch (err) {
       showToast('Error saving asset', 'error');
     }

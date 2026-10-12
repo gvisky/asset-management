@@ -180,8 +180,7 @@ async function loadStats() {
 
     renderOps(stats, scopedTo);
     renderPersonnel();
-    _naCountry = null; _naIssue = '';
-    renderNeedsAttention();
+    if (naPanel) naPanel.followScope();
 
     // Top Models — by selected Asset Type, split by country (loaded separately).
     loadTopModels();
@@ -373,191 +372,16 @@ function escD(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').repl
 function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 // ── Missing-info alerts table ─────────────────────────────────────────────────
-// ── Needs Attention — Missing Info: split by country (tabs) and by issue (chips) ──
-let _naRows = null;
-let _naCountry = null;     // null = follow the dashboard country switch
-let _naIssue = '';         // '' = all issues
-let _naSite = '';          // '' = all sites, else 'Office' / 'Factory' (Vietnam)
-let _naType = '';          // '' = all asset types
-
-function naIssues(a) {
-  const tags = missingInfoTags(a);
-  if (a.dup_serial) tags.push('Dup Serial');
-  return tags;
-}
-const NA_ISSUES = ['Asset code', 'Serial', 'PC No', 'AD Name', 'Dup Serial'];
-// Missing-info tag → asset field, for in-place editing.
-const NA_FIELDS = { 'Serial': 'serial_no', 'Asset code': 'asset_code', 'PC No': 'computer_no', 'AD Name': 'ad_name' };
-const NA_PROTECTED = ['serial_no', 'asset_code'];   // IT-only fields (server: PROTECTED_FIELDS)
-
-// Can the current user fill this field in place? Mirrors the server's edit rules.
-function naEditable(a, field) {
-  if (!canEdit()) return { ok: false, why: 'View only' };
-  if (NA_PROTECTED.includes(field)) {
-    if (!isIT()) return { ok: false, why: 'Only IT members can edit Serial / Asset code' };
-    if (a.fields_locked) return { ok: false, why: 'Locked — an IT admin must unlock this record first' };
-  }
-  if (field === 'ad_name' && a.user_locked) return { ok: false, why: 'Locked — an IT admin must unlock via History Usage' };
-  return { ok: true };
-}
-
-// Save the values typed in one Needs Attention row (merged into the full record → normal PUT rules apply).
-async function naSaveRow(tr) {
-  const id = tr.dataset.id;
-  const inputs = [...tr.querySelectorAll('input[data-field]')].filter(i => i.value.trim());
-  if (!inputs.length) { showToast('Type the missing value first', 'error'); return; }
-  const btn = tr.querySelector('.na-save');
-  btn.disabled = true;
-  try {
-    const row = await apiGet(`/api/assets/${id}`);
-    inputs.forEach(i => { row[i.dataset.field] = i.value.trim(); });
-    await apiPut(`/api/assets/${id}`, row);
-    showToast(`Saved #${id}`);
-    await loadAlerts();
-  } catch (err) {
-    let msg = 'Could not save';
-    try { msg = JSON.parse(err.message).error || msg; } catch {}
-    showToast(msg, 'error');
-    btn.disabled = false;
-  }
-}
-
-async function loadAlerts() {
-  const tbody = document.getElementById('alert-tbody');
-  try {
-    // Edit rights decide which missing fields are editable in place — make sure the user is known.
-    if (!window.CURRENT_USER && typeof ensureAuth === 'function') await ensureAuth();
-    const order = (c) => { const i = COUNTRIES.indexOf(c); return i < 0 ? COUNTRIES.length : i; };
-    _naRows = (await apiGet('/api/assets/incomplete')).map(a => ({ ...a, _issues: naIssues(a) }))
-      .sort((x, y) => order(x.country) - order(y.country) || typeRank(x.asset_type) - typeRank(y.asset_type) || x.id - y.id);
-    renderNeedsAttention();
-  } catch (err) {
-    console.error(err);
-    tbody.innerHTML = `<tr><td colspan="5" class="empty-state">Failed to load alerts</td></tr>`;
-  }
-}
-
-function renderNeedsAttention() {
-  if (!_naRows) return;
-  const tbody = document.getElementById('alert-tbody');
-  const userCountry = window.CURRENT_USER && window.CURRENT_USER.country;
-  const country = userCountry || (_naCountry !== null ? _naCountry : dashScope);
-
-  const badge = document.getElementById('alert-count');
-  badge.textContent = `${_naRows.length} to fix`;
-  badge.style.display = _naRows.length ? '' : 'none';
-
-  // Country tabs with counts.
-  const tabs = document.getElementById('na-country');
-  const inCountry = (c) => _naRows.filter(a => !c || a.country === c);
-  if (userCountry) {
-    tabs.innerHTML = `<span class="seg-fixed">${escHtml(userCountry)}</span>`;
-  } else {
-    tabs.innerHTML = [['', 'All'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
-      `<button type="button" role="tab" class="seg-btn${v === country ? ' active' : ''}" data-country="${v}" aria-selected="${v === country}">${label}<span class="seg-count">${fmt(inCountry(v).length)}</span></button>`).join('');
-    tabs.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
-      _naCountry = btn.dataset.country; _naIssue = '';
-      if (_naCountry && _naCountry !== SITE_COUNTRY) _naSite = '';
-      renderNeedsAttention();
-    }));
-  }
-
-  // Office / Factory buttons (Vietnam only — shown for All and Vietnam).
-  const siteEl = document.getElementById('na-site');
-  const showSite = !country || country === SITE_COUNTRY;
-  if (!showSite) _naSite = '';
-  const inSite = (rows, site) => rows.filter(a => !site || (a.country === SITE_COUNTRY && a.location === site));
-  const rowsCountry = inCountry(country);
-  siteEl.style.display = showSite ? '' : 'none';
-  siteEl.innerHTML = showSite ? [['', 'All sites'], ...SITES.map(x => [x, 'VN ' + x])].map(([v, label]) =>
-    `<button type="button" role="tab" class="seg-btn${v === _naSite ? ' active' : ''}" data-site="${v}" aria-selected="${v === _naSite}">${label}<span class="seg-count">${fmt(inSite(rowsCountry, v).length)}</span></button>`).join('') : '';
-  siteEl.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
-    _naSite = btn.dataset.site; renderNeedsAttention();
-  }));
-
-  // Asset type filter — Laptop / Desktop / Phone first, counts within country + site.
-  const rowsSite = inSite(rowsCountry, _naSite);
-  const typeCounts = tally(rowsSite.map(a => ({ ...a, cnt: 1 })), a => a.asset_type || '');
-  const types = [...typeCounts.keys()].filter(Boolean)
-    .sort((x, y) => typeRank(x) - typeRank(y) || typeCounts.get(y).total - typeCounts.get(x).total);
-  if (_naType && !typeCounts.has(_naType === '__none' ? '' : _naType)) _naType = '';
-  const typeSel = document.getElementById('na-type');
-  typeSel.innerHTML = `<option value="">All asset types (${fmt(rowsSite.length)})</option>` +
-    types.map(t => `<option value="${escHtml(t)}"${t === _naType ? ' selected' : ''}>${escHtml(t)} (${fmt(typeCounts.get(t).total)})</option>`).join('') +
-    (typeCounts.has('') ? `<option value="__none"${_naType === '__none' ? ' selected' : ''}>Type not set (${fmt(typeCounts.get('').total)})</option>` : '');
-  typeSel.onchange = () => { _naType = typeSel.value; _naIssue = ''; renderNeedsAttention(); };
-
-  // Issue chips (counts within country + site + type) — click to filter.
-  const rowsC = rowsSite.filter(a => !_naType || (_naType === '__none' ? !a.asset_type : a.asset_type === _naType));
-  const issueCount = (t) => rowsC.filter(a => a._issues.includes(t)).length;
-  const issuesEl = document.getElementById('na-issues');
-  issuesEl.innerHTML = NA_ISSUES.filter(t => issueCount(t)).map(t =>
-    `<button type="button" class="na-chip${t === _naIssue ? ' active' : ''}" data-issue="${t}">${t}<b>${fmt(issueCount(t))}</b></button>`).join('')
-    || '<span class="text-muted text-sm">No missing info here.</span>';
-  issuesEl.querySelectorAll('.na-chip').forEach(btn => btn.addEventListener('click', () => {
-    _naIssue = _naIssue === btn.dataset.issue ? '' : btn.dataset.issue; renderNeedsAttention();
-  }));
-  document.getElementById('na-open').href = invLink({ incomplete: '1', country: _naSite ? SITE_COUNTRY : country,
-    location: _naSite, asset_type: _naType === '__none' ? '' : _naType });
-
-  const rows = _naIssue ? rowsC.filter(a => a._issues.includes(_naIssue)) : rowsC;
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">
-      <svg width="36" height="36" fill="none" stroke="#22c55e" stroke-width="1.5" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-      <p>All assets${country ? ' in ' + escHtml(country) : ''} have their key info. 🎉</p>
-    </div></td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = rows.map(a => {
-    // Each missing field is an input you can fill right here (or a red tag when you can't edit it).
-    let tagHtml = a._issues.filter(t => t !== 'Dup Serial').map(t => {
-      const field = NA_FIELDS[t];
-      const can = naEditable(a, field);
-      return can.ok
-        ? `<label class="na-field"><span>${t}</span><input data-field="${field}" placeholder="Enter ${t}" autocomplete="off"></label>`
-        : `<span class="badge badge-broken" title="${escHtml(can.why)}" style="margin:1px;font-size:10.5px;padding:2px 6px">${t}</span>`;
-    }).join('');
-    if (a.dup_serial) {
-      const others = (a.dup_with || []).map(o => o.asset_code || `#${o.id}`).join(', ');
-      const title = others ? `Same serial "${a.serial_no}" as: ${others}` : `Duplicate serial "${a.serial_no}"`;
-      tagHtml += `<span class="badge" title="${escHtml(title)}" style="margin:1px;font-size:10.5px;padding:2px 6px;background:#fde68a;color:#92400e">Dup Serial: ${escHtml(a.serial_no || '?')}</span>`;
-    }
-    const hasInputs = tagHtml.includes('data-field=');
-    const label = a.brand_model || a.user_name || a.department || `Asset #${a.id}`;
-    const site = a.country === SITE_COUNTRY && SITES.includes(a.location) ? ` · ${a.location}` : '';
-    return `
-      <tr data-id="${a.id}">
-        <td style="min-width:140px">
-          <div class="truncate" title="${escHtml(label)}" style="max-width:220px">${escHtml(label)}</div>
-          <span class="text-muted text-sm">#${a.id}${a.asset_type ? ' · ' + escHtml(a.asset_type) : ''}</span>
-        </td>
-        <td class="text-sm">${escHtml(a.country || '—')}<span class="text-muted">${site}</span></td>
-        <td class="text-sm">${escHtml(a.user_name || '—')}</td>
-        <td><div class="na-fields">${tagHtml}</div></td>
-        <td style="text-align:right;white-space:nowrap">
-          ${hasInputs ? '<button type="button" class="btn btn-primary btn-sm na-save">Save</button>' : ''}
-          <a class="btn btn-ghost btn-sm" href="/inventory.html?edit=${a.id}" title="Open the full edit form">Details</a>
-        </td>
-      </tr>`;
-  }).join('');
-
-  tbody.querySelectorAll('tr[data-id]').forEach(tr => {
-    const btn = tr.querySelector('.na-save');
-    if (!btn) return;
-    btn.addEventListener('click', () => naSaveRow(tr));
-    tr.querySelectorAll('input[data-field]').forEach(i => i.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); naSaveRow(tr); }
-    }));
-  });
-}
+// ── Needs Attention — Missing Info (shared panel, js/needs-attention.js) ──
+let naPanel = null;
 
 // ── Save handler (modal save on dashboard page) ───────────────────────────────
 let _saveMode = 'add';
 
 document.addEventListener('DOMContentLoaded', () => {
   loadStats();
-  loadAlerts();                         // missing-info table (asset data quality)
+  naPanel = NeedsAttention({ root: document.getElementById('na-root'), mode: 'missing',
+    scope: () => dashScope, showOpenLink: true });
   loadPersonnelSummary();               // User Inventory summary cards
   // Consolidated notifications (all scopes) — next to Top Models; keep the box when there are none.
   Promise.resolve(loadAlertBox('alert-box', '')).then(() => {
