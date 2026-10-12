@@ -216,6 +216,8 @@ async function loadPersonnelSummary() {
 // ── Top Models box — models + per-country quantity for a chosen Asset Type ────
 // Each model has a 🔒 lock-delete checkbox at the front (IT admin only).
 let _tmInited = false;
+const TM_SHOW = 6;          // rows shown before "Show all"
+let _tmExpanded = false;
 async function loadTopModels(assetType) {
   const body = document.getElementById('tm-body');
   const sel = document.getElementById('tm-type');
@@ -237,19 +239,28 @@ async function loadTopModels(assetType) {
       ${canLock ? '<div class="text-muted text-sm" style="margin-bottom:6px">🔒 Tick a model to lock its assets from deletion (editors can edit but not delete).</div>' : ''}
       <div class="table-wrap"><table>
         <thead><tr>${canLock ? '<th title="Lock from deletion">🔒</th>' : ''}<th>Model</th>${countries.map(c => `<th style="text-align:right">${c}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead>
-        <tbody>${d.models.map(m => {
+        <tbody>${d.models.map((m, i) => {
           const locked = lockedSet.has(String(m.brand_model).toLowerCase());
           const lockCell = canLock
             ? `<td style="text-align:center"><input type="checkbox" class="tm-lock-cb" data-model="${escAttr(m.brand_model)}" ${locked ? 'checked' : ''} title="Lock '${escAttr(m.brand_model)}' from deletion"></td>`
             : '';
-          return `<tr${locked ? ' style="background:#fff7ed"' : ''}>
+          const hidden = !_tmExpanded && i >= TM_SHOW;
+          return `<tr class="${i >= TM_SHOW ? 'tm-more' : ''}" style="${locked ? 'background:#fff7ed;' : ''}${hidden ? 'display:none' : ''}">
             ${lockCell}
             <td>${locked ? '🔒 ' : ''}<a href="/inventory.html?asset_type=${encodeURIComponent(d.selected)}&brand=${encodeURIComponent(m.brand_model)}" title="View these assets">${escD(m.brand_model)}</a></td>
             ${countries.map(c => `<td style="text-align:right">${m.byCountry[c] || 0}</td>`).join('')}
             <td style="text-align:right"><strong>${m.total}</strong></td>
           </tr>`;
         }).join('')}</tbody>
-      </table></div>`;
+      </table></div>
+      ${d.models.length > TM_SHOW ? `<button type="button" class="btn btn-ghost btn-sm" id="tm-toggle" style="margin-top:10px">${_tmExpanded ? 'Show less' : `Show all ${d.models.length} models`}</button>` : ''}`;
+
+    const toggle = document.getElementById('tm-toggle');
+    if (toggle) toggle.addEventListener('click', () => {
+      _tmExpanded = !_tmExpanded;
+      body.querySelectorAll('tr.tm-more').forEach(tr => { tr.style.display = _tmExpanded ? '' : 'none'; });
+      toggle.textContent = _tmExpanded ? 'Show less' : `Show all ${d.models.length} models`;
+    });
 
     // Wire each model lock checkbox.
     body.querySelectorAll('.tm-lock-cb').forEach(cb => cb.addEventListener('change', async () => {
@@ -264,7 +275,7 @@ async function loadTopModels(assetType) {
     body.innerHTML = '<div class="text-muted text-sm">Could not load models.</div>';
   }
 
-  if (!_tmInited) { _tmInited = true; sel.addEventListener('change', () => loadTopModels(sel.value)); }
+  if (!_tmInited) { _tmInited = true; sel.addEventListener('change', () => { _tmExpanded = false; loadTopModels(sel.value); }); }
 }
 function escD(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function escAttr(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
