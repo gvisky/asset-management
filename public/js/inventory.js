@@ -403,6 +403,8 @@ async function onEdit(id) {
     // Show the "Print Delivery Form" button (edit mode only — needs a saved asset).
     const pb = document.getElementById('modal-print');
     if (pb) { pb.style.display = ''; pb.dataset.id = id; }
+    const cb = document.getElementById('modal-custody');
+    if (cb) { cb.style.display = ''; cb.dataset.id = id; }
     openModal('Edit Asset');
   } catch (err) {
     showToast('Failed to load asset', 'error');
@@ -541,6 +543,12 @@ async function refreshBrandOptions() {
       (brands || []).map(b => `<option value="${b.replace(/"/g, '&quot;')}">${b}</option>`).join('');
     sel.value = (cur && (brands || []).includes(cur)) ? cur : '';   // keep selection if still valid
   } catch (e) { /* leave as-is */ }
+}
+
+// Open the HQ Custody Agreement (printable form → Print / Save as PDF) in a new tab.
+function printCustodyForm(id) {
+  if (!id) return;
+  window.open(`/custody-form.html?id=${encodeURIComponent(id)}`, '_blank');
 }
 
 // Download the pre-filled Delivery-Acceptance form (.xlsx) for printing & signature.
@@ -745,6 +753,8 @@ document.addEventListener('DOMContentLoaded', () => {
       clearForm();
       const pb = document.getElementById('modal-print');
       if (pb) pb.style.display = 'none';   // can't print an unsaved asset
+      const cb = document.getElementById('modal-custody');
+      if (cb) cb.style.display = 'none';
       applyFieldLock(null);                // new asset — protected fields open, no lock UI
       openModal('Add Asset');
     });
@@ -753,6 +763,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Print Delivery Form (edit modal)
   const printBtn = document.getElementById('modal-print');
   if (printBtn) printBtn.addEventListener('click', () => printDeliveryForm(printBtn.dataset.id));
+  const custodyBtn = document.getElementById('modal-custody');
+  if (custodyBtn) custodyBtn.addEventListener('click', () => printCustodyForm(custodyBtn.dataset.id));
 
   // Unlock protected fields (IT admin only)
   const unlockBtn = document.getElementById('modal-unlock');
@@ -779,6 +791,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('view-print-btn').addEventListener('click', () => {
     if (viewAsset) printDeliveryForm(viewAsset.id);
+  });
+  document.getElementById('view-custody-btn').addEventListener('click', () => {
+    if (viewAsset) printCustodyForm(viewAsset.id);
   });
 
   // Delete modal

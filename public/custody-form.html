@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Custody Agreement</title>
+  <style>
+    @page { size: A4; margin: 12mm 14mm 12mm 8mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Tahoma, Verdana, "Segoe UI", Arial, sans-serif; font-size: 8.6pt; color: #111; background: #e5e7eb; }
+    .toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; align-items: center; padding: 10px 16px;
+      background: #1e2433; color: #fff; font-family: system-ui, sans-serif; font-size: 13px; }
+    .toolbar button { border: 0; border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; background: #1a56db; color: #fff; }
+    .toolbar button.ghost { background: transparent; border: 1px solid #4b5563; }
+    .toolbar .hint { opacity: .75; }
+    .page { position: relative; width: 210mm; min-height: 297mm; margin: 16px auto; padding: 12mm 14mm 12mm 20mm; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+    .form-code { position: absolute; left: 6mm; top: 12mm; transform: rotate(180deg); writing-mode: vertical-rl; font-size: 7pt; color: #333; }
+    .head { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; margin-bottom: 9mm; }
+    .head img { height: 11mm; }
+    .head .title { text-align: center; font-weight: 700; font-size: 10pt; }
+    .head .date { text-align: right; }
+    .meta div { margin: 1px 0; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 7mm 0 3mm; }
+    .row3 > div:nth-child(2) { text-align: center; }
+    .row3 > div:nth-child(3) { text-align: right; }
+    .confirm { font-weight: 700; font-size: 9.2pt; text-align: justify; margin-bottom: 8mm; }
+    h4 { margin: 0 0 3mm; font-size: 9.5pt; }
+    ol.terms { margin: 0; padding-left: 13mm; }
+    ol.terms > li { margin-bottom: 2mm; text-align: justify; line-height: 1.4; }
+    ol.terms > li::marker { font-weight: 700; font-size: 11pt; }
+    .terms p { margin: 1.6mm 0; }
+    .terms ul { margin: 1mm 0; padding-left: 8mm; list-style: circle; }
+    .terms ul li { margin-bottom: 1.5mm; }
+    .ack { margin-top: 5mm; }
+    .sign { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4mm; margin-top: 2mm; }
+    .sign b { display: block; }
+    .sign .name { min-height: 20mm; }
+    .rule { border-top: 1.5px solid #111; margin: 6mm 0 4mm; }
+    .return-head { display: grid; grid-template-columns: 2fr 1fr; }
+    .page-break { break-before: page; }
+    .muted { color: #6b7280; }
+    @media print {
+      body { background: #fff; }
+      .toolbar { display: none; }
+      .page { margin: 0; padding: 0 0 0 12mm; width: auto; min-height: 0; box-shadow: none; }
+      .form-code { left: 0; top: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" onclick="window.print()">🖨️ Print / Save as PDF</button>
+    <button type="button" class="ghost" onclick="window.close()">Close</button>
+    <span class="hint" id="hint">Loading asset…</span>
+  </div>
+
+  <div class="page" id="form" hidden>
+    <div class="form-code">FR.GLB.16-001/ Rev.No.:0 / 10.07.2026</div>
+
+    <div class="head">
+      <img src="/img/hayat-logo.png" alt="HAYAT">
+      <div class="title">CUSTODY AGREEMENT</div>
+      <div class="date"><b>Date:</b> <span data-f="date"></span></div>
+    </div>
+
+    <div class="meta">
+      <div><b>Personel Registry No:</b> <span data-f="registry"></span></div>
+      <div><b>Request No:</b> <span data-f="request"></span></div>
+      <div><b>Device Type:</b> <span data-f="type"></span></div>
+      <div><b>Asset No:</b> <span data-f="assetNo"></span></div>
+    </div>
+
+    <div class="row3">
+      <div><b>Model:</b> <span data-f="model"></span></div>
+      <div><b>SN / IMEI:</b> <span data-f="serial"></span></div>
+      <div><b>Brand:</b> <span data-f="brand"></span></div>
+    </div>
+
+    <div class="confirm">I confirm that I have received one (1) device of the following specifications, together with the specified components, by undertaking the conditions outlined below:</div>
+
+    <h4>User's Accepted Commitments:</h4>
+    <ol class="terms">
+      <li>Definitions
+        <p><b>“User”</b> means any individual to whom the Company assigns a Device for work purposes, including but not limited to employees, collaborators, contractors, or any individuals having a working relationship with the Company.</p>
+        <p><b>“Company”</b> means Hayat Kimya Vietnam Company Limited, including its affiliates and subsidiaries (if applicable).</p>
+        <p><b>“Device”</b> means any equipment, devices, or tools provided by the Company to the User upon establishment of a relationship with the Company (including employment), such as laptops, mobile phones, tablets, and other work-related equipment.</p>
+        <p><b>“Corporate Data”</b> means all information, data, and materials owned by or under the control of the Company, stored, processed, or accessed through the Device.</p>
+        <p><b>“Personal Data”</b> means any information relating to an identified or identifiable individual in accordance with applicable laws.</p>
+      </li>
+      <li>The Device cannot be transferred to another person or made available for use by third parties.</li>
+      <li>Repairs, maintenance, troubleshooting, and software installations must not be performed by anyone other than personnel from the Information Technology Directorate. In case of non-compliance, the User shall be responsible for any resulting or potential issues.</li>
+      <li>Any damage arising from the User’s fault will be recovered from the User <i>(e.g., theft, loss, physical damage to the device, etc.)</i>.</li>
+      <li>For the security of Corporate Data, a mobile device management application is used on mobile devices.</li>
+      <li>In the event that the User's relationship with the Company is terminated, including any suspension or termination of employment, the Device must be returned to the Information Technology Directorate.</li>
+      <li><b>Acceptable Use and Personal Use</b>
+        <p>The assigned Device must be used primarily for business purposes in accordance with Company policies. Personal use is permitted only within reasonable and incidental limits (e.g., brief personal communications or browsing that does not interfere with work duties, consume excessive resources, or expose Corporate Data to risk), in compliance with Vietnamese laws. No software installation is allowed without prior confirmation from the Information Technology Directorate. The User takes full responsibility for any unlicensed or illegally installed software and holds the Company harmless against any claim, loss, liability, or expense arising from such violation. All activities on the Device may be subject to monitoring and auditing for security, compliance, and legitimate business interests. The User will be personally held accountable for any violations of the Company's Acceptable Use Policy or related information security rules.</p>
+        <p>For the avoidance of doubt, the User acknowledges and agrees that the automatic storage of information on the Device of the User in accordance with this assignment form shall not, in itself, constitute the Company’s collection, storage, or processing of Personal Data of the User. The User further acknowledges that they are solely responsible for controlling and managing any Personal Data stored on the Device. The Company shall not be liable for any Personal Data stored on the User’s Device or for any loss, disclosure, or misuse thereof.</p>
+      </li>
+      <li>The assignment and use of the Device fully comply with Human Resources of the Company procedures and applicable Vietnamese labor regulations, including the Labor Code 2019 (particularly Article 129 on compensation for damage to employer property). Any violation of these terms or related policies may result in disciplinary action, in accordance with applicable regulations and Company procedures.</li>
+      <li><b>Legal and Regulatory Compliance</b> This assignment form is prepared in full compliance with all relevant laws and regulations applicable in Vietnam, including but not limited to:
+        <ul>
+          <li>Labor Code 2019 (particularly Article 129 on asset damage compensation), and other relevant provisions on information security, occupational health and safety, and employment rights. The User accepts full responsibility for the lawful use of the Device and agrees to compensate the Company against any claims, losses, liabilities, or expenses arising from the User's non-compliant use; and</li>
+          <li>Law on Personal Data Protection 2025 and its implementing regulations; and</li>
+          <li>Civil Code 2015 and its implementing regulations; and</li>
+          <li>Other applicable laws and regulations.</li>
+        </ul>
+      </li>
+    </ol>
+
+    <div class="ack">
+      <b>User Acknowledgment</b><br>
+      I have read, understood, and agree to all the terms above. I accept full responsibility as outlined.
+    </div>
+
+    <p style="margin-top:7mm">Delivered Equipment:</p>
+    <b>CUSTODY DELIVERY:</b>
+    <div class="sign">
+      <div class="name"><b>Delivery Party:</b><b>Date: <span style="font-weight:400" data-f="date"></span></b><span data-f="deliveredBy"></span></div>
+      <div class="name"><b>Received Party :</b><b>Date: <span style="font-weight:400" data-f="date"></span></b><span data-f="receivedBy"></span></div>
+      <div class="name"><b>Inventory Officer:</b><b>Date:</b></div>
+    </div>
+
+    <div class="rule"></div>
+    <div class="return-head"><b>CUSTODY RETURN:</b><b>Request No:</b></div>
+    <div class="sign">
+      <div><b>Delivering Party:</b><b>Date:</b></div>
+      <div><b>Receiving Party :</b><b>Date:</b></div>
+      <div><b>Inventory:</b><b>Date:</b></div>
+    </div>
+  </div>
+
+  <script src="/js/custody-form.js"></script>
+</body>
+</html>
