@@ -1,6 +1,6 @@
 /* HQ Custody Agreement (FR.GLB.16-001) — printable form for one asset.
    Opened from Asset Inventory: /custody-form.html?id=<asset id>
-   Device Type = Asset Type, Asset No = Asset Code, Model / Brand from Brand / Model,
+   Device Type = Asset Type, Asset No = Asset Code, Asset No (S/4) = S/4 asset code, Model / Brand from Brand / Model,
    SN / IMEI = Serial, Delivery Party = the user printing, Received Party = User Name, Date = today. */
 
 // Known brand names at the start of "Brand / Model" (e.g. "Lenovo T14 G2" → Lenovo + T14 G2).
@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       request: '',
       type: a.asset_type || '',
       assetNo: a.asset_code || '',
+      assetS4: a.asset_s4 || '',
       model,
       serial: a.serial_no || '',
       brand,
