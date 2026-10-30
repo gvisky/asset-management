@@ -183,7 +183,7 @@ async function applyDirectoryImport(parsed, user) {
       ...updateIds('UPDATE personnel SET azure_seen_at = ?', [now], seenIds),
       ...multiInsert('personnel', ['country', 'display_name', 'email', 'user_type', 'status', 'company_name', 'position',
         'leaving_date', 'entra_id', 'employee_id', 'ad_department', 'azure_seen_at'], inserts),
-    ]);
+    ], 50);
     out.notInExport = Number((await get(
       'SELECT COUNT(*) AS c FROM personnel WHERE azure_seen_at IS NULL OR azure_seen_at < ?', [now])).c);
     await setMeta('personnel_last_import', now);
@@ -205,7 +205,9 @@ async function applyDirectoryImport(parsed, user) {
     const defaults = (c) => (['is_managed', 'is_compliant', 'account_enabled'].includes(c) ? null : (c.startsWith('in_') ? 0 : ''));
     const cols = [...DEVICE_COLS, 'person_id', 'asset_id', 'imported_at'];
     const rows = devices.map(d => [...DEVICE_COLS.map(c => (d[c] === undefined ? defaults(c) : d[c])), personOf(d.user_upn), assetOf(d), now]);
-    await batch([{ sql: 'DELETE FROM devices', args: [] }, ...multiInsert('devices', cols, rows, 40)]);
+    // DELETE + inserts in one transaction per request chunk; 50 statements ≈ 2,000 rows per request.
+    await run('DELETE FROM devices');
+    await batch(multiInsert('devices', cols, rows, 40), 50);
     await setMeta('directory_last_import', now);
   } else {
     // People only: re-link existing devices to (new) people / assets where it changed.

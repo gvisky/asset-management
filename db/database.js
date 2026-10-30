@@ -32,7 +32,7 @@ async function run(sql, args = [])  { await init(); return backend.run(sql, args
 async function script(sql)          { await init(); return backend.script(sql); }
 // Run many write statements ([{ sql, args }]) in one transaction — used by big imports
 // (thousands of rows) so Turso gets a few round trips instead of one per row.
-async function batch(stmts, chunk = 400) {
+async function batch(stmts, chunk = 100) {
   await init();
   for (let i = 0; i < stmts.length; i += chunk) await backend.batch(stmts.slice(i, i + chunk));
 }
