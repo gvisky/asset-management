@@ -5,24 +5,18 @@ const { get, all, run, audit, notify, getMeta, setMeta } = require('../db/databa
 const { requireAuth, isITAdmin } = require('../middleware/auth');
 const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
 
+const { normCountry } = require('../lib/countries');
+const { knownCountries } = require('../lib/country-list');
+const { scopeList, inScope, countrySql, resolveScopedCountry } = require('../lib/scope');
+const { parseCsv } = require('../lib/directory-import');
+
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
 
 const USER_TYPES = ['', 'Hayat Member', 'No Hayat Member'];
 const STATUSES   = ['Active', 'to be delete', 'pending delete', 'deleted'];
 
-// Map an Azure "Company Name" to one of our 3 countries (else null = ignore).
-function countryFromCompany(company) {
-  const c = String(company || '').toLowerCase();
-  if (c.includes('vietnam')) return 'Vietnam';
-  if (c.includes('thailand') || c.includes('thailans')) return 'Thailand';  // handles the export typo
-  if (c.includes('malaysia')) return 'Malaysia';
-  return null;
-}
-
 router.use(requireAuth);
 
-const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
 const isHR = (req) => req.user && req.user.team === 'HR';
 const isIT = (req) => req.user && req.user.team === 'IT';
 
@@ -40,9 +34,8 @@ router.get('/', wrap(async (req, res) => {
   const conditions = [];
   const params = [];
 
-  const scope = scopeOf(req);
-  if (scope) { conditions.push('country = ?'); params.push(scope); }
-  else if (country) { conditions.push('country = ?'); params.push(country); }
+  const cs = countrySql(req, 'country', country);
+  if (cs.clause) { conditions.push(cs.clause); params.push(...cs.params); }
 
   if (search) {
     conditions.push('(display_name LIKE ? OR email LIKE ? OR company_name LIKE ? OR position LIKE ?)');
@@ -51,6 +44,10 @@ router.get('/', wrap(async (req, res) => {
   }
   if (status)    { conditions.push('status = ?');    params.push(status); }
   if (user_type) { conditions.push('user_type = ?'); params.push(user_type); }
+  // Not found in the latest Azure user export (left / disabled / renamed?).
+  if (req.query.azure === 'missing') {
+    conditions.push("azure_seen_at IS NOT NULL AND azure_seen_at < (SELECT value FROM app_meta WHERE key = 'personnel_last_import')");
+  }
 
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const offset = (Number(page) - 1) * Number(limit);
@@ -63,17 +60,19 @@ router.get('/', wrap(async (req, res) => {
   const adMatch = `a.deleted_at IS NULL AND a.ad_name <> '' AND instr(p.email,'@') > 0
         AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1))`;
   const data = await all(
-    `SELECT p.*, (SELECT COUNT(*) FROM assets a WHERE ${adMatch}) AS asset_count
+    `SELECT p.*, (SELECT COUNT(*) FROM assets a WHERE ${adMatch}) AS asset_count,
+            (SELECT COUNT(*) FROM devices d WHERE d.person_id = p.id) AS device_count
      FROM personnel p ${where} ORDER BY display_name COLLATE NOCASE LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );
-  res.json({ total, page: Number(page), limit: Number(limit), data,
+  const lastImport = await getMeta('personnel_last_import');
+  res.json({ total, page: Number(page), limit: Number(limit), data, last_import: lastImport,
              can: { edit: isITAdmin(req.user) } });
 }));
 
 // ── GET /api/personnel/filters — country list for the filter dropdown ─────────
 router.get('/filters', wrap(async (req, res) => {
-  const countries = scopeOf(req) ? [scopeOf(req)] : ['Vietnam', 'Thailand', 'Malaysia'];
+  const countries = scopeList(req) || await knownCountries();
   res.json({ countries });
 }));
 
@@ -81,10 +80,10 @@ router.get('/filters', wrap(async (req, res) => {
 // Country-scoped: Thailand/Malaysia use a different scheme, so they get only
 // their own cost centers (currently none → blank). Available to HR & IT.
 router.get('/cost-centers', wrap(async (req, res) => {
-  const country = scopeOf(req) || req.query.country || '';
   const cond = ['deleted_at IS NULL', "cost_center <> ''"];
   const params = [];
-  if (country) { cond.push('country = ?'); params.push(country); }
+  const cs = countrySql(req, 'country');
+  if (cs.clause) { cond.push(cs.clause); params.push(...cs.params); }
   const rows = await all(
     `SELECT cost_center AS code, MAX(cost_center_desc) AS descr
        FROM assets WHERE ${cond.join(' AND ')}
@@ -99,8 +98,7 @@ router.post('/', wrap(async (req, res) => {
   const display_name = (b.display_name || '').trim();
   const email = (b.email || '').trim();
   if (!display_name || !email) return res.status(400).json({ error: 'Display name and email are required' });
-  let country = (b.country || '').trim();
-  if (!VALID_COUNTRIES.includes(country)) country = 'Vietnam';
+  const country = resolveScopedCountry(req, normCountry(b.country), 'Vietnam');
   const user_type = USER_TYPES.includes(b.user_type) ? b.user_type : '';
   const status = STATUSES.includes(b.status) ? b.status : 'Active';
   // TH/MY use a different scheme — don't store VN cost centers for them.
@@ -145,7 +143,7 @@ router.post('/import-sync', wrap(async (req, res) => {
       const key = c.header.trim().toLowerCase();
       if (key in byHeader) data[c.field] = String(byHeader[key] == null ? '' : byHeader[key]).trim();
     }
-    if (!VALID_COUNTRIES.includes(data.country)) data.country = data.country || 'Vietnam';
+    data.country = resolveScopedCountry(req, normCountry(data.country), 'Vietnam');
     // Thailand/Malaysia don't carry Vietnam's cost-center/department scheme.
     if (data.country !== 'Vietnam') { data.department = ''; data.cost_center = ''; }
 
@@ -153,7 +151,7 @@ router.post('/import-sync', wrap(async (req, res) => {
     const id = (idRaw === '' || idRaw == null) ? null : Number(idRaw);
     if (id && Number.isFinite(id)) {
       const existing = await get('SELECT * FROM personnel WHERE id = ?', [id]);
-      if (!existing) { skipped++; continue; }
+      if (!existing || !inScope(req, existing.country)) { skipped++; continue; }
       const ut = USER_TYPES.includes(data.user_type) ? data.user_type : existing.user_type;
       const st = STATUSES.includes(data.status) ? data.status : existing.status;
       const fields = PERS_WRITABLE.map(c => c.field);
@@ -179,9 +177,9 @@ router.post('/import-sync', wrap(async (req, res) => {
 
 // ── GET /api/personnel/summary — dashboard metrics (country-scoped) ───────────
 router.get('/summary', wrap(async (req, res) => {
-  const scope = scopeOf(req);
-  const cond = scope ? 'WHERE country = ?' : '';
-  const params = scope ? [scope] : [];
+  const cs = countrySql(req, 'country', null);
+  const cond = cs.clause ? 'WHERE ' + cs.clause : '';
+  const params = cs.params;
 
   const total = Number((await get(`SELECT COUNT(*) AS c FROM personnel ${cond}`, params)).c);
   const byStatus = (await all(`SELECT status, COUNT(*) AS c FROM personnel ${cond} GROUP BY status`, params))
@@ -214,62 +212,18 @@ router.get('/meta', wrap(async (req, res) => {
   res.json({ last_import: last, days_since: days, due, canImport: isITAdmin(req.user) });
 }));
 
-// ── POST /api/personnel/import — IT uploads a raw Azure CSV export ────────────
-// Filters to Vietnam/Thailand/Malaysia by Company Name, then upserts by email,
-// preserving HR/IT workflow fields (user_type, status, leaving_date).
+// ── POST /api/personnel/import — IT uploads the Azure users CSV ──────────────
+// All countries. Same importer as Devices → Import (routes/devices.js): upserts
+// people by email, keeping HR/IT workflow fields and rows they have edited.
 router.post('/import', wrap(async (req, res) => {
   if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can upload' });
-
   const csv = req.body && req.body.csv;
   if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'No CSV content received' });
-
   let rows;
-  try {
-    const wb = XLSX.read(csv, { type: 'string' });
-    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
-  } catch (e) {
-    return res.status(400).json({ error: 'Could not parse the CSV file' });
-  }
-
-  const existing = await all('SELECT id, email, touched FROM personnel');
-  const byEmail = new Map(existing.map(r => [String(r.email).toLowerCase(), r]));
-
-  let added = 0, updated = 0, skipped = 0, preserved = 0;
-  const byCountry = { Vietnam: 0, Thailand: 0, Malaysia: 0 };
-
-  for (const r of rows) {
-    const display = String(r.displayName || r['Display Name'] || '').trim();
-    const email   = String(r.userPrincipalName || r.Email || r.email || '').trim();
-    const company = String(r.companyName || r['Company Name'] || '').trim();
-    const country = countryFromCompany(company);
-    if (!country || !email) { skipped++; continue; }
-    byCountry[country]++;
-
-    const found = byEmail.get(email.toLowerCase());
-    if (found) {
-      // Never overwrite records an HR/IT member has already edited.
-      if (found.touched) { preserved++; continue; }
-      // Untouched existing: refresh roster fields only (workflow fields kept).
-      await run("UPDATE personnel SET display_name = ?, company_name = ?, country = ?, updated_at = datetime('now') WHERE id = ?",
-                [display, company, country, found.id]);
-      updated++;
-    } else {
-      // New person → insert (no duplicates, matched by email above).
-      await run(`INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date)
-                 VALUES (?, ?, ?, '', 'Active', ?, '', '')`,
-                [country, display, email, company]);
-      added++;
-    }
-  }
-
-  const nowStr = (await get("SELECT datetime('now') AS n")).n;
-  await setMeta('personnel_last_import', nowStr);
-  await audit(req.user, 'IMPORT', null,
-    `Imported personnel: +${added} new, ${updated} updated, ${preserved} preserved (edited), ${skipped} skipped`);
-  await notify({ audience: 'all', scope: 'personnel', message:
-    `${req.user.full_name} imported the Azure user export: +${added} new, ${updated} refreshed, ${preserved} kept (already edited).` });
-
-  res.json({ added, updated, skipped, preserved, byCountry, last_import: nowStr });
+  try { rows = parseCsv(csv); } catch (e) { return res.status(400).json({ error: 'Could not parse the CSV file' }); }
+  const { applyDirectoryImport } = require('./devices');
+  const out = await applyDirectoryImport({ azure: rows }, req.user);
+  res.json({ ...out, skipped: out.skippedGuests + out.skippedNoCountry });
 }));
 
 // ── PUT /api/personnel/:id — edit a record (IT admin only) ────────────────────
@@ -277,6 +231,7 @@ router.put('/:id', wrap(async (req, res) => {
   if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can edit User Inventory records' });
   const row = await get('SELECT * FROM personnel WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Person not found' });
+  if (!inScope(req, row.country)) return res.status(403).json({ error: 'Not in your region' });
 
   const sets = [];
   const params = [];

@@ -100,13 +100,10 @@ async function loadFilters() {
       if (cc.descr) CC_BY_DESC[String(cc.descr).trim().toLowerCase()] = cc;
     });
 
-    // Regional managers (scoped to one country) don't need the country filter
-    // and their add/edit form is locked to their country.
-    const myCountry = window.CURRENT_USER && window.CURRENT_USER.country;
+    // Single-country users don't need the country filter (the form is locked by auth.js).
+    const myCountry = mySingleCountry();
     if (myCountry) {
       countrySel.style.display = 'none';
-      const fc = document.getElementById('f-country');
-      if (fc) { fc.value = myCountry; fc.disabled = true; }
       if (!locationApplies(myCountry)) document.getElementById('filter-location').style.display = 'none';
     }
   } catch (err) {
@@ -674,7 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   // Location (Office / Factory) only exists in Vietnam — hide that filter for Thailand / Malaysia.
   const syncLocationFilter = () => {
-    const c = document.getElementById('filter-country').value || (window.CURRENT_USER && window.CURRENT_USER.country) || '';
+    const c = document.getElementById('filter-country').value || mySingleCountry() || '';
     const lf = document.getElementById('filter-location');
     const applies = locationApplies(c);
     lf.style.display = applies ? '' : 'none';

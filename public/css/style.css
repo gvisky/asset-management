@@ -215,6 +215,10 @@ a.bar-item:hover .bar-fill { filter: brightness(1.1); }
 .na-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; border-bottom: 1px solid var(--border); background: #fafbfc; }
 .seg-sm .seg-btn { padding: 4px 10px; font-size: 12px; }
 .na-type { min-width: 170px; }
+.country-all { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0 8px; }
+.country-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; max-height: 180px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }
+.country-pick label { display: flex; align-items: center; gap: 6px; }
 .alert-pop-wrap { position: relative; }
 .alert-btn .badge { margin-left: 4px; padding: 1px 6px; font-size: 10.5px; }
 .alert-pop { position: absolute; right: 0; top: calc(100% + 8px); width: 420px; max-width: calc(100vw - 24px); z-index: 200;

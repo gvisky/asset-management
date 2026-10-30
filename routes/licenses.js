@@ -3,7 +3,8 @@ const router = express.Router();
 const { get, all, run, audit } = require('../db/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
-const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+const { normCountry } = require('../lib/countries');
+const { scopeList, inScope } = require('../lib/scope');
 const TYPES = ['subscription', 'perpetual'];
 
 router.use(requireAuth);
@@ -13,13 +14,15 @@ router.use((req, res, next) => {
   next();
 });
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
 
 // Visibility: scoped users see Global + their own country; globals see all
 // (optionally filtered by ?country=).
 function visFilter(req) {
-  const scope = scopeOf(req);
-  if (scope) return { clause: "(country = 'Global' OR country = ?)", params: [scope] };
+  const list = scopeList(req);
+  if (list) {
+    if (req.query.country && list.includes(req.query.country)) return { clause: 'country = ?', params: [req.query.country] };
+    return { clause: `(country = 'Global' OR country IN (${list.map(() => '?').join(', ')}))`, params: list };
+  }
   if (req.query.country) return { clause: 'country = ?', params: [req.query.country] };
   return { clause: null, params: [] };
 }
@@ -27,9 +30,8 @@ function visFilter(req) {
 // A user may manage a license if global, or (scoped) only their own country's
 // rows — never the shared Global ones.
 function canManage(req, lic) {
-  const scope = scopeOf(req);
-  if (!scope) return true;
-  return lic.country === scope;
+  if (!scopeList(req)) return true;
+  return lic.country !== 'Global' && inScope(req, lic.country);
 }
 
 const SEATS = `(SELECT COUNT(*) FROM license_assignments la WHERE la.license_id = l.id AND la.released_at IS NULL)`;
@@ -61,8 +63,7 @@ router.get('/stats', wrap(async (req, res) => {
 router.get('/:id', wrap(async (req, res) => {
   const lic = await get(`SELECT l.*, ${SEATS} AS seats_used FROM licenses l WHERE l.id = ?`, [req.params.id]);
   if (!lic) return res.status(404).json({ error: 'License not found' });
-  const scope = scopeOf(req);
-  if (scope && lic.country !== 'Global' && lic.country !== scope) {
+  if (lic.country !== 'Global' && !inScope(req, lic.country)) {
     return res.status(403).json({ error: 'Not in your region' });
   }
   const assignments = await all(
@@ -74,10 +75,10 @@ router.get('/:id', wrap(async (req, res) => {
 // Resolve the country to store, honouring scope. Scoped users always store
 // their own country; globals may pick a country or 'Global'.
 function resolveCountry(req, requested) {
-  const scope = scopeOf(req);
-  if (scope) return scope;
-  if (requested === 'Global' || VALID_COUNTRIES.includes(requested)) return requested;
-  return 'Global';
+  const list = scopeList(req);
+  const c = requested === 'Global' ? 'Global' : normCountry(requested);
+  if (list) return list.includes(c) ? c : list[0];        // scoped users: only their own countries
+  return c || 'Global';
 }
 
 // ── POST /api/licenses — create (admin/editor) ────────────────────────────────
@@ -108,7 +109,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const b = req.body;
   const type = b.type ?? lic.type;
   if (!TYPES.includes(type)) return res.status(400).json({ error: 'Invalid type' });
-  const country = scopeOf(req) ? lic.country : resolveCountry(req, b.country ?? lic.country);
+  const country = resolveCountry(req, b.country ?? lic.country);
 
   await run(
     `UPDATE licenses SET name = ?, vendor = ?, type = ?, total_seats = ?, license_key = ?,

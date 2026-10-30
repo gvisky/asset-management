@@ -26,7 +26,7 @@ Node + Express · Turso/libSQL (built-in node:sqlite locally) · vanilla HTML/CS
 | yen | editor | Vietnam | HR | **no Asset Inventory access** |
 | test | admin (global) | all | IT | test account used by Claude Code to verify changes on the live site |
 
-Roles: **admin / editor / viewer** (+ region scope). Teams: **IT / HR** (drive the User Inventory page). Global = no region (sees all countries); regional = limited to their country. **IT admin** = team IT + role admin (needed for Budget, User Inventory editing/import, report import, unlocking).
+Roles: **admin / editor / viewer** (+ country scope: global, or one or more countries per user). Teams: **IT / HR** (drive the User Inventory page). Global = no region (sees all countries); regional = limited to their country. **IT admin** = team IT + role admin (needed for Budget, User Inventory editing/import, report import, unlocking).
 
 ## Modules
 1. **Asset Inventory** — 3 countries (Vietnam/Thailand/Malaysia); search + filters (country, location, brand, department, status, **Asset Type** — landing view defaults to Laptop); clickable dashboard cards; **Needs Attention** (missing info, Active without AD Name, duplicate serials; some asset types exempt); **Missing AD & Asset** inline filter; AD Name column; department / cost center / ECC CC linked dropdowns; **Print Delivery Form** (company .xlsx) from Edit / View Detail; **Recycle Bin** (soft delete + restore, admin; permanent delete for IT admin); audit log. Asset status = **Active / Broken / Stock**.
@@ -41,7 +41,8 @@ Roles: **admin / editor / viewer** (+ region scope). Teams: **IT / HR** (drive t
 9. **Notifications / Alerts** — alert boxes on Dashboard / Asset Inventory / User Inventory + Needs Attention alerts page; audience-aware (IT/HR/all) + region-scoped; events for HR/IT changes, asset delete/restore, imports.
 10. **Dashboard** — asset stats, per-country cards, Top Models by Asset Type (with delete-lock), User Inventory summary cards, consolidated alerts.
 11. **Mobile / phone UI** — off-canvas hamburger sidebar, card-view tables, iPhone safe-area support (desktop layout unchanged).
-12. **Backup / restore** — `npm run backup` (all tables → timestamped JSON), `npm run restore` (see `DISASTER-RECOVERY.md`).
+12. **Devices (Intune + Entra)** — IT admin imports 3 Microsoft exports (Azure users, Intune devices, Entra devices); they are linked by email (person ⇄ device), Intune Device ID / device name (Intune ⇄ Entra) and Computer No / Serial (device ⇄ asset). Devices page with compliance, last sign-in, owner and asset links; "Fill assets from Intune" fills only empty asset fields. The Azure users file updates User Inventory for **all countries** (people only — guests and service accounts skipped).
+13. **Backup / restore** — `npm run backup` (all tables → timestamped JSON), `npm run restore` (see `DISASTER-RECOVERY.md`).
 
 ## Working rule (avoid conflicts)
 The project is **one repo + one live site + one database**. Every push to `main` goes live immediately and works on real data.

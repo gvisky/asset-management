@@ -30,6 +30,12 @@ async function get(sql, args = [])  { await init(); return backend.get(sql, args
 async function all(sql, args = [])  { await init(); return backend.all(sql, args); }
 async function run(sql, args = [])  { await init(); return backend.run(sql, args); }
 async function script(sql)          { await init(); return backend.script(sql); }
+// Run many write statements ([{ sql, args }]) in one transaction — used by big imports
+// (thousands of rows) so Turso gets a few round trips instead of one per row.
+async function batch(stmts, chunk = 400) {
+  await init();
+  for (let i = 0; i < stmts.length; i += chunk) await backend.batch(stmts.slice(i, i + chunk));
+}
 
 // ── Backend setup ───────────────────────────────────────────────────────────
 async function setup() {
@@ -47,6 +53,7 @@ async function setup() {
         };
       },
       async script(sql) { await client.executeMultiple(sql); },
+      async batch(stmts) { await client.batch(stmts.map(s => ({ sql: s.sql, args: s.args || [] })), 'write'); },
     };
     console.log('[db] Using Turso cloud database (shared)');
   } else {
@@ -66,6 +73,11 @@ async function setup() {
         };
       },
       async script(sql) { db.exec(sql); },
+      async batch(stmts) {
+        db.exec('BEGIN');
+        try { for (const st of stmts) db.prepare(st.sql).run(...(st.args || [])); db.exec('COMMIT'); }
+        catch (e) { db.exec('ROLLBACK'); throw e; }
+      },
     };
     console.log('[db] Using local SQLite file:', DB_PATH);
   }
@@ -843,6 +855,50 @@ async function migrate() {
   // user_locked = 1 once any member changed User Name / AD Name (a holder change);
   // surfaced via the History Usage button. Only an IT admin can unlock.
   if (!acols.includes('user_locked'))       await backend.run("ALTER TABLE assets ADD COLUMN user_locked INTEGER NOT NULL DEFAULT 0");
+
+  // User Inventory ← Azure user export (all countries): Entra object id, employee id,
+  // Azure department, and when the person was last seen in an Azure export.
+  const pcols2 = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
+  if (!pcols2.includes('entra_id'))       await backend.run("ALTER TABLE personnel ADD COLUMN entra_id TEXT DEFAULT ''");
+  if (!pcols2.includes('employee_id'))    await backend.run("ALTER TABLE personnel ADD COLUMN employee_id TEXT DEFAULT ''");
+  if (!pcols2.includes('ad_department'))  await backend.run("ALTER TABLE personnel ADD COLUMN ad_department TEXT DEFAULT ''");
+  if (!pcols2.includes('azure_seen_at'))  await backend.run("ALTER TABLE personnel ADD COLUMN azure_seen_at TEXT DEFAULT NULL");
+
+  // Devices ← Intune + Entra device exports (replaced on every import; one row per device).
+  await backend.script(`
+    CREATE TABLE IF NOT EXISTS devices (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      name            TEXT    DEFAULT '',
+      country         TEXT    DEFAULT '',
+      user_upn        TEXT    DEFAULT '',
+      user_name       TEXT    DEFAULT '',
+      person_id       INTEGER DEFAULT NULL,
+      asset_id        INTEGER DEFAULT NULL,
+      os              TEXT    DEFAULT '',
+      os_version      TEXT    DEFAULT '',
+      model           TEXT    DEFAULT '',
+      manufacturer    TEXT    DEFAULT '',
+      serial_no       TEXT    DEFAULT '',
+      managed_by      TEXT    DEFAULT '',
+      ownership       TEXT    DEFAULT '',
+      category        TEXT    DEFAULT '',
+      join_type       TEXT    DEFAULT '',
+      is_managed      INTEGER DEFAULT NULL,
+      is_compliant    INTEGER DEFAULT NULL,
+      account_enabled INTEGER DEFAULT NULL,
+      last_sign_in    TEXT    DEFAULT '',
+      intune_id       TEXT    DEFAULT '',
+      entra_device_id TEXT    DEFAULT '',
+      entra_object_id TEXT    DEFAULT '',
+      in_intune       INTEGER NOT NULL DEFAULT 0,
+      in_entra        INTEGER NOT NULL DEFAULT 0,
+      imported_at     TEXT    DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_devices_upn     ON devices(user_upn);
+    CREATE INDEX IF NOT EXISTS idx_devices_name    ON devices(name);
+    CREATE INDEX IF NOT EXISTS idx_devices_country ON devices(country);
+    CREATE INDEX IF NOT EXISTS idx_personnel_email ON personnel(email);
+  `);
 }
 
 // Create a notification for a given audience/country/scope.
@@ -996,4 +1052,4 @@ async function audit(user, action, assetId, details) {
   }
 }
 
-module.exports = { init, get, all, run, script, audit, notify, getMeta, setMeta, USE_TURSO };
+module.exports = { init, get, all, run, script, batch, audit, notify, getMeta, setMeta, USE_TURSO };

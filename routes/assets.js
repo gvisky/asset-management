@@ -34,7 +34,9 @@ const NO_TYPE_SQL = "(asset_type IS NULL OR asset_type = '')";
 const TYPE_ORDER_SQL = `CASE LOWER(asset_type) WHEN 'laptop' THEN 0 WHEN 'desktop' THEN 1
   WHEN 'mobile phone' THEN 2 WHEN 'phone' THEN 2 WHEN 'ip phone' THEN 3 ELSE 9 END`;
 
-const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+const { normCountry } = require('../lib/countries');
+const { knownCountries } = require('../lib/country-list');
+const { scopeList, inScope, countrySql, singleScope, resolveScopedCountry } = require('../lib/scope');
 
 // Only this account may edit the History Usage audit log (configurable via env).
 const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
@@ -53,17 +55,9 @@ router.use((req, res, next) => {
 // Small wrapper so async handler errors become 500s instead of hanging.
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
-// The country a user is restricted to (null = sees all countries).
-const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
-
-// Build a country filter: scoped users are forced to their country; global users
-// may optionally filter via ?country=. Returns { clause, params }.
-function countryFilter(req) {
-  const scope = scopeOf(req);
-  if (scope) return { clause: 'country = ?', params: [scope] };
-  if (req.query.country) return { clause: 'country = ?', params: [req.query.country] };
-  return { clause: null, params: [] };
-}
+// Country filter: the user's countries (if they manage only some), optionally
+// narrowed by ?country=. Returns { clause, params }.
+const countryFilter = (req) => countrySql(req, 'country');
 
 // ── GET /api/assets — list (excludes soft-deleted) with search & filter ───────
 router.get('/', wrap(async (req, res) => {
@@ -195,7 +189,7 @@ router.get('/stats', wrap(async (req, res) => {
   const openRepairs = Number((await get(`SELECT COUNT(*) as cnt FROM maintenance_log WHERE ${repCond.join(' AND ')}`, rp)).cnt);
 
   res.json({ total, byStatus, byLocation, byCountry, byBrand, breakdown, recentlyAdded, deletedCount, incompleteCount,
-             warrantyExpiring, openRepairs, scope: scopeOf(req) });
+             warrantyExpiring, openRepairs, scope: singleScope(req), scopeList: scopeList(req) });
 }));
 
 // Models (brand_model) that are locked from deletion (JSON list in app_meta).
@@ -220,7 +214,7 @@ router.get('/top-models', wrap(async (req, res) => {
   let selected = (req.query.asset_type || '').trim();
   if (!selected || !names.includes(selected)) selected = names.includes('Laptop') ? 'Laptop' : (names[0] || '');
 
-  const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
+  const countries = scopeList(req) || [...new Set((await all(`SELECT DISTINCT country AS c FROM assets ${baseWhere}`, bp)).map(r => r.c))];
   const rows = selected ? await all(
     `SELECT brand_model, country, COUNT(*) AS cnt FROM assets WHERE ${base.join(' AND ')} AND asset_type = ?
        GROUP BY brand_model, country`, [...bp, selected]) : [];
@@ -280,7 +274,7 @@ router.get('/filters', wrap(async (req, res) => {
   const noTypeCount = Number((await get(
     `SELECT COUNT(*) AS cnt FROM assets WHERE deleted_at IS NULL AND ${NO_TYPE_SQL}${extra}`, cf.params)).cnt);
   // Global users get the full country list; scoped users get only their own.
-  const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
+  const countries = scopeList(req) || await knownCountries();
   res.json({ brands, departments, countries, costCenters, assetTypes, noTypeCount });
 }));
 
@@ -372,8 +366,7 @@ router.get('/user-locked', wrap(async (req, res) => {
 router.post('/:id/user-unlock', requireITAdmin, wrap(async (req, res) => {
   const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Asset not found' });
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
   if (!existing.user_locked) return res.json({ message: 'already unlocked', user_locked: 0 });
 
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -389,8 +382,7 @@ router.post('/:id/user-unlock', requireITAdmin, wrap(async (req, res) => {
 router.post('/:id/unlock', requireITAdmin, wrap(async (req, res) => {
   const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Asset not found' });
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
   if (!existing.fields_locked) return res.json({ message: 'already unlocked', fields_locked: 0 });
 
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -407,8 +399,7 @@ router.post('/:id/unlock', requireITAdmin, wrap(async (req, res) => {
 router.get('/:id/delivery-form', wrap(async (req, res) => {
   const a = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
   if (!a) return res.status(404).json({ error: 'Asset not found' });
-  const scope = scopeOf(req);
-  if (scope && a.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, a.country)) return res.status(403).json({ error: 'Not in your region' });
 
   const today = new Date().toISOString().slice(0, 10);
   const buf = buildDeliveryForm({
@@ -433,8 +424,7 @@ router.get('/:id/delivery-form', wrap(async (req, res) => {
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Asset not found' });
-  const scope = scopeOf(req);
-  if (scope && row.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, row.country)) return res.status(403).json({ error: 'Not in your region' });
   // Flag if this asset's model is delete/edit-locked (freezes Asset Type / Brand-Model / Serial).
   const lockedModels = await getLockedModels();
   row.model_locked = row.brand_model && lockedModels.some(m => m.toLowerCase() === String(row.brand_model).toLowerCase()) ? 1 : 0;
@@ -447,10 +437,7 @@ const SITES = ['Office', 'Factory'];
 
 // Resolve the country to store for a create/update, honouring the user's scope.
 function resolveCountry(req, requested) {
-  const scope = scopeOf(req);
-  if (scope) return scope;                                   // scoped users can only use their own
-  if (requested && VALID_COUNTRIES.includes(requested)) return requested;
-  return 'Vietnam';                                          // sensible default for global users
+  return resolveScopedCountry(req, normCountry(requested), 'Vietnam');   // scoped users: only their countries
 }
 
 // ── POST /api/assets — create (admin/editor only) ─────────────────────────────
@@ -508,7 +495,6 @@ router.post('/import', requireITAdmin, wrap(async (req, res) => {
     rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
   } catch (e) { return res.status(400).json({ error: 'Could not read the Excel file' }); }
 
-  const scope = scopeOf(req);
   let updated = 0, inserted = 0, skipped = 0;
 
   for (const row of rows) {
@@ -525,10 +511,8 @@ router.post('/import', requireITAdmin, wrap(async (req, res) => {
       if (key in byHeader) data[c.field] = String(byHeader[key] == null ? '' : byHeader[key]).trim();
     }
     if (data.asset_type !== undefined) data.asset_type = normalizeAssetType(data.asset_type);
-    // Country: scoped users are locked to their region; otherwise validate.
-    let country = scope || data.country;
-    if (!VALID_COUNTRIES.includes(country)) country = scope || 'Vietnam';
-    data.country = country;
+    // Country: normalized; scoped users are limited to their countries.
+    data.country = resolveCountry(req, data.country);
 
     const idRaw = idRawCell;
     const id = (idRaw === '' || idRaw == null) ? null : Number(idRaw);
@@ -536,7 +520,7 @@ router.post('/import', requireITAdmin, wrap(async (req, res) => {
     if (id && Number.isFinite(id)) {
       const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [id]);
       if (!existing) { skipped++; continue; }
-      if (scope && existing.country !== scope) { skipped++; continue; }   // outside region
+      if (!inScope(req, existing.country)) { skipped++; continue; }   // outside region
       // status must stay valid; blank/invalid keeps the existing value.
       const status = ['Active', 'Broken', 'Stock'].includes(data.status) ? data.status : existing.status;
       const fields = WRITABLE_COLS.map(c => c.field);
@@ -567,8 +551,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Asset not found' });
 
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
 
   const {
     location, country, department, computer_no, brand_model, date_assigned,
@@ -578,7 +561,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   } = req.body;
 
   // Scoped users can't move an asset out of their country.
-  const finalCountry = scope ? scope : resolveCountry(req, country !== undefined ? country : existing.country);
+  const finalCountry = resolveCountry(req, country !== undefined ? country : existing.country);
   // Office / Factory sites exist only in Vietnam: outside Vietnam clear a site value, otherwise keep what's stored.
   const loc = finalCountry === SITE_COUNTRY ? location
     : (SITES.includes(existing.location) ? '' : existing.location);
@@ -701,8 +684,7 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Asset not found' });
 
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
 
   // A locked model can't be deleted by anyone (incl. IT admin). To delete, an
   // IT admin must first uncheck the lock in Dashboard → Top Models.
@@ -732,8 +714,7 @@ router.post('/:id/restore', requireRole('admin'), wrap(async (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Deleted asset not found' });
 
   // Regional admins can only restore assets in their own country.
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
 
   await run('UPDATE assets SET deleted_at = NULL, deleted_by = NULL WHERE id = ?', [req.params.id]);
 

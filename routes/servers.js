@@ -3,7 +3,9 @@ const router = express.Router();
 const { get, all, run, audit, notify } = require('../db/database');
 const { requireAuth, requireRole, requireITAdmin } = require('../middleware/auth');
 
-const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+const { normCountry } = require('../lib/countries');
+const { knownCountries } = require('../lib/country-list');
+const { scopeList, inScope, countrySql, singleScope, resolveScopedCountry } = require('../lib/scope');
 const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
 
 // Identity fields that only IT may edit; editing one locks the record until an IT admin unlocks it.
@@ -18,14 +20,7 @@ router.use((req, res, next) => {
 });
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
-
-function countryFilter(req) {
-  const scope = scopeOf(req);
-  if (scope) return { clause: 'country = ?', params: [scope] };
-  if (req.query.country) return { clause: 'country = ?', params: [req.query.country] };
-  return { clause: null, params: [] };
-}
+const countryFilter = (req) => countrySql(req, 'country');
 
 // ── GET /api/servers — list ───────────────────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
@@ -66,7 +61,7 @@ router.get('/stats', wrap(async (req, res) => {
     .reduce((a, r) => { a[r.status] = Number(r.cnt); return a; }, {});
   const warCond = [...live, "warranty_expiry <> ''", "date(warranty_expiry) <= date('now','+90 days')"];
   const warrantyExpiring = Number((await get(`SELECT COUNT(*) as cnt FROM servers WHERE ${warCond.join(' AND ')}`, lp)).cnt);
-  res.json({ total, byStatus, warrantyExpiring, scope: scopeOf(req) });
+  res.json({ total, byStatus, warrantyExpiring, scope: singleScope(req) });
 }));
 
 // ── GET /api/servers/filters ────────────────────────────────────────────────────
@@ -76,7 +71,7 @@ router.get('/filters', wrap(async (req, res) => {
   const roles = (await all(`SELECT DISTINCT role AS v FROM servers WHERE deleted_at IS NULL AND role <> ''${extra} ORDER BY role COLLATE NOCASE`, cf.params)).map(r => r.v);
   const categories = (await all(`SELECT DISTINCT category AS v FROM servers WHERE deleted_at IS NULL AND category <> ''${extra} ORDER BY category COLLATE NOCASE`, cf.params)).map(r => r.v);
   const producers = (await all(`SELECT DISTINCT producer AS v FROM servers WHERE deleted_at IS NULL AND producer <> ''${extra} ORDER BY producer COLLATE NOCASE`, cf.params)).map(r => r.v);
-  const countries = scopeOf(req) ? [scopeOf(req)] : VALID_COUNTRIES;
+  const countries = scopeList(req) || await knownCountries();
   res.json({ roles, categories, producers, countries });
 }));
 
@@ -84,16 +79,12 @@ router.get('/filters', wrap(async (req, res) => {
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);
   if (!row) return res.status(404).json({ error: 'Server not found' });
-  const scope = scopeOf(req);
-  if (scope && row.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, row.country)) return res.status(403).json({ error: 'Not in your region' });
   res.json(row);
 }));
 
 function resolveCountry(req, requested) {
-  const scope = scopeOf(req);
-  if (scope) return scope;
-  if (requested && VALID_COUNTRIES.includes(requested)) return requested;
-  return 'Vietnam';
+  return resolveScopedCountry(req, normCountry(requested), 'Vietnam');
 }
 
 const FIELDS = ['location', 'hostname', 'brand_model', 'producer', 'category', 'serial_no', 'asset_code', 'ip_address',
@@ -121,10 +112,9 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
 router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Server not found' });
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
 
-  const finalCountry = scope ? scope : resolveCountry(req, req.body.country !== undefined ? req.body.country : existing.country);
+  const finalCountry = resolveCountry(req, req.body.country !== undefined ? req.body.country : existing.country);
   const incoming = { country: finalCountry };
   FIELDS.forEach(f => { if (req.body[f] !== undefined) incoming[f] = req.body[f]; });
 
@@ -182,8 +172,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Server not found' });
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
   await run("UPDATE servers SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?", [req.user.username, req.params.id]);
   const label = existing.hostname || existing.asset_code || 'untitled';
   await audit(req.user, 'DELETE', Number(req.params.id), `Deleted server "${label}"`);
@@ -196,8 +185,7 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 router.post('/:id/unlock', requireITAdmin, wrap(async (req, res) => {
   const existing = await get('SELECT * FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Server not found' });
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
   if (!existing.fields_locked) return res.json({ message: 'already unlocked', fields_locked: 0 });
 
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');

@@ -24,7 +24,7 @@ async function loadUsers() {
         <td>${u.full_name || '—'}</td>
         <td>${roleBadge(u.role)}</td>
         <td>${u.team ? `<span class="badge badge-office">${u.team}</span>` : '<span class="text-muted text-sm">—</span>'}</td>
-        <td>${u.country ? `<span class="badge badge-factory">${u.country}</span>` : '<span class="text-muted text-sm">Global</span>'}</td>
+        <td>${u.country ? String(u.country).split(',').map(c => `<span class="badge badge-factory" style="margin:1px">${c}</span>`).join('') : '<span class="text-muted text-sm">Global</span>'}</td>
         <td class="text-sm">${Number(u.asset_access) === 0 ? '<span class="text-muted">User Inv. only</span>' : 'Yes'}</td>
         <td class="text-muted text-sm">${(u.created_at || '').split(' ')[0]}</td>
         <td>
@@ -67,6 +67,27 @@ function closeUserModal() {
   document.getElementById('user-overlay').classList.remove('open');
   document.getElementById('user-form').reset();
   document.getElementById('u-id').value = '';
+  setUserCountries('');
+}
+
+// ── Countries picker: "All countries (global)" or a set of countries ─────────
+async function renderCountryPicker() {
+  const box = document.getElementById('u-country-list');
+  const { all } = await getCountries();
+  box.innerHTML = (all || []).map(c =>
+    `<label><input type="checkbox" value="${String(c).replace(/"/g, '&quot;')}"> ${c}</label>`).join('');
+}
+function setUserCountries(value) {
+  const list = String(value || '').split(',').map(s => s.trim()).filter(Boolean);
+  const allBox = document.getElementById('u-country-all');
+  const box = document.getElementById('u-country-list');
+  allBox.checked = !list.length;
+  box.hidden = !list.length;
+  box.querySelectorAll('input').forEach(i => { i.checked = list.includes(i.value); });
+}
+function getUserCountries() {
+  if (document.getElementById('u-country-all').checked) return '';
+  return [...document.querySelectorAll('#u-country-list input:checked')].map(i => i.value).join(',');
 }
 
 function editUser(u) {
@@ -76,7 +97,7 @@ function editUser(u) {
   document.getElementById('u-username').disabled = true;
   document.getElementById('u-fullname').value = u.full_name || '';
   document.getElementById('u-role').value = u.role;
-  document.getElementById('u-country').value = u.country || '';
+  setUserCountries(u.country || '');
   document.getElementById('u-team').value = u.team || '';
   document.getElementById('u-asset_access').value = String(Number(u.asset_access) === 0 ? 0 : 1);
   document.getElementById('u-password').value = '';
@@ -101,6 +122,10 @@ function parseErr(err) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  renderCountryPicker();
+  document.getElementById('u-country-all').addEventListener('change', (e) => {
+    document.getElementById('u-country-list').hidden = e.target.checked;
+  });
   // auth.js redirects non-admins away via gating; also guard here
   setTimeout(() => {
     // Global admins only (regional admins cannot manage users).
@@ -129,7 +154,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const username = document.getElementById('u-username').value.trim();
     const full_name= document.getElementById('u-fullname').value.trim();
     const role     = document.getElementById('u-role').value;
-    const country  = document.getElementById('u-country').value;
+    const country  = getUserCountries();
+    if (!document.getElementById('u-country-all').checked && !country) { showToast('Pick at least one country, or tick All countries', 'error'); return; }
     const team     = document.getElementById('u-team').value;
     const asset_access = document.getElementById('u-asset_access').value;
     const password = document.getElementById('u-password').value;

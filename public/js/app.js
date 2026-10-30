@@ -112,10 +112,12 @@ function clearForm() {
     if (!el) return;
     el.value = (f === 'status') ? 'Active' : (f === 'location') ? '' : '';
   });
-  // Country is a select without an empty option — keep the scoped user's country, else the first option.
+  // Country is a select without an empty option — the single-country user's country, else the first option.
   const fc = document.getElementById('f-country');
-  const myCountry = window.CURRENT_USER && window.CURRENT_USER.country;
-  if (fc && myCountry) fc.value = myCountry;
+  if (fc) {
+    const mine = typeof mySingleCountry === 'function' ? mySingleCountry() : null;
+    fc.value = mine || (fc.options[0] ? fc.options[0].value : '');
+  }
   syncLocationField();
 }
 

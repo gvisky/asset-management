@@ -13,14 +13,12 @@ router.use((req, res, next) => {
   next();
 });
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
+const { scopeList, countrySql } = require('../lib/scope');
 
 // Country clause for assets/personnel/maintenance (which all carry `country`).
 function scoped(req, col = 'country') {
-  const s = scopeOf(req);
-  if (s) return { clause: ` AND ${col} = ?`, params: [s] };
-  if (req.query.country) return { clause: ` AND ${col} = ?`, params: [req.query.country] };
-  return { clause: '', params: [] };
+  const cs = countrySql(req, col);
+  return cs.clause ? { clause: ` AND ${cs.clause}`, params: cs.params } : { clause: '', params: [] };
 }
 
 // Each report returns { sheets: [{ name, rows }] }.
@@ -85,11 +83,12 @@ const REPORTS = {
   },
 
   async offboarding(req) {
-    const s = scopeOf(req);
     const cond = ["p.leaving_date <> ''", 'a.deleted_at IS NULL'];
     const params = [];
-    if (s) { cond.push('p.country = ?', 'a.country = ?'); params.push(s, s); }
-    else if (req.query.country) { cond.push('p.country = ?', 'a.country = ?'); params.push(req.query.country, req.query.country); }
+    for (const col of ['p.country', 'a.country']) {
+      const cs = countrySql(req, col);
+      if (cs.clause) { cond.push(cs.clause); params.push(...cs.params); }
+    }
     const rows = await all(
       `SELECT p.display_name AS "Person", p.email AS "Email", p.leaving_date AS "Leaving Date",
               p.country AS "Country", a.asset_code AS "Asset Code", a.brand_model AS "Brand/Model",
@@ -101,11 +100,11 @@ const REPORTS = {
   },
 
   async licenses(req) {
-    const s = scopeOf(req);
+    const list = scopeList(req);
     const used = `(SELECT COUNT(*) FROM license_assignments la WHERE la.license_id = l.id AND la.released_at IS NULL)`;
     let where = '';
     const params = [];
-    if (s) { where = "WHERE (country = 'Global' OR country = ?)"; params.push(s); }
+    if (list) { where = `WHERE (country = 'Global' OR country IN (${list.map(() => '?').join(', ')}))`; params.push(...list); }
     else if (req.query.country) { where = 'WHERE country = ?'; params.push(req.query.country); }
     const rows = await all(
       `SELECT name AS "Name", vendor AS "Vendor", type AS "Type", ${used} AS "Seats Used",

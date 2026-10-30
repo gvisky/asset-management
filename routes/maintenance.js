@@ -18,7 +18,7 @@ router.use((req, res, next) => {
 });
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const scopeOf = (req) => (req.user && req.user.country) ? req.user.country : null;
+const { countrySql, inScope } = require('../lib/scope');
 
 // Fetch the linked record (asset or server) and a short label for messages.
 async function source(kind, id) {
@@ -35,9 +35,8 @@ router.get('/', wrap(async (req, res) => {
   const { status = '', asset_type = '' } = req.query;
   const cond = ['1=1']; const params = [];
 
-  const scope = scopeOf(req);
-  if (scope)                 { cond.push('m.country = ?'); params.push(scope); }
-  else if (req.query.country){ cond.push('m.country = ?'); params.push(req.query.country); }
+  const cs = countrySql(req, 'm.country');
+  if (cs.clause) { cond.push(cs.clause); params.push(...cs.params); }
 
   if (status)     { cond.push('m.status = ?');     params.push(status); }
   if (asset_type) { cond.push('m.asset_type = ?'); params.push(asset_type); }
@@ -79,8 +78,7 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const src = await source(asset_type, asset_id);
   if (!src) return res.status(404).json({ error: 'Item not found' });
 
-  const scope = scopeOf(req);
-  if (scope && src.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, src.country)) return res.status(403).json({ error: 'Not in your region' });
   if (!TYPES.includes(type))      return res.status(400).json({ error: 'Invalid type' });
   if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
   if (!description.trim())        return res.status(400).json({ error: 'Description is required' });
@@ -105,8 +103,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM maintenance_log WHERE id = ?', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Record not found' });
 
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
 
   const type        = req.body.type        ?? existing.type;
   const description = req.body.description ?? existing.description;
@@ -135,8 +132,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
 router.delete('/:id', requireRole('admin'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM maintenance_log WHERE id = ?', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Record not found' });
-  const scope = scopeOf(req);
-  if (scope && existing.country !== scope) return res.status(403).json({ error: 'Not in your region' });
+  if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
   await run('DELETE FROM maintenance_log WHERE id = ?', [req.params.id]);
   await audit(req.user, 'MAINTENANCE', existing.asset_id, `Deleted maintenance #${existing.id}`);
   res.json({ message: 'Deleted' });
