@@ -2,7 +2,7 @@
    Entra devices). See lib/directory-import.js for how the files are linked. */
 const express = require('express');
 const router = express.Router();
-const { get, all, run, batch, audit, notify, setMeta, getMeta } = require('../db/database');
+const { get, all, run, batch, errorText, audit, notify, setMeta, getMeta } = require('../db/database');
 const { requireAuth, requireRole, isITAdmin } = require('../middleware/auth');
 const { normalizeAssetType } = require('../lib/asset-columns');
 const { normCountry } = require('../lib/countries');
@@ -114,7 +114,7 @@ router.post('/import', wrap(async (req, res) => {
   } catch (e) {
     // Show the real reason to the IT admin (e.g. a database limit) instead of "Server error".
     console.error('[import]', e);
-    res.status(500).json({ error: `Import failed: ${e.message || e}` });
+    res.status(500).json({ error: `Import failed: ${errorText(e)}` });
   }
 }));
 
@@ -193,9 +193,14 @@ async function applyDirectoryImport(parsed, user) {
     await batch([
       ...stmts,
       ...updateIds('UPDATE personnel SET azure_seen_at = ?', [now], seenIds),
-      ...multiInsert('personnel', ['country', 'display_name', 'email', 'user_type', 'status', 'company_name', 'position',
-        'leaving_date', 'entra_id', 'employee_id', 'ad_department', 'azure_seen_at'], inserts),
-    ], 50);
+      // One statement per new person, skipped if the email already exists — safe to retry.
+      ...inserts.map(v => ({
+        sql: `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position,
+                leaving_date, entra_id, employee_id, ad_department, azure_seen_at)
+              SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+               WHERE NOT EXISTS (SELECT 1 FROM personnel WHERE email = ?)`,   // exact match → uses idx_personnel_email
+        args: [...v, v[2]] })),
+    ], 100);
     out.notInExport = Number((await get(
       'SELECT COUNT(*) AS c FROM personnel WHERE azure_seen_at IS NULL OR azure_seen_at < ?', [now])).c);
     await setMeta('personnel_last_import', now);
@@ -226,6 +231,10 @@ async function applyDirectoryImport(parsed, user) {
       await run('DELETE FROM devices WHERE imported_at = ?', [now]).catch(() => {});
       throw e;
     }
+    // A retried request may have been applied twice — keep one row per device of this snapshot.
+    await run(`DELETE FROM devices WHERE imported_at = ? AND id NOT IN (
+        SELECT MIN(id) FROM devices WHERE imported_at = ?
+        GROUP BY COALESCE(NULLIF(intune_id, ''), ''), COALESCE(NULLIF(entra_object_id, ''), ''), name)`, [now, now]);
     await run('DELETE FROM devices WHERE imported_at IS NULL OR imported_at <> ?', [now]);
     await setMeta('directory_last_import', now);
   } else {
