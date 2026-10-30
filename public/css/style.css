@@ -322,6 +322,22 @@ tbody td {
   vertical-align: middle;
 }
 tbody tr:last-child td { border-bottom: none; }
+/* Wide lists that should fit the window (User Inventory): tighter cells, wrapped text. */
+.fit-table thead th { padding: 9px 8px; }
+.fit-table tbody td { padding: 8px 8px; }
+.fit-table .name-cell { min-width: 170px; max-width: 240px; word-break: break-word; }
+.fit-table .wrap-cell { min-width: 110px; max-width: 180px; }
+@media (max-width: 1600px) {
+  .fit-table { font-size: 12px; }
+  .fit-table thead th { padding: 8px 6px; font-size: 11px; letter-spacing: .02em; white-space: normal; }
+  .fit-table .when-cell { min-width: 74px; }
+  .fit-table tbody td { padding: 7px 6px; }
+  .fit-table .name-cell { min-width: 128px; max-width: 190px; }
+  .fit-table .wrap-cell { min-width: 90px; max-width: 140px; }
+  .fit-table select.form-control { width: 100px !important; font-size: 12px; padding: 4px !important; }
+  .fit-table input.form-control { width: 112px !important; font-size: 12px; padding: 4px !important; }
+  .fit-table .btn-sm { padding: 3px 6px; white-space: nowrap; }
+}
 tbody tr:hover { background: #f9fafb; }
 
 /* Locked records (IT edited a protected field: Serial / Brand-Model / Asset Code) */
