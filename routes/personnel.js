@@ -72,7 +72,7 @@ router.get('/', wrap(async (req, res) => {
     [...params, Number(limit), offset]
   );
   const lastImport = await getMeta('personnel_last_import');
-  res.json({ total, page: Number(page), limit: Number(limit), data, last_import: lastImport,
+  res.json({ total, page: Number(page), limit: Number(limit), data, last_import: lastImport, baseline: await getMeta('baseline_personnel'),
              can: { edit: isITAdmin(req.user) } });
 }));
 

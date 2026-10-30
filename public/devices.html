@@ -51,6 +51,7 @@
     <span class="topbar-title">Devices <span class="text-muted text-sm" style="font-weight:400">· Intune &amp; Entra</span></span>
     <span id="total-label" class="text-muted text-sm"></span>
     <span id="alert-btn-slot"></span>
+    <button class="btn btn-primary btn-sm" id="btn-addall" style="display:none" title="Add every device of a known country to Asset Inventory">➕ Add all to Asset Inventory</button>
     <button class="btn btn-ghost btn-sm" id="btn-fill" style="display:none" title="Fill empty Serial / Computer No / AD Name / User on linked assets">🔗 Fill assets from Intune</button>
     <button class="btn btn-primary btn-sm" id="btn-import" style="display:none">⬆ Import exports</button>
   </header>
@@ -65,6 +66,11 @@
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="search-input" placeholder="Search device, user, email, serial, model…">
         </div>
+        <select class="filter-select" id="f-view" title="Which devices to list">
+          <option value="pending">To add (not in Asset / User Inventory)</option>
+          <option value="fresh">New since the first import</option>
+          <option value="">All devices</option>
+        </select>
         <select class="filter-select" id="f-country"><option value="">All countries</option></select>
         <select class="filter-select" id="f-os"><option value="">All OS</option></select>
         <select class="filter-select" id="f-source">
@@ -148,6 +154,21 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" id="import-cancel">Close</button>
       <button class="btn btn-primary" id="import-go" disabled>Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add ALL devices (of a known country) to Asset Inventory -->
+<div class="modal-overlay" id="addall-overlay">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <span class="modal-title">Add all devices to Asset Inventory</span>
+      <button class="modal-close" id="addall-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="addall-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="addall-cancel">Close</button>
+      <button class="btn btn-primary" id="addall-go">Add</button>
     </div>
   </div>
 </div>

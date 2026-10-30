@@ -13,6 +13,21 @@ const { parseCsv, detectKind, buildDirectory } = require('../lib/directory-impor
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const lcKey = (v) => String(v || '').trim().toLowerCase();
+// Stable references of a device across imports (device rows are replaced on every import).
+const deviceRefs = (d) => [d.intune_id && `intune:${lcKey(d.intune_id)}`, d.entra_object_id && `entra:${lcKey(d.entra_object_id)}`].filter(Boolean);
+const refString = (d) => deviceRefs(d).join('|');
+// Remember device → asset links (device_links), so they survive future imports.
+// pairs: [[assetId, device], …] (device needs intune_id / entra_object_id).
+async function rememberLinks(pairs) {
+  const rows = [];
+  for (const [aid, d] of pairs) for (const ref of deviceRefs(d)) rows.push([ref, aid]);
+  const stmts = [];
+  for (let i = 0; i < rows.length; i += 100) {
+    const chunk = rows.slice(i, i + 100);
+    stmts.push({ sql: `INSERT OR REPLACE INTO device_links (ref, asset_id) VALUES ${chunk.map(() => '(?, ?)').join(', ')}`, args: chunk.flat() });
+  }
+  await batch(stmts, 50);
+}
 router.use(requireAuth);
 // Same audience as the Asset Inventory (HR-only members have no access).
 router.use((req, res, next) => {
@@ -50,6 +65,9 @@ function deviceWhere(req) {
   if (q.asset === 'unlinked') cond.push('d.asset_id IS NULL');
   if (q.stale === '1') cond.push(`(d.last_sign_in = '' OR julianday(d.last_sign_in) < julianday('now', '-${STALE_DAYS} days'))`);
   if (q.person_id) { cond.push('d.person_id = ?'); params.push(Number(q.person_id)); }
+  // Default view: only devices still to add — not in Asset Inventory, or their user not in User Inventory.
+  if (q.view === 'pending') cond.push("(d.asset_id IS NULL OR (d.user_upn <> '' AND d.person_id IS NULL))");
+  if (q.fresh === '1') cond.push("d.first_seen_at > COALESCE((SELECT value FROM app_meta WHERE key = 'baseline_devices'), '')");
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
 }
 
@@ -64,7 +82,7 @@ router.get('/', wrap(async (req, res) => {
        FROM devices d LEFT JOIN assets a ON a.id = d.asset_id AND a.deleted_at IS NULL
        ${where} ORDER BY CASE WHEN d.name GLOB '[A-Za-z0-9]*' THEN 0 ELSE 1 END, d.name COLLATE NOCASE LIMIT ? OFFSET ?`,
     [...params, limit, (page - 1) * limit]);
-  res.json({ total, page, limit, data });
+  res.json({ total, page, limit, data, baseline: await getMeta('baseline_devices') });
 }));
 
 // ── GET /api/devices/stats — tiles + filter options (same filters as the list) ─
@@ -84,6 +102,10 @@ router.get('/stats', wrap(async (req, res) => {
     noUser: await one("d.user_upn = ''"),
     linkedAsset: await one('d.asset_id IS NOT NULL'),
     corpNotInAssets: await one("d.ownership = 'Corporate' AND d.asset_id IS NULL"),
+    // For "Add all": devices of a known country not yet in Asset Inventory (all / company only).
+    addableAll: await one("d.asset_id IS NULL AND d.country <> '' AND (d.intune_id <> '' OR d.entra_object_id <> '')"),
+    addableCorporate: await one("d.asset_id IS NULL AND d.country <> '' AND (d.intune_id <> '' OR d.entra_object_id <> '') AND d.ownership <> 'Personal'"),
+    freshDevices: await one("d.first_seen_at > COALESCE((SELECT value FROM app_meta WHERE key = 'baseline_devices'), '')"),
     ownersNotInPeople: Number((await get(`SELECT COUNT(DISTINCT LOWER(d.user_upn)) AS c FROM devices d ${and} d.user_upn <> '' AND d.person_id IS NULL`, params)).c),
     stale: await one(`(d.last_sign_in = '' OR julianday(d.last_sign_in) < julianday('now', '-${STALE_DAYS} days'))`),
     staleDays: STALE_DAYS,
@@ -216,20 +238,50 @@ async function applyDirectoryImport(parsed, user) {
     // Lookups for the links: device → person (email), device → asset (Computer No, else serial).
     stage = 'linking people and assets';
     const personByEmail = new Map((await all('SELECT id, email FROM personnel')).map(r => [String(r.email).toLowerCase(), r.id]));
-    const assetRows = await all("SELECT id, computer_no, serial_no FROM assets WHERE deleted_at IS NULL");
-    const assetByName = new Map(), assetBySerial = new Map();
+    const assetRows = await all("SELECT id, computer_no, serial_no, device_ref FROM assets WHERE deleted_at IS NULL");
+    const assetByName = new Map(), assetBySerial = new Map(), assetByRef = new Map();
+    const liveIds = new Set(assetRows.map(a => a.id));
+    for (const l of await all('SELECT ref, asset_id FROM device_links')) if (liveIds.has(l.asset_id)) assetByRef.set(l.ref, l.asset_id);
     for (const a of assetRows) {
+      String(a.device_ref || '').split('|').filter(Boolean).forEach(r => assetByRef.set(r, a.id));
       if (a.computer_no && !assetByName.has(lcKey(a.computer_no))) assetByName.set(lcKey(a.computer_no), a.id);
       if (a.serial_no && !assetBySerial.has(lcKey(a.serial_no))) assetBySerial.set(lcKey(a.serial_no), a.id);
     }
     const personOf = (upn) => (upn ? personByEmail.get(lcKey(upn)) || null : null);
-    const assetOf = (d) => (d.name && assetByName.get(lcKey(d.name))) || (d.serial_no && assetBySerial.get(lcKey(d.serial_no))) || null;
+    // Asset of a device: the asset created from it (device_ref), else same Computer No, else same serial.
+    const assetOf = (d) => deviceRefs(d).map(r => assetByRef.get(r)).find(Boolean)
+      || (d.name && assetByName.get(lcKey(d.name))) || (d.serial_no && assetBySerial.get(lcKey(d.serial_no))) || null;
   
     if (parsed.intune || parsed.entra) {
       // ── Devices (replaced by the new snapshot, links set on insert) ───────────────
       const defaults = (c) => (['is_managed', 'is_compliant', 'account_enabled'].includes(c) ? null : (c.startsWith('in_') ? 0 : ''));
-      const cols = [...DEVICE_COLS, 'person_id', 'asset_id', 'imported_at'];
-      const rows = devices.map(d => [...DEVICE_COLS.map(c => (d[c] === undefined ? defaults(c) : d[c])), personOf(d.user_upn), assetOf(d), now]);
+      // Keep each device's first-seen date from earlier imports (new devices: now).
+      const firstSeen = new Map();
+      for (const r of await all('SELECT ref, first_seen_at FROM device_seen')) firstSeen.set(r.ref, r.first_seen_at);
+      for (const o of await all('SELECT intune_id, entra_object_id, name, first_seen_at FROM devices')) {
+        const keys = deviceRefs(o); if (!keys.length && o.name) keys.push(`name:${lcKey(o.name)}`);
+        keys.forEach(k => { if (o.first_seen_at && !firstSeen.has(k)) firstSeen.set(k, o.first_seen_at); });
+      }
+      const seenOf = (d) => { const keys = deviceRefs(d); if (!keys.length && d.name) keys.push(`name:${lcKey(d.name)}`);
+        return keys.map(k => firstSeen.get(k)).find(Boolean) || now; };
+      const cols = [...DEVICE_COLS, 'person_id', 'asset_id', 'imported_at', 'first_seen_at'];
+      const rows = devices.map(d => [...DEVICE_COLS.map(c => (d[c] === undefined ? defaults(c) : d[c])), personOf(d.user_upn), assetOf(d), now, seenOf(d)]);
+      out.newDevices = rows.filter(r => r[r.length - 1] === now).length;
+      // Remember first-seen dates permanently (a device missing from one import keeps its date).
+      const seenRows = [];
+      devices.forEach((d, i) => {
+        const keys = deviceRefs(d); if (!keys.length && d.name) keys.push(`name:${lcKey(d.name)}`);
+        keys.forEach(k => { if (!firstSeen.has(k)) seenRows.push([k, rows[i][rows[i].length - 1]]); });
+      });
+      const seenStmts = [];
+      for (let i = 0; i < seenRows.length; i += 100) {
+        const ch = seenRows.slice(i, i + 100);
+        seenStmts.push({ sql: `INSERT OR IGNORE INTO device_seen (ref, first_seen_at) VALUES ${ch.map(() => '(?, ?)').join(', ')}`, args: ch.flat() });
+      }
+      await batch(seenStmts, 50);
+      // Remember every device ⇄ asset link found (by Computer No / serial too) for the next imports.
+      const assetCol = cols.indexOf('asset_id');
+      await rememberLinks(devices.map((d, i) => [rows[i][assetCol], d]).filter(([aid, d]) => aid && deviceRefs(d).length));
       // DELETE + inserts in one transaction per request chunk; 50 statements ≈ 2,000 rows per request.
     stage = 'saving devices';
       // Insert the new snapshot first, then drop the old one — if any request fails, the
@@ -380,6 +432,7 @@ router.post('/to-assets', requireRole('admin', 'editor'), wrap(async (req, res) 
       [computerNo, computerNo, serial, serial]);
     if (dup) {
       await run('UPDATE devices SET asset_id = ? WHERE id = ?', [dup.id, d.id]);
+      await rememberLinks([[dup.id, d]]);
       skipped.push({ device_id: d.id, reason: `Already in Asset Inventory (#${dup.id}) — linked`, asset_id: dup.id });
       continue;
     }
@@ -387,12 +440,13 @@ router.post('/to-assets', requireRole('admin', 'editor'), wrap(async (req, res) 
     const status = ['Active', 'Broken', 'Stock'].includes(str('status')) ? str('status') : 'Active';
     const hist = `${ts} UTC: created from Intune / Entra device "${d.name}" by ${req.user.username}`;
     const r = await run(`INSERT INTO assets (location, country, department, computer_no, brand_model, serial_no,
-        asset_code, asset_s4, user_name, ad_name, status, history_usage, sap_confirmed, asset_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+        asset_code, asset_s4, user_name, ad_name, status, history_usage, sap_confirmed, asset_type, device_ref)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
       [location, country, str('department'), computerNo, str('brand_model'), serial, str('asset_code'), str('asset_s4'),
-       str('user_name'), str('ad_name'), status, hist, normalizeAssetType(str('asset_type'))]);
+       str('user_name'), str('ad_name'), status, hist, normalizeAssetType(str('asset_type')), refString(d)]);
     const id = r.lastInsertRowid;
     await run('UPDATE devices SET asset_id = ? WHERE id = ?', [id, d.id]);
+    await rememberLinks([[id, d]]);
     created.push({ device_id: d.id, asset_id: id, name: d.name, country });
   }
   if (created.length) {
@@ -402,6 +456,81 @@ router.post('/to-assets', requireRole('admin', 'editor'), wrap(async (req, res) 
     await notify({ audience: 'IT', scope: 'asset', message: msg });
   }
   res.json({ created, skipped });
+}));
+
+// POST /api/devices/to-assets-all — add EVERY device of a known country that isn't in Asset Inventory
+// yet (within the current filters), in chunks: { ...filters, limit, include_personal }.
+// The page calls it repeatedly until `remaining` is 0. Values come from the proposals (learned
+// Brand / Model, guessed Asset Type); Asset code, S/4, Location, Department stay to fill (Needs Attention).
+router.post('/to-assets-all', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  const b = req.body || {};
+  req.query = { ...b };                                   // reuse the list filters
+  const limit = Math.min(1000, Math.max(1, Number(b.limit) || 500));
+  const { where, params } = deviceWhere(req);
+  const and = where ? where + ' AND' : 'WHERE';
+  const personalCond = b.include_personal ? '' : " AND d.ownership <> 'Personal'";
+  // Only devices with an Intune / Entra id (so the new asset can be linked back reliably).
+  const pick = `${and} d.asset_id IS NULL AND d.country <> '' AND (d.intune_id <> '' OR d.entra_object_id <> '')${personalCond}`;
+  const devices = (await all(`SELECT d.* FROM devices d ${pick} ORDER BY d.id LIMIT ?`, [...params, limit]))
+    .filter(d => inScope(req, d.country));
+
+  const learned = learnModels(await all(
+    `SELECT d.manufacturer, d.model, a.brand_model, a.asset_type FROM devices d
+       JOIN assets a ON a.id = d.asset_id AND a.deleted_at IS NULL WHERE d.model <> ''`));
+  const assets = await all("SELECT id, computer_no, serial_no, device_ref FROM assets WHERE deleted_at IS NULL");
+  const byName = new Map(), bySerial = new Map(), byRef = new Map();
+  const live = new Set(assets.map(a => a.id));
+  for (const l of await all('SELECT ref, asset_id FROM device_links')) if (live.has(l.asset_id)) byRef.set(l.ref, l.asset_id);
+  for (const a of assets) {
+    if (a.computer_no) byName.set(lcKey(a.computer_no), a.id);
+    if (a.serial_no) bySerial.set(lcKey(a.serial_no), a.id);
+    String(a.device_ref || '').split('|').filter(Boolean).forEach(r => byRef.set(r, a.id));
+  }
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const links = [], inserts = [], dupOf = [];
+  const firstBySerial = new Map(), firstByName = new Map();
+  const isPcName = (n) => /^[A-Z]{2,}[A-Z0-9-]*\d{3,}$/i.test(n || '');   // e.g. VNHCMC0273 — unique per machine
+  for (const d of devices) {
+    // Already an asset? → just link.
+    const existing = deviceRefs(d).map(r => byRef.get(r)).find(Boolean)
+      || (d.name && byName.get(lcKey(d.name))) || (d.serial_no && bySerial.get(lcKey(d.serial_no)));
+    if (existing) { links.push([existing, d.id]); continue; }
+    // Same machine twice in this run (same serial / PC name)? → link it to the first one's new asset.
+    const first = (d.serial_no && firstBySerial.get(lcKey(d.serial_no))) || (isPcName(d.name) && firstByName.get(lcKey(d.name)));
+    if (first) { dupOf.push([d, first]); continue; }
+    if (d.serial_no) firstBySerial.set(lcKey(d.serial_no), d);
+    if (isPcName(d.name)) firstByName.set(lcKey(d.name), d);
+    inserts.push({ d, p: proposeAsset(d, learned) });
+  }
+  // Insert (one row per statement, idempotent on device_ref) then link the devices.
+  await batch(inserts.map(({ d, p }) => ({
+    sql: `INSERT INTO assets (location, country, department, computer_no, brand_model, serial_no, asset_code, asset_s4,
+            user_name, ad_name, status, history_usage, sap_confirmed, asset_type, device_ref)
+          SELECT '', ?, '', ?, ?, ?, '', '', ?, ?, 'Active', ?, 0, ?, ?
+           WHERE NOT EXISTS (SELECT 1 FROM assets WHERE device_ref = ? AND device_ref <> '')`,
+    args: [p.country, p.computer_no, p.brand_model, p.serial_no, p.user_name, p.ad_name,
+      `${ts} UTC: created from Intune / Entra device "${d.name}" (Add all) by ${req.user.username}`,
+      normalizeAssetType(p.asset_type), refString(d), refString(d)],
+  })), 200);
+  const refs = inserts.map(x => refString(x.d)).filter(Boolean);
+  const idByRef = new Map();
+  for (let i = 0; i < refs.length; i += 400) {
+    const chunk = refs.slice(i, i + 400);
+    (await all(`SELECT id, device_ref FROM assets WHERE device_ref IN (${chunk.map(() => '?').join(', ')})`, chunk))
+      .forEach(r => idByRef.set(r.device_ref, r.id));
+  }
+  inserts.forEach(x => { const id = idByRef.get(refString(x.d)); if (id) links.push([id, x.d.id]); });
+  dupOf.forEach(([d, first]) => { const id = idByRef.get(refString(first)); if (id) links.push([id, d.id]); });
+  await batch(links.map(([aid, did]) => ({ sql: 'UPDATE devices SET asset_id = ? WHERE id = ?', args: [aid, did] })), 400);
+  const devById = new Map(devices.map(d => [d.id, d]));
+  await rememberLinks(links.map(([aid, did]) => [aid, devById.get(did)]).filter(([, d]) => d));
+
+  const remaining = Number((await get(`SELECT COUNT(*) AS c FROM devices d ${pick}`, params)).c);
+  const created = inserts.filter(x => idByRef.get(refString(x.d))).length;
+  if (created) await audit(req.user, 'CREATE', null, `Added ${created} devices from Intune / Entra to Asset Inventory (Add all)`);
+  // The first complete "Add all" is the asset baseline: those assets are not shown as "New".
+  if (remaining === 0) await run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_assets', datetime('now'))");
+  res.json({ created, linked: links.length - created, processed: devices.length, remaining });
 }));
 
 // GET /api/devices/owners?ids= — device owners not yet in User Inventory (one row per email).

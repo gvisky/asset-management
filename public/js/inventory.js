@@ -135,6 +135,7 @@ async function loadAssets(page = 1) {
 
   try {
     const result = await apiGet(`${API}?${params}`);
+    assetBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
     const lbl = document.getElementById('total-label');
@@ -144,6 +145,8 @@ async function loadAssets(page = 1) {
     showToast('Failed to load assets', 'error');
   }
 }
+
+let assetBaseline = null;   // first big load — rows from it get no New / Edited badge
 
 function renderTable(rows) {
   const tbody = document.getElementById('assets-tbody');
@@ -158,7 +161,7 @@ function renderTable(rows) {
   tbody.innerHTML = rows.map((a, i) => `
     <tr class="${a.ad_issue_reason ? 'row-adissue' : ((a.fields_locked || a.user_locked) ? 'row-locked' : '')}">
       <td class="text-muted text-sm">${a.id}</td>
-      <td class="when-cell">${whenCell(a.created_at, a.updated_at)}</td>
+      <td class="when-cell">${whenCell(a.created_at, a.updated_at, assetBaseline)}</td>
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
           : `<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code>`}</td>

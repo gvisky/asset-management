@@ -135,7 +135,7 @@ router.get('/', wrap(async (req, res) => {
     [...params, Number(limit), offset]
   );
 
-  res.json({ total: Number(totalRow.cnt), page: Number(page), limit: Number(limit), data: rows });
+  res.json({ total: Number(totalRow.cnt), page: Number(page), limit: Number(limit), data: rows, baseline: await getMeta('baseline_assets') });
 }));
 
 // ── GET /api/assets/stats — dashboard metrics (excludes soft-deleted) ─────────

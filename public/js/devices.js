@@ -12,6 +12,7 @@ function devFilters() {
   const extra = v('f-extra');
   return {
     search: v('search-input').trim(), country: v('f-country'), os: v('f-os'), source: v('f-source'),
+    view: v('f-view') === 'pending' ? 'pending' : '', fresh: v('f-view') === 'fresh' ? '1' : '',
     compliant: v('f-compliant'), asset: v('f-asset'),
     stale: extra === 'stale' ? '1' : '', enabled: extra === 'disabled' ? '0' : '',
     user: extra === 'nouser' ? 'none' : extra === 'user_notin' ? 'notin' : '',
@@ -42,13 +43,18 @@ async function loadDevices(page = devPage) {
     const r = await apiGet(`/api/devices?${devQuery({ page, limit: DEV_PAGE })}`);
     document.getElementById('total-label').textContent = `${dFmt(r.total)} devices`;
     r.data.forEach(d => devRows.set(d.id, d));
+    devBaseline = r.baseline || null;
     if (!r.data.length) {
-      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><p>No devices. An IT admin can import the Intune / Entra exports.</p></div></td></tr>';
+      const view = document.getElementById('f-view').value;
+      tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><p>${
+        view === 'pending' ? '✅ Nothing to add — every device here is in Asset Inventory and its user is in User Inventory. Choose “All devices” to see them all.'
+        : view === 'fresh' ? 'No new devices since the first import.'
+        : 'No devices. An IT admin can import the Intune / Entra exports.'}</p></div></td></tr>`;
     } else {
       tbody.innerHTML = r.data.map(d => `
         <tr>
           <td><input type="checkbox" class="dev-sel" data-id="${d.id}"${selected.has(d.id) ? ' checked' : ''}></td>
-          <td><strong>${dEsc(d.name || '—')}</strong>${d.account_enabled === 0 ? ' <span class="badge badge-broken" title="Disabled in Entra">disabled</span>' : ''}
+          <td><strong>${dEsc(d.name || '—')}</strong>${devBaseline && d.first_seen_at && d.first_seen_at > devBaseline ? ' <span class="badge badge-active" style="font-size:10px" title="First seen in an import after the first big import">New</span>' : ''}${d.account_enabled === 0 ? ' <span class="badge badge-broken" title="Disabled in Entra">disabled</span>' : ''}
             <br><span class="text-muted text-sm">${dEsc([d.manufacturer, d.model].filter(Boolean).join(' · ') || '—')}</span></td>
           <td class="text-sm">${dEsc(d.country || 'Unknown')}</td>
           <td class="text-sm">${d.user_upn
@@ -124,12 +130,16 @@ async function loadDevStats() {
       sel.innerHTML = `<option value="">${allText}</option>` + items.map(x => `<option value="${dEsc(x.v)}">${dEsc(x.t)}</option>`).join('');
       if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
     };
+    // Dropdown options come from ALL devices (not the current view), so a country stays
+    // pickable even when nothing is left to add there.
+    const needOpts = !document.getElementById('f-os').dataset.filled || !document.getElementById('f-country').dataset.filled;
+    const full = needOpts ? await apiGet('/api/devices/stats') : null;
     if (!document.getElementById('f-os').dataset.filled) {
-      fill('f-os', s.byOs.filter(x => x.os).map(x => ({ v: x.os, t: `${x.os} (${dFmt(x.count)})` })), 'OS', 'All OS');
+      fill('f-os', full.byOs.filter(x => x.os).map(x => ({ v: x.os, t: `${x.os} (${dFmt(x.count)})` })), 'OS', 'All OS');
       document.getElementById('f-os').dataset.filled = '1';
     }
     if (!document.getElementById('f-country').dataset.filled) {
-      const items = s.byCountry.map(x => ({ v: x.country || '__none', t: `${x.country || 'Unknown'} (${dFmt(x.count)})` }));
+      const items = full.byCountry.map(x => ({ v: x.country || '__none', t: `${x.country || 'Unknown'} (${dFmt(x.count)})` }));
       fill('f-country', items, 'Country', 'All countries');
       document.getElementById('f-country').dataset.filled = '1';
       if (mySingleCountry()) document.getElementById('f-country').style.display = 'none';
@@ -138,11 +148,16 @@ async function loadDevStats() {
       ? `Last import: ${s.lastImport} UTC` : 'No import yet — an IT admin can upload the Intune / Entra exports.';
     document.getElementById('btn-import').style.display = s.canImport ? '' : 'none';
     document.getElementById('btn-fill').style.display = s.canImport ? '' : 'none';
+    const addAll = document.getElementById('btn-addall');
+    addAll.style.display = canEdit() && s.addableAll ? '' : 'none';
+    addAll.textContent = `➕ Add all to Asset Inventory (${dFmt(s.addableAll)})`;
+    addAll.dataset.all = s.addableAll; addAll.dataset.corp = s.addableCorporate;
   } catch (e) { /* ignore */ }
 }
 
 // ── Selection + adding to Asset Inventory / User Inventory ──────────────────
 const selected = new Set();
+let devBaseline = null;      // first big import — devices first seen later are "New"
 const devRows = new Map();   // id → last loaded row (for the bulk actions)
 function renderBulkBar() {
   const bar = document.getElementById('bulk-bar');
@@ -326,6 +341,63 @@ async function openAddPeople(ids) {
   } catch (e) { body.innerHTML = 'Could not load the selected devices.'; }
 }
 
+// ── Add ALL devices of a known country (within the current filters), in chunks ──
+function setupAddAll() {
+  const overlay = document.getElementById('addall-overlay');
+  const body = document.getElementById('addall-body');
+  const go = document.getElementById('addall-go');
+  let running = false;
+  const close = () => { if (!running) overlay.classList.remove('open'); };
+  document.getElementById('addall-close').addEventListener('click', close);
+  document.getElementById('addall-cancel').addEventListener('click', close);
+  document.getElementById('btn-addall').addEventListener('click', () => {
+    const btn = document.getElementById('btn-addall');
+    const all = Number(btn.dataset.all || 0), corp = Number(btn.dataset.corp || 0);
+    const f = devFilters();
+    const scope = [f.country && f.country !== '__none' ? f.country : 'all countries', f.os, f.search && `“${f.search}”`].filter(Boolean).join(' · ');
+    body.innerHTML = `
+      <p style="margin-top:0">Adds every device that has a <b>country</b> and is <b>not yet in Asset Inventory</b> (current filters: ${dEsc(scope)}).
+        Devices with no country (Unknown) are not included — pick their country with ➕ Add.</p>
+      <p class="text-sm">Filled automatically: Computer No, Serial, Brand / Model (★ learned from your assets), Asset Type, Country, User Name, AD Name, Status Active.
+        <b>Asset code, Asset S/4, Location (Office/Factory) and Department</b> stay empty — they will appear in <b>Needs Attention</b>.
+        Devices that already match an asset (same Computer No / Serial) are only linked, not added again.</p>
+      <label class="text-sm" style="display:flex;gap:8px;align-items:center;margin:10px 0">
+        <input type="checkbox" id="addall-personal" checked> Include personal (BYOD) devices
+        <span class="text-muted">— <span id="addall-count"></span></span></label>
+      <div id="addall-progress" class="text-sm"></div>`;
+    const cb = document.getElementById('addall-personal');
+    const upd = () => { const n = cb.checked ? all : corp; document.getElementById('addall-count').textContent = `${dFmt(n)} devices`; go.textContent = `Add ${dFmt(n)} devices`; go.disabled = !n; };
+    cb.addEventListener('change', upd); upd();
+    overlay.classList.add('open');
+  });
+  go.addEventListener('click', async () => {
+    const prog = document.getElementById('addall-progress');
+    const include_personal = document.getElementById('addall-personal').checked;
+    const total = Number(include_personal ? document.getElementById('btn-addall').dataset.all : document.getElementById('btn-addall').dataset.corp) || 1;
+    running = true; go.disabled = true;
+    let created = 0, linked = 0, rounds = 0;
+    try {
+      for (;;) {
+        const r = await apiPost('/api/devices/to-assets-all', { ...devFilters(), include_personal, limit: 500 });
+        created += r.created; linked += r.linked; rounds++;
+        const done = Math.min(total, created + linked);
+        prog.innerHTML = `<div style="background:#eef0f4;border-radius:6px;height:10px;overflow:hidden;margin:6px 0">
+            <div style="width:${Math.round((done / total) * 100)}%;height:100%;background:#1a56db"></div></div>
+          ${dFmt(created)} added, ${dFmt(linked)} linked to existing assets · ${dFmt(r.remaining)} remaining`;
+        if (!r.remaining) break;
+        if (!r.processed || (r.created + r.linked) === 0 || rounds > 100) { prog.innerHTML += '<br>⚠ Stopped: some devices could not be added — try again or add them one by one.'; break; }
+      }
+      showToast(`Added ${dFmt(created)} devices to Asset Inventory`);
+    } catch (err) {
+      let m = 'Could not add'; try { m = JSON.parse(err.message).error || m; } catch {}
+      prog.innerHTML += `<br>❌ ${dEsc(m)} — ${dFmt(created)} added so far; click Add again to continue.`;
+      go.disabled = false;
+    }
+    running = false;
+    refresh();
+  });
+}
+
 function setupAdd() {
   document.getElementById('sel-page').addEventListener('change', (e) => {
     document.querySelectorAll('#dev-tbody .dev-sel').forEach(cb => {
@@ -422,19 +494,25 @@ function setupFill() {
 
 document.addEventListener('DOMContentLoaded', () => {
   const p = new URLSearchParams(window.location.search);
-  if (p.get('search')) document.getElementById('search-input').value = p.get('search');
+  if (p.get('search')) {
+    // Opened from User Inventory (a person's devices) → show all their devices, added or not.
+    document.getElementById('search-input').value = p.get('search');
+    document.getElementById('f-view').value = '';
+  }
   refresh();
   setupImport();
   setupFill();
   setupAdd();
+  setupAddAll();
   if (typeof loadAlertButton === 'function') loadAlertButton('alert-btn-slot', '');
   let t;
   document.getElementById('search-input').addEventListener('input', () => { clearTimeout(t); t = setTimeout(refresh, 320); });
-  ['f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id =>
+  ['f-view', 'f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id =>
     document.getElementById(id).addEventListener('change', refresh));
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
     ['f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('f-view').value = 'pending';
     refresh();
   });
 });
