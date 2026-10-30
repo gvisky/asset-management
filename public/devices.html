@@ -87,13 +87,22 @@
           <option value="stale">No sign-in for 90+ days</option>
           <option value="nouser">No user</option>
           <option value="disabled">Disabled in Entra</option>
+          <option value="corp_unlinked">Company devices not in Asset Inventory</option>
+          <option value="user_notin">User not in User Inventory</option>
         </select>
         <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
+      </div>
+      <div class="bulk-bar" id="bulk-bar" hidden>
+        <b id="bulk-count">0 selected</b>
+        <button class="btn btn-primary btn-sm" id="bulk-assets">➕ Add to Asset Inventory</button>
+        <button class="btn btn-ghost btn-sm" id="bulk-people">👤 Add users to User Inventory</button>
+        <button class="btn btn-ghost btn-sm" id="bulk-clear">Clear selection</button>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
+              <th style="width:28px"><input type="checkbox" id="sel-page" title="Select this page"></th>
               <th>Device</th>
               <th>Country</th>
               <th>User</th>
@@ -105,7 +114,7 @@
               <th>Asset</th>
             </tr>
           </thead>
-          <tbody id="dev-tbody"><tr><td colspan="9" class="empty-state">Loading…</td></tr></tbody>
+          <tbody id="dev-tbody"><tr><td colspan="10" class="empty-state">Loading…</td></tr></tbody>
         </table>
       </div>
       <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -139,6 +148,38 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" id="import-cancel">Close</button>
       <button class="btn btn-primary" id="import-go" disabled>Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add devices to Asset Inventory -->
+<div class="modal-overlay" id="addasset-overlay">
+  <div class="modal" style="max-width:1320px;width:96vw">
+    <div class="modal-header">
+      <span class="modal-title">Add devices to Asset Inventory</span>
+      <button class="modal-close" id="addasset-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="addasset-body">Loading…</div>
+    <div class="modal-footer">
+      <span class="text-muted text-sm" id="addasset-note" style="flex:1"></span>
+      <button class="btn btn-ghost" id="addasset-cancel">Cancel</button>
+      <button class="btn btn-primary" id="addasset-go" disabled>Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add device owners to User Inventory -->
+<div class="modal-overlay" id="addpeople-overlay">
+  <div class="modal" style="max-width:1100px;width:94vw">
+    <div class="modal-header">
+      <span class="modal-title">Add users to User Inventory</span>
+      <button class="modal-close" id="addpeople-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="addpeople-body">Loading…</div>
+    <div class="modal-footer">
+      <span class="text-muted text-sm" id="addpeople-note" style="flex:1"></span>
+      <button class="btn btn-ghost" id="addpeople-cancel">Cancel</button>
+      <button class="btn btn-primary" id="addpeople-go" disabled>Add</button>
     </div>
   </div>
 </div>

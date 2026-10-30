@@ -215,6 +215,14 @@ a.bar-item:hover .bar-fill { filter: brightness(1.1); }
 .na-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; border-bottom: 1px solid var(--border); background: #fafbfc; }
 .seg-sm .seg-btn { padding: 4px 10px; font-size: 12px; }
 .na-type { min-width: 170px; }
+.bulk-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; background: #eff6ff; border-bottom: 1px solid #bfdbfe; font-size: 13px; }
+.add-table td, .add-table th { padding: 6px 6px; vertical-align: top; }
+.add-table input.form-control, .add-table select.form-control { padding: 4px 6px; font-size: 12.5px; min-width: 90px; }
+.add-table .w-lg { min-width: 170px; }
+.add-table tr.excluded td { opacity: .45; }
+.miss-tag { display: inline-block; margin: 1px; padding: 1px 6px; border-radius: 4px; background: #fee2e2; color: #991b1b; font-size: 11px; white-space: nowrap; }
+.apply-all { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; padding: 10px 12px; margin-bottom: 10px; background: #f6f7f9; border-radius: 8px; font-size: 12.5px; }
+.apply-all label { display: flex; flex-direction: column; gap: 3px; }
 .country-all { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 4px 0 8px; }
 .country-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; max-height: 180px; overflow-y: auto;
   border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; font-size: 13px; }

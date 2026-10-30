@@ -3,7 +3,10 @@
 const express = require('express');
 const router = express.Router();
 const { get, all, run, batch, audit, notify, setMeta, getMeta } = require('../db/database');
-const { requireAuth, isITAdmin } = require('../middleware/auth');
+const { requireAuth, requireRole, isITAdmin } = require('../middleware/auth');
+const { normalizeAssetType } = require('../lib/asset-columns');
+const { normCountry } = require('../lib/countries');
+const { learnModels, proposeAsset, assetMissing, personMissing } = require('../lib/device-to-asset');
 const { countrySql, inScope, scopeList } = require('../lib/scope');
 const { resetCountryCache } = require('../lib/country-list');
 const { parseCsv, detectKind, buildDirectory } = require('../lib/directory-import');
@@ -41,6 +44,8 @@ function deviceWhere(req) {
   if (q.compliant === '0') cond.push('d.is_compliant = 0');
   if (q.enabled === '0')   cond.push('d.account_enabled = 0');
   if (q.user === 'none')   cond.push("d.user_upn = ''");
+  if (q.user === 'notin')  cond.push("d.user_upn <> '' AND d.person_id IS NULL");   // owner not in User Inventory
+  if (q.ownership)         { cond.push('d.ownership = ?'); params.push(q.ownership); }
   if (q.asset === 'linked')   cond.push('d.asset_id IS NOT NULL');
   if (q.asset === 'unlinked') cond.push('d.asset_id IS NULL');
   if (q.stale === '1') cond.push(`(d.last_sign_in = '' OR julianday(d.last_sign_in) < julianday('now', '-${STALE_DAYS} days'))`);
@@ -78,6 +83,8 @@ router.get('/stats', wrap(async (req, res) => {
     disabled: await one('d.account_enabled = 0'),
     noUser: await one("d.user_upn = ''"),
     linkedAsset: await one('d.asset_id IS NOT NULL'),
+    corpNotInAssets: await one("d.ownership = 'Corporate' AND d.asset_id IS NULL"),
+    ownersNotInPeople: Number((await get(`SELECT COUNT(DISTINCT LOWER(d.user_upn)) AS c FROM devices d ${and} d.user_upn <> '' AND d.person_id IS NULL`, params)).c),
     stale: await one(`(d.last_sign_in = '' OR julianday(d.last_sign_in) < julianday('now', '-${STALE_DAYS} days'))`),
     staleDays: STALE_DAYS,
     byOs: byOs.map(r => ({ os: r.v || '', count: Number(r.c) })),
@@ -278,6 +285,134 @@ async function fillAssets(req, res, apply) {
     fields: { serial_no: count('serial_no'), computer_no: count('computer_no'), ad_name: count('ad_name'), user_name: count('user_name') },
     sample: changes.slice(0, 50).map(({ history, ...c }) => c) });
 }
+
+
+// ── Add devices to Asset Inventory / their users to User Inventory ────────────
+const MAX_ADD = 300;
+const idList = (v) => [...new Set(String(v || '').split(',').map(Number).filter(n => Number.isInteger(n) && n > 0))].slice(0, MAX_ADD);
+
+async function loadDevicesInScope(req, ids) {
+  if (!ids.length) return [];
+  const rows = await all(`SELECT * FROM devices WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
+  return rows.filter(d => (scopeList(req) ? d.country && inScope(req, d.country) : true));
+}
+
+// GET /api/devices/proposals?ids=1,2,3 — what each device would become as an asset
+// (+ what would still be missing). Devices already in Asset Inventory are reported, not proposed.
+router.get('/proposals', wrap(async (req, res) => {
+  const devices = await loadDevicesInScope(req, idList(req.query.ids));
+  const learned = learnModels(await all(
+    `SELECT d.manufacturer, d.model, a.brand_model, a.asset_type FROM devices d
+       JOIN assets a ON a.id = d.asset_id AND a.deleted_at IS NULL WHERE d.model <> ''`));
+  const assets = await all("SELECT id, computer_no, serial_no, asset_code, asset_s4 FROM assets WHERE deleted_at IS NULL");
+  const byName = new Map(), bySerial = new Map();
+  for (const a of assets) {
+    if (a.computer_no) byName.set(lcKey(a.computer_no), a);
+    if (a.serial_no) bySerial.set(lcKey(a.serial_no), a);
+  }
+  const proposals = [], existing = [];
+  for (const d of devices) {
+    const hit = d.asset_id ? { id: d.asset_id } : (byName.get(lcKey(d.name)) || (d.serial_no && bySerial.get(lcKey(d.serial_no))));
+    if (hit) { existing.push({ device_id: d.id, name: d.name, asset_id: hit.id }); continue; }
+    const p = proposeAsset(d, learned);
+    proposals.push({ ...p, missing: assetMissing(p) });
+  }
+  res.json({ proposals, existing });
+}));
+
+// POST /api/devices/to-assets — { items: [{ device_id, asset_type, brand_model, … }] }
+// Creates the assets (same rules as Add Asset: country scope, Office/Factory only in
+// Vietnam, History Usage line) and links each device to its new asset.
+router.post('/to-assets', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  const items = (req.body && Array.isArray(req.body.items) ? req.body.items : []).slice(0, MAX_ADD);
+  const devices = new Map((await loadDevicesInScope(req, items.map(i => Number(i.device_id)))).map(d => [d.id, d]));
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const created = [], skipped = [];
+  for (const it of items) {
+    const d = devices.get(Number(it.device_id));
+    if (!d) { skipped.push({ device_id: it.device_id, reason: 'Device not found or outside your countries' }); continue; }
+    if (d.asset_id) { skipped.push({ device_id: d.id, reason: 'Already in Asset Inventory' }); continue; }
+    const str = (k) => String(it[k] == null ? '' : it[k]).trim();
+    const country = normCountry(str('country')) || d.country;
+    if (!country) { skipped.push({ device_id: d.id, reason: 'Pick a country' }); continue; }
+    if (!inScope(req, country)) { skipped.push({ device_id: d.id, reason: 'Country outside your scope' }); continue; }
+    const computerNo = str('computer_no'), serial = str('serial_no');
+    // Don't create a duplicate of an asset that already has this Computer No / Serial.
+    const dup = await get(`SELECT id FROM assets WHERE deleted_at IS NULL AND (
+        (? <> '' AND LOWER(computer_no) = LOWER(?)) OR (? <> '' AND LOWER(serial_no) = LOWER(?))) LIMIT 1`,
+      [computerNo, computerNo, serial, serial]);
+    if (dup) {
+      await run('UPDATE devices SET asset_id = ? WHERE id = ?', [dup.id, d.id]);
+      skipped.push({ device_id: d.id, reason: `Already in Asset Inventory (#${dup.id}) — linked`, asset_id: dup.id });
+      continue;
+    }
+    const location = country === 'Vietnam' && ['Office', 'Factory'].includes(str('location')) ? str('location') : '';
+    const status = ['Active', 'Broken', 'Stock'].includes(str('status')) ? str('status') : 'Active';
+    const hist = `${ts} UTC: created from Intune / Entra device "${d.name}" by ${req.user.username}`;
+    const r = await run(`INSERT INTO assets (location, country, department, computer_no, brand_model, serial_no,
+        asset_code, asset_s4, user_name, ad_name, status, history_usage, sap_confirmed, asset_type)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      [location, country, str('department'), computerNo, str('brand_model'), serial, str('asset_code'), str('asset_s4'),
+       str('user_name'), str('ad_name'), status, hist, normalizeAssetType(str('asset_type'))]);
+    const id = r.lastInsertRowid;
+    await run('UPDATE devices SET asset_id = ? WHERE id = ?', [id, d.id]);
+    created.push({ device_id: d.id, asset_id: id, name: d.name, country });
+  }
+  if (created.length) {
+    const byCountry = created.reduce((m, c) => { m[c.country] = (m[c.country] || 0) + 1; return m; }, {});
+    const msg = `${req.user.full_name} added ${created.length} device(s) from Intune / Entra to Asset Inventory (${Object.entries(byCountry).map(([c, n]) => `${c} ${n}`).join(', ')}).`;
+    await audit(req.user, 'CREATE', null, msg);
+    await notify({ audience: 'IT', scope: 'asset', message: msg });
+  }
+  res.json({ created, skipped });
+}));
+
+// GET /api/devices/owners?ids= — device owners not yet in User Inventory (one row per email).
+router.get('/owners', wrap(async (req, res) => {
+  const devices = await loadDevicesInScope(req, idList(req.query.ids));
+  const seen = new Map();
+  for (const d of devices) {
+    if (!d.user_upn || d.person_id) continue;
+    const k = lcKey(d.user_upn);
+    if (!seen.has(k)) seen.set(k, { email: d.user_upn, display_name: d.user_name || d.user_upn.split('@')[0], country: d.country || '', devices: [] });
+    seen.get(k).devices.push(d.name);
+  }
+  // Already in User Inventory under that email (e.g. added since the import)?
+  const people = await all('SELECT id, email FROM personnel');
+  const inPeople = new Set(people.map(p => lcKey(p.email)));
+  const owners = [...seen.values()].filter(o => !inPeople.has(lcKey(o.email)))
+    .map(o => ({ ...o, missing: personMissing(o) }));
+  res.json({ owners });
+}));
+
+// POST /api/devices/to-people — { items: [{ email, display_name, country, company_name, position }] } (IT admin)
+router.post('/to-people', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can add users to User Inventory' });
+  const items = (req.body && Array.isArray(req.body.items) ? req.body.items : []).slice(0, MAX_ADD);
+  const created = [], skipped = [];
+  for (const it of items) {
+    const str = (k) => String(it[k] == null ? '' : it[k]).trim();
+    const email = str('email');
+    const country = normCountry(str('country'));
+    if (!email || !email.includes('@')) { skipped.push({ email, reason: 'Missing email' }); continue; }
+    if (!country) { skipped.push({ email, reason: 'Pick a country' }); continue; }
+    if (!inScope(req, country)) { skipped.push({ email, reason: 'Country outside your scope' }); continue; }
+    if (await get('SELECT id FROM personnel WHERE LOWER(email) = LOWER(?)', [email])) { skipped.push({ email, reason: 'Already in User Inventory' }); continue; }
+    const r = await run(`INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date)
+      VALUES (?, ?, ?, '', 'Active', ?, ?, '')`, [country, str('display_name') || email.split('@')[0], email, str('company_name'), str('position')]);
+    const id = r.lastInsertRowid;
+    // Link this person's devices; devices without a country take the person's country.
+    await run("UPDATE devices SET person_id = ?, country = CASE WHEN country = '' THEN ? ELSE country END WHERE LOWER(user_upn) = LOWER(?)", [id, country, email]);
+    created.push({ email, person_id: id, country });
+  }
+  if (created.length) {
+    resetCountryCache();
+    const msg = `${req.user.full_name} added ${created.length} device owner(s) to User Inventory.`;
+    await audit(req.user, 'PERSONNEL', null, msg);
+    await notify({ audience: 'all', scope: 'personnel', message: msg });
+  }
+  res.json({ created, skipped });
+}));
 
 // ── GET /api/devices/:id — one device (scope-checked) ─────────────────────────
 router.get('/:id', wrap(async (req, res) => {
