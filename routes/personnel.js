@@ -228,8 +228,13 @@ router.post('/import', wrap(async (req, res) => {
   let rows;
   try { rows = parseCsv(csv); } catch (e) { return res.status(400).json({ error: 'Could not parse the CSV file' }); }
   const { applyDirectoryImport } = require('./devices');
-  const out = await applyDirectoryImport({ azure: rows }, req.user);
-  res.json({ ...out, skipped: out.skippedGuests + out.skippedNoCountry });
+  try {
+    const out = await applyDirectoryImport({ azure: rows }, req.user);
+    res.json({ ...out, skipped: out.skippedGuests + out.skippedNoCountry });
+  } catch (e) {
+    console.error('[import]', e);
+    res.status(500).json({ error: `Import failed: ${e.message || e}` });
+  }
 }));
 
 // ── PUT /api/personnel/:id — edit a record (IT admin only) ────────────────────

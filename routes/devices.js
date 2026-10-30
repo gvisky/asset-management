@@ -109,8 +109,13 @@ router.post('/import', wrap(async (req, res) => {
     if (!kind) return res.status(400).json({ error: 'Unrecognised file — upload the Azure users, Intune devices or Entra devices export' });
     parsed[kind] = rows;
   }
-  const result = await applyDirectoryImport(parsed, req.user);
-  res.json(result);
+  try {
+    res.json(await applyDirectoryImport(parsed, req.user));
+  } catch (e) {
+    // Show the real reason to the IT admin (e.g. a database limit) instead of "Server error".
+    console.error('[import]', e);
+    res.status(500).json({ error: `Import failed: ${e.message || e}` });
+  }
 }));
 
 // Shared by POST /api/devices/import and the User Inventory "Upload Azure CSV" button.
@@ -213,8 +218,15 @@ async function applyDirectoryImport(parsed, user) {
     const cols = [...DEVICE_COLS, 'person_id', 'asset_id', 'imported_at'];
     const rows = devices.map(d => [...DEVICE_COLS.map(c => (d[c] === undefined ? defaults(c) : d[c])), personOf(d.user_upn), assetOf(d), now]);
     // DELETE + inserts in one transaction per request chunk; 50 statements ≈ 2,000 rows per request.
-    await run('DELETE FROM devices');
-    await batch(multiInsert('devices', cols, rows, 40), 50);
+    // Insert the new snapshot first, then drop the old one — if any request fails, the
+    // previous devices are kept (and the half-written new rows removed).
+    try {
+      await batch(multiInsert('devices', cols, rows, 25), 50);
+    } catch (e) {
+      await run('DELETE FROM devices WHERE imported_at = ?', [now]).catch(() => {});
+      throw e;
+    }
+    await run('DELETE FROM devices WHERE imported_at IS NULL OR imported_at <> ?', [now]);
     await setMeta('directory_last_import', now);
   } else {
     // People only: re-link existing devices to (new) people / assets where it changed.

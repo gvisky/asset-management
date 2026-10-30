@@ -32,9 +32,26 @@ async function run(sql, args = [])  { await init(); return backend.run(sql, args
 async function script(sql)          { await init(); return backend.script(sql); }
 // Run many write statements ([{ sql, args }]) in one transaction — used by big imports
 // (thousands of rows) so Turso gets a few round trips instead of one per row.
+// Each request is also kept under ~512 KB: Turso rejects request bodies of about 2 MB+
+// (a big CSV import easily exceeds that when chunked by statement count alone).
+const BATCH_MAX_BYTES = 512 * 1024;
+const stmtBytes = (st) => String(st.sql).length + 16 +
+  (st.args || []).reduce((n, a) => n + 24 + (a == null ? 4 : String(a).length * (/[^\x00-\x7f]/.test(String(a)) ? 3 : 1)), 0);
+// Split statements into requests of at most `chunk` statements and ~BATCH_MAX_BYTES each.
+function splitBatches(stmts, chunk = 100) {
+  const out = [];
+  let cur = [], bytes = 0;
+  for (const st of stmts) {
+    const b = stmtBytes(st);
+    if (cur.length && (cur.length >= chunk || bytes + b > BATCH_MAX_BYTES)) { out.push(cur); cur = []; bytes = 0; }
+    cur.push(st); bytes += b;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
 async function batch(stmts, chunk = 100) {
   await init();
-  for (let i = 0; i < stmts.length; i += chunk) await backend.batch(stmts.slice(i, i + chunk));
+  for (const part of splitBatches(stmts, chunk)) await backend.batch(part);
 }
 
 // ── Backend setup ───────────────────────────────────────────────────────────
@@ -1052,4 +1069,4 @@ async function audit(user, action, assetId, details) {
   }
 }
 
-module.exports = { init, get, all, run, script, batch, audit, notify, getMeta, setMeta, USE_TURSO };
+module.exports = { init, get, all, run, script, batch, splitBatches, audit, notify, getMeta, setMeta, USE_TURSO };
