@@ -34,7 +34,7 @@ async function script(sql)          { await init(); return backend.script(sql); 
 // (thousands of rows) so Turso gets a few round trips instead of one per row.
 // Each request is also kept under ~512 KB: Turso rejects request bodies of about 2 MB+
 // (a big CSV import easily exceeds that when chunked by statement count alone).
-const BATCH_MAX_BYTES = 512 * 1024;
+const BATCH_MAX_BYTES = 256 * 1024;
 const stmtBytes = (st) => String(st.sql).length + 16 +
   (st.args || []).reduce((n, a) => n + 24 + (a == null ? 4 : String(a).length * (/[^\x00-\x7f]/.test(String(a)) ? 3 : 1)), 0);
 // Split statements into requests of at most `chunk` statements and ~BATCH_MAX_BYTES each.
@@ -51,7 +51,34 @@ function splitBatches(stmts, chunk = 100) {
 }
 async function batch(stmts, chunk = 100) {
   await init();
-  for (const part of splitBatches(stmts, chunk)) await backend.batch(part);
+  for (const part of splitBatches(stmts, chunk)) await runBatchPart(part, 0);
+}
+// A batch is one transaction: if a request fails nothing of it was applied, so it is safe to
+// retry. On failure, split the request in half (a too-big request is the usual cause on Turso)
+// and retry; a single statement is retried twice after a short pause (network hiccups).
+// Callers keep their statements idempotent in case a request succeeded but its reply was lost.
+const pause = (ms) => new Promise(r => setTimeout(r, ms));
+async function runBatchPart(part, attempt) {
+  try {
+    await backend.batch(part);
+  } catch (e) {
+    if (part.length > 1) {
+      const mid = Math.ceil(part.length / 2);
+      await runBatchPart(part.slice(0, mid), 0);
+      await runBatchPart(part.slice(mid), 0);
+      return;
+    }
+    if (attempt < 2) { await pause(800 * (attempt + 1)); return runBatchPart(part, attempt + 1); }
+    throw e;
+  }
+}
+// Readable error text, including the network cause hidden behind "fetch failed".
+function errorText(e) {
+  if (!e) return 'unknown error';
+  const parts = [e.message || String(e)];
+  let c = e.cause, depth = 0;
+  while (c && depth++ < 3) { parts.push(c.code ? `${c.code}${c.message ? ' ' + c.message : ''}` : (c.message || String(c))); c = c.cause; }
+  return [...new Set(parts.filter(Boolean))].join(' — ');
 }
 
 // ── Backend setup ───────────────────────────────────────────────────────────
@@ -1069,4 +1096,4 @@ async function audit(user, action, assetId, details) {
   }
 }
 
-module.exports = { init, get, all, run, script, batch, splitBatches, audit, notify, getMeta, setMeta, USE_TURSO };
+module.exports = { init, get, all, run, script, batch, splitBatches, errorText, audit, notify, getMeta, setMeta, USE_TURSO };

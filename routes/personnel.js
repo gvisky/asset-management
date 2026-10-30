@@ -1,7 +1,7 @@
 const express = require('express');
 const XLSX = require('xlsx');
 const router = express.Router();
-const { get, all, run, audit, notify, getMeta, setMeta } = require('../db/database');
+const { get, all, run, audit, notify, getMeta, setMeta, errorText } = require('../db/database');
 const { requireAuth, isITAdmin } = require('../middleware/auth');
 const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
 
@@ -233,7 +233,7 @@ router.post('/import', wrap(async (req, res) => {
     res.json({ ...out, skipped: out.skippedGuests + out.skippedNoCountry });
   } catch (e) {
     console.error('[import]', e);
-    res.status(500).json({ error: `Import failed: ${e.message || e}` });
+    res.status(500).json({ error: `Import failed: ${errorText(e)}` });
   }
 }));
 
