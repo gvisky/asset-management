@@ -36,6 +36,10 @@ router.use((req, res, next) => {
 });
 
 const STALE_DAYS = 90;
+// Bulk data features (Import exports, Upload Azure users CSV, Add all, Fill assets from Intune) are
+// OFF unless Render sets IMPORTS_ENABLED=1 — turned off after the first import mixed up data.
+const IMPORTS_ENABLED = process.env.IMPORTS_ENABLED === '1';
+const importsOff = (res) => res.status(403).json({ error: 'Imports are turned off for now (IMPORTS_ENABLED is not set).' });
 const DEVICE_COLS = ['name', 'country', 'user_upn', 'user_name', 'os', 'os_version', 'model', 'manufacturer',
   'serial_no', 'managed_by', 'ownership', 'category', 'join_type', 'is_managed', 'is_compliant', 'account_enabled',
   'last_sign_in', 'intune_id', 'entra_device_id', 'entra_object_id', 'in_intune', 'in_entra'];
@@ -112,13 +116,15 @@ router.get('/stats', wrap(async (req, res) => {
     byOs: byOs.map(r => ({ os: r.v || '', count: Number(r.c) })),
     byCountry: byCountry.map(r => ({ country: r.v || '', count: Number(r.c) })),
     lastImport: await getMeta('directory_last_import'),
-    canImport: isITAdmin(req.user),
+    canImport: IMPORTS_ENABLED && isITAdmin(req.user),
+    importsEnabled: IMPORTS_ENABLED,
   });
 }));
 
 // ── POST /api/devices/import — IT admin uploads 1–3 export CSVs ───────────────
 // Body: { files: [csvText, …] } (any order — each file is recognised by its headers).
 router.post('/import', wrap(async (req, res) => {
+  if (!IMPORTS_ENABLED) return importsOff(res);
   if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can import' });
   const texts = (req.body && Array.isArray(req.body.files)) ? req.body.files : [];
   if (!texts.length) return res.status(400).json({ error: 'No files received' });
@@ -331,6 +337,7 @@ async function applyDirectoryImport(parsed, user) {
 // ?apply=1 (IT admin) writes them and logs each change in History Usage.
 router.get('/asset-fill', wrap(async (req, res) => fillAssets(req, res, false)));
 router.post('/asset-fill', wrap(async (req, res) => {
+  if (!IMPORTS_ENABLED) return importsOff(res);
   if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can fill assets from Intune' });
   return fillAssets(req, res, true);
 }));
@@ -463,6 +470,7 @@ router.post('/to-assets', requireRole('admin', 'editor'), wrap(async (req, res) 
 // The page calls it repeatedly until `remaining` is 0. Values come from the proposals (learned
 // Brand / Model, guessed Asset Type); Asset code, S/4, Location, Department stay to fill (Needs Attention).
 router.post('/to-assets-all', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  if (!IMPORTS_ENABLED) return importsOff(res);
   const b = req.body || {};
   req.query = { ...b };                                   // reuse the list filters
   const limit = Math.min(1000, Math.max(1, Number(b.limit) || 500));
@@ -590,3 +598,4 @@ router.get('/:id', wrap(async (req, res) => {
 
 module.exports = router;
 module.exports.applyDirectoryImport = applyDirectoryImport;
+module.exports.IMPORTS_ENABLED = IMPORTS_ENABLED;

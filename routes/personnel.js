@@ -215,13 +215,15 @@ router.get('/meta', wrap(async (req, res) => {
     days = Math.floor(Number(r.d));
     due = days >= 30;
   }
-  res.json({ last_import: last, days_since: days, due, canImport: isITAdmin(req.user) });
+  const importsOn = process.env.IMPORTS_ENABLED === '1';   // see routes/devices.js
+  res.json({ last_import: last, days_since: days, due: importsOn && due, canImport: importsOn && isITAdmin(req.user) });
 }));
 
 // ── POST /api/personnel/import — IT uploads the Azure users CSV ──────────────
 // All countries. Same importer as Devices → Import (routes/devices.js): upserts
 // people by email, keeping HR/IT workflow fields and rows they have edited.
 router.post('/import', wrap(async (req, res) => {
+  if (process.env.IMPORTS_ENABLED !== '1') return res.status(403).json({ error: 'Imports are turned off for now.' });
   if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can upload' });
   const csv = req.body && req.body.csv;
   if (!csv || typeof csv !== 'string') return res.status(400).json({ error: 'No CSV content received' });

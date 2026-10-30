@@ -149,7 +149,7 @@ async function loadDevStats() {
     document.getElementById('btn-import').style.display = s.canImport ? '' : 'none';
     document.getElementById('btn-fill').style.display = s.canImport ? '' : 'none';
     const addAll = document.getElementById('btn-addall');
-    addAll.style.display = canEdit() && s.addableAll ? '' : 'none';
+    addAll.style.display = s.importsEnabled && canEdit() && s.addableAll ? '' : 'none';
     addAll.textContent = `➕ Add all to Asset Inventory (${dFmt(s.addableAll)})`;
     addAll.dataset.all = s.addableAll; addAll.dataset.corp = s.addableCorporate;
   } catch (e) { /* ignore */ }
