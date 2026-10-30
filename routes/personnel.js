@@ -233,7 +233,7 @@ router.post('/import', wrap(async (req, res) => {
     res.json({ ...out, skipped: out.skippedGuests + out.skippedNoCountry });
   } catch (e) {
     console.error('[import]', e);
-    res.status(500).json({ error: `Import failed: ${errorText(e)}` });
+    res.status(500).json({ error: `Import failed${e.stage ? ` while ${e.stage}` : ''}: ${errorText(e)}` });
   }
 }));
 

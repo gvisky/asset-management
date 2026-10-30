@@ -114,7 +114,7 @@ router.post('/import', wrap(async (req, res) => {
   } catch (e) {
     // Show the real reason to the IT admin (e.g. a database limit) instead of "Server error".
     console.error('[import]', e);
-    res.status(500).json({ error: `Import failed: ${errorText(e)}` });
+    res.status(500).json({ error: `Import failed${e.stage ? ` while ${e.stage}` : ''}: ${errorText(e)}` });
   }
 }));
 
@@ -142,120 +142,136 @@ function updateIds(sqlPrefix, prefixArgs, ids, per = 500) {
 }
 
 async function applyDirectoryImport(parsed, user) {
-  const known = new Map((await all('SELECT email, country FROM personnel')).map(r => [String(r.email).toLowerCase(), r.country]));
-  const { people, devices, stats } = buildDirectory(parsed, known);
-  const now = (await get("SELECT datetime('now') AS n")).n;
-  const out = { files: Object.keys(parsed), ...stats, added: 0, updated: 0, preserved: 0 };
-
-  // ── People → User Inventory (upsert by email; HR/IT-edited rows keep their edits) ──
-  // Only rows whose details changed are rewritten; the rest just get "seen in this export".
-  if (parsed.azure) {
-    const existing = new Map((await all(
-      'SELECT id, email, touched, display_name, company_name, position, country, entra_id, employee_id, ad_department FROM personnel'))
-      .map(r => [String(r.email).toLowerCase(), r]));
-    const same = (a, b) => String(a || '') === String(b || '');
-    const seen = new Set();
-    const stmts = [], seenIds = [], inserts = [];
-    for (const p of people) {
-      const key = p.email.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const found = existing.get(key);
-      if (found && found.touched) {
-        // Edited by HR/IT: only refresh the Azure reference fields, fill blanks.
-        const blanks = (!found.display_name && p.display_name) || (!found.company_name && p.company_name) || (!found.position && p.position);
-        if (blanks || !same(found.entra_id, p.entra_id) || !same(found.employee_id, p.employee_id) || !same(found.ad_department, p.ad_department)) {
-          stmts.push({ sql: `UPDATE personnel SET entra_id = ?, employee_id = ?, ad_department = ?,
-                display_name = CASE WHEN display_name = '' THEN ? ELSE display_name END,
-                company_name = CASE WHEN company_name = '' THEN ? ELSE company_name END,
-                position     = CASE WHEN position = '' THEN ? ELSE position END
-              WHERE id = ?`,
-            args: [p.entra_id, p.employee_id, p.ad_department, p.display_name, p.company_name, p.position, found.id] });
+  let stage = 'starting';
+  try {
+    // Let the event loop catch up after parsing the CSVs (see db/database.js: dropped connections).
+    await new Promise(r => setTimeout(r, 50));
+    stage = 'reading User Inventory';
+    const known = new Map((await all('SELECT email, country FROM personnel')).map(r => [String(r.email).toLowerCase(), r.country]));
+    const { people, devices, stats } = buildDirectory(parsed, known);
+    await new Promise(r => setTimeout(r, 50));
+    const now = (await get("SELECT datetime('now') AS n")).n;
+    const out = { files: Object.keys(parsed), ...stats, added: 0, updated: 0, preserved: 0 };
+  
+    // ── People → User Inventory (upsert by email; HR/IT-edited rows keep their edits) ──
+    // Only rows whose details changed are rewritten; the rest just get "seen in this export".
+    stage = 'updating User Inventory';
+    if (parsed.azure) {
+      const existing = new Map((await all(
+        'SELECT id, email, touched, display_name, company_name, position, country, entra_id, employee_id, ad_department FROM personnel'))
+        .map(r => [String(r.email).toLowerCase(), r]));
+      const same = (a, b) => String(a || '') === String(b || '');
+      const seen = new Set();
+      const stmts = [], seenIds = [], inserts = [];
+      for (const p of people) {
+        const key = p.email.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const found = existing.get(key);
+        if (found && found.touched) {
+          // Edited by HR/IT: only refresh the Azure reference fields, fill blanks.
+          const blanks = (!found.display_name && p.display_name) || (!found.company_name && p.company_name) || (!found.position && p.position);
+          if (blanks || !same(found.entra_id, p.entra_id) || !same(found.employee_id, p.employee_id) || !same(found.ad_department, p.ad_department)) {
+            stmts.push({ sql: `UPDATE personnel SET entra_id = ?, employee_id = ?, ad_department = ?,
+                  display_name = CASE WHEN display_name = '' THEN ? ELSE display_name END,
+                  company_name = CASE WHEN company_name = '' THEN ? ELSE company_name END,
+                  position     = CASE WHEN position = '' THEN ? ELSE position END
+                WHERE id = ?`,
+              args: [p.entra_id, p.employee_id, p.ad_department, p.display_name, p.company_name, p.position, found.id] });
+          }
+          seenIds.push(found.id);
+          out.preserved++;
+        } else if (found) {
+          const changed = !same(found.display_name, p.display_name) || !same(found.company_name, p.company_name)
+            || !same(found.position, p.position) || !same(found.country, p.country) || !same(found.entra_id, p.entra_id)
+            || !same(found.employee_id, p.employee_id) || !same(found.ad_department, p.ad_department);
+          if (changed) {
+            stmts.push({ sql: `UPDATE personnel SET display_name = ?, company_name = ?, position = ?, country = ?,
+                  entra_id = ?, employee_id = ?, ad_department = ?, updated_at = datetime('now') WHERE id = ?`,
+              args: [p.display_name, p.company_name, p.position, p.country, p.entra_id, p.employee_id, p.ad_department, found.id] });
+            out.updated++;
+          } else out.unchanged = (out.unchanged || 0) + 1;
+          seenIds.push(found.id);
+        } else {
+          inserts.push([p.country, p.display_name, p.email, '', 'Active', p.company_name, p.position, '', p.entra_id, p.employee_id, p.ad_department, now]);
+          out.added++;
         }
-        seenIds.push(found.id);
-        out.preserved++;
-      } else if (found) {
-        const changed = !same(found.display_name, p.display_name) || !same(found.company_name, p.company_name)
-          || !same(found.position, p.position) || !same(found.country, p.country) || !same(found.entra_id, p.entra_id)
-          || !same(found.employee_id, p.employee_id) || !same(found.ad_department, p.ad_department);
-        if (changed) {
-          stmts.push({ sql: `UPDATE personnel SET display_name = ?, company_name = ?, position = ?, country = ?,
-                entra_id = ?, employee_id = ?, ad_department = ?, updated_at = datetime('now') WHERE id = ?`,
-            args: [p.display_name, p.company_name, p.position, p.country, p.entra_id, p.employee_id, p.ad_department, found.id] });
-          out.updated++;
-        } else out.unchanged = (out.unchanged || 0) + 1;
-        seenIds.push(found.id);
-      } else {
-        inserts.push([p.country, p.display_name, p.email, '', 'Active', p.company_name, p.position, '', p.entra_id, p.employee_id, p.ad_department, now]);
-        out.added++;
       }
+      await batch([
+        ...stmts,
+        ...updateIds('UPDATE personnel SET azure_seen_at = ?', [now], seenIds),
+        // One statement per new person, skipped if the email already exists — safe to retry.
+        ...inserts.map(v => ({
+          sql: `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position,
+                  leaving_date, entra_id, employee_id, ad_department, azure_seen_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                 WHERE NOT EXISTS (SELECT 1 FROM personnel WHERE email = ?)`,   // exact match → uses idx_personnel_email
+          args: [...v, v[2]] })),
+      ], 100);
+      out.notInExport = Number((await get(
+        'SELECT COUNT(*) AS c FROM personnel WHERE azure_seen_at IS NULL OR azure_seen_at < ?', [now])).c);
+      await setMeta('personnel_last_import', now);
     }
-    await batch([
-      ...stmts,
-      ...updateIds('UPDATE personnel SET azure_seen_at = ?', [now], seenIds),
-      // One statement per new person, skipped if the email already exists — safe to retry.
-      ...inserts.map(v => ({
-        sql: `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position,
-                leaving_date, entra_id, employee_id, ad_department, azure_seen_at)
-              SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-               WHERE NOT EXISTS (SELECT 1 FROM personnel WHERE email = ?)`,   // exact match → uses idx_personnel_email
-        args: [...v, v[2]] })),
-    ], 100);
-    out.notInExport = Number((await get(
-      'SELECT COUNT(*) AS c FROM personnel WHERE azure_seen_at IS NULL OR azure_seen_at < ?', [now])).c);
-    await setMeta('personnel_last_import', now);
-  }
-
-  // Lookups for the links: device → person (email), device → asset (Computer No, else serial).
-  const personByEmail = new Map((await all('SELECT id, email FROM personnel')).map(r => [String(r.email).toLowerCase(), r.id]));
-  const assetRows = await all("SELECT id, computer_no, serial_no FROM assets WHERE deleted_at IS NULL");
-  const assetByName = new Map(), assetBySerial = new Map();
-  for (const a of assetRows) {
-    if (a.computer_no && !assetByName.has(lcKey(a.computer_no))) assetByName.set(lcKey(a.computer_no), a.id);
-    if (a.serial_no && !assetBySerial.has(lcKey(a.serial_no))) assetBySerial.set(lcKey(a.serial_no), a.id);
-  }
-  const personOf = (upn) => (upn ? personByEmail.get(lcKey(upn)) || null : null);
-  const assetOf = (d) => (d.name && assetByName.get(lcKey(d.name))) || (d.serial_no && assetBySerial.get(lcKey(d.serial_no))) || null;
-
-  if (parsed.intune || parsed.entra) {
-    // ── Devices (replaced by the new snapshot, links set on insert) ───────────────
-    const defaults = (c) => (['is_managed', 'is_compliant', 'account_enabled'].includes(c) ? null : (c.startsWith('in_') ? 0 : ''));
-    const cols = [...DEVICE_COLS, 'person_id', 'asset_id', 'imported_at'];
-    const rows = devices.map(d => [...DEVICE_COLS.map(c => (d[c] === undefined ? defaults(c) : d[c])), personOf(d.user_upn), assetOf(d), now]);
-    // DELETE + inserts in one transaction per request chunk; 50 statements ≈ 2,000 rows per request.
-    // Insert the new snapshot first, then drop the old one — if any request fails, the
-    // previous devices are kept (and the half-written new rows removed).
-    try {
-      await batch(multiInsert('devices', cols, rows, 25), 50);
-    } catch (e) {
-      await run('DELETE FROM devices WHERE imported_at = ?', [now]).catch(() => {});
-      throw e;
+  
+    // Lookups for the links: device → person (email), device → asset (Computer No, else serial).
+    stage = 'linking people and assets';
+    const personByEmail = new Map((await all('SELECT id, email FROM personnel')).map(r => [String(r.email).toLowerCase(), r.id]));
+    const assetRows = await all("SELECT id, computer_no, serial_no FROM assets WHERE deleted_at IS NULL");
+    const assetByName = new Map(), assetBySerial = new Map();
+    for (const a of assetRows) {
+      if (a.computer_no && !assetByName.has(lcKey(a.computer_no))) assetByName.set(lcKey(a.computer_no), a.id);
+      if (a.serial_no && !assetBySerial.has(lcKey(a.serial_no))) assetBySerial.set(lcKey(a.serial_no), a.id);
     }
-    // A retried request may have been applied twice — keep one row per device of this snapshot.
-    await run(`DELETE FROM devices WHERE imported_at = ? AND id NOT IN (
-        SELECT MIN(id) FROM devices WHERE imported_at = ?
-        GROUP BY COALESCE(NULLIF(intune_id, ''), ''), COALESCE(NULLIF(entra_object_id, ''), ''), name)`, [now, now]);
-    await run('DELETE FROM devices WHERE imported_at IS NULL OR imported_at <> ?', [now]);
-    await setMeta('directory_last_import', now);
-  } else {
-    // People only: re-link existing devices to (new) people / assets where it changed.
-    const devRows = await all('SELECT id, name, serial_no, user_upn, person_id, asset_id FROM devices');
-    await batch(devRows
-      .map(d => ({ d, pid: personOf(d.user_upn), aid: assetOf(d) }))
-      .filter(x => x.pid !== x.d.person_id || x.aid !== x.d.asset_id)
-      .map(x => ({ sql: 'UPDATE devices SET person_id = ?, asset_id = ? WHERE id = ?', args: [x.pid, x.aid, x.d.id] })), 800);
+    const personOf = (upn) => (upn ? personByEmail.get(lcKey(upn)) || null : null);
+    const assetOf = (d) => (d.name && assetByName.get(lcKey(d.name))) || (d.serial_no && assetBySerial.get(lcKey(d.serial_no))) || null;
+  
+    if (parsed.intune || parsed.entra) {
+      // ── Devices (replaced by the new snapshot, links set on insert) ───────────────
+      const defaults = (c) => (['is_managed', 'is_compliant', 'account_enabled'].includes(c) ? null : (c.startsWith('in_') ? 0 : ''));
+      const cols = [...DEVICE_COLS, 'person_id', 'asset_id', 'imported_at'];
+      const rows = devices.map(d => [...DEVICE_COLS.map(c => (d[c] === undefined ? defaults(c) : d[c])), personOf(d.user_upn), assetOf(d), now]);
+      // DELETE + inserts in one transaction per request chunk; 50 statements ≈ 2,000 rows per request.
+    stage = 'saving devices';
+      // Insert the new snapshot first, then drop the old one — if any request fails, the
+      // previous devices are kept (and the half-written new rows removed).
+      try {
+        await batch(multiInsert('devices', cols, rows, 25), 50);
+      } catch (e) {
+        await run('DELETE FROM devices WHERE imported_at = ?', [now]).catch(() => {});
+        throw e;
+      }
+    stage = 'removing the old device list';
+      // A retried request may have been applied twice — keep one row per device of this snapshot.
+      await run(`DELETE FROM devices WHERE imported_at = ? AND id NOT IN (
+          SELECT MIN(id) FROM devices WHERE imported_at = ?
+          GROUP BY COALESCE(NULLIF(intune_id, ''), ''), COALESCE(NULLIF(entra_object_id, ''), ''), name)`, [now, now]);
+      await run('DELETE FROM devices WHERE imported_at IS NULL OR imported_at <> ?', [now]);
+      await setMeta('directory_last_import', now);
+    } else {
+      // People only: re-link existing devices to (new) people / assets where it changed.
+      const devRows = await all('SELECT id, name, serial_no, user_upn, person_id, asset_id FROM devices');
+      await batch(devRows
+        .map(d => ({ d, pid: personOf(d.user_upn), aid: assetOf(d) }))
+        .filter(x => x.pid !== x.d.person_id || x.aid !== x.d.asset_id)
+        .map(x => ({ sql: 'UPDATE devices SET person_id = ?, asset_id = ? WHERE id = ?', args: [x.pid, x.aid, x.d.id] })), 800);
+    }
+    stage = 'counting links';
+    out.linkedPeople = Number((await get('SELECT COUNT(*) AS c FROM devices WHERE person_id IS NOT NULL')).c);
+    out.linkedAssets = Number((await get('SELECT COUNT(*) AS c FROM devices WHERE asset_id IS NOT NULL')).c);
+    out.last_import = now;
+    resetCountryCache();
+  
+    stage = 'writing the audit log';
+    const msg = `${user.full_name} imported the Microsoft exports (${out.files.join(', ')}): `
+      + (parsed.azure ? `people +${out.added} new, ${out.updated} refreshed, ${out.preserved} kept (edited); ` : '')
+      + ((parsed.intune || parsed.entra) ? `${out.devices} devices, ${out.linkedAssets} linked to assets.` : '');
+    await audit(user, 'IMPORT', null, msg);
+    await notify({ audience: 'IT', scope: 'system', message: msg });
+    return out;
+  } catch (e) {
+    e.stage = stage;
+    throw e;
   }
-  out.linkedPeople = Number((await get('SELECT COUNT(*) AS c FROM devices WHERE person_id IS NOT NULL')).c);
-  out.linkedAssets = Number((await get('SELECT COUNT(*) AS c FROM devices WHERE asset_id IS NOT NULL')).c);
-  out.last_import = now;
-  resetCountryCache();
-
-  const msg = `${user.full_name} imported the Microsoft exports (${out.files.join(', ')}): `
-    + (parsed.azure ? `people +${out.added} new, ${out.updated} refreshed, ${out.preserved} kept (edited); ` : '')
-    + ((parsed.intune || parsed.entra) ? `${out.devices} devices, ${out.linkedAssets} linked to assets.` : '');
-  await audit(user, 'IMPORT', null, msg);
-  await notify({ audience: 'IT', scope: 'system', message: msg });
-  return out;
 }
 
 // ── GET /api/devices/asset-fill — what Intune can fill on linked assets ───────
