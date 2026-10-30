@@ -21,6 +21,39 @@ async function ensureAuth() {
 
 function isAdmin()       { return window.CURRENT_USER && window.CURRENT_USER.role === 'admin'; }
 function isGlobalAdmin() { return isAdmin() && !window.CURRENT_USER.country; }   // admin with no country
+
+// Countries the user manages ([] = global, sees every country). Stored as "Vietnam,Thailand".
+function myCountries() {
+  return String((window.CURRENT_USER && window.CURRENT_USER.country) || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+// The one country a single-country user is fixed to (null if global or several).
+function mySingleCountry() { const l = myCountries(); return l.length === 1 ? l[0] : null; }
+
+// Country list from the server (cached per page): { countries (mine), all, core, scoped }.
+let _countriesPromise = null;
+function getCountries() {
+  if (!_countriesPromise) {
+    _countriesPromise = fetch('/api/countries').then(r => (r.ok ? r.json() : { countries: [], all: [], core: [] }))
+      .catch(() => ({ countries: [], all: [], core: [] }));
+  }
+  return _countriesPromise;
+}
+// Fill every <select data-countries> with the countries this user may pick
+// (data-countries="global" also offers "Global (all countries)" first).
+async function fillCountrySelects(root = document) {
+  const { countries } = await getCountries();
+  if (!countries || !countries.length) return;
+  root.querySelectorAll('select[data-countries]').forEach(sel => {
+    const cur = sel.value;
+    const withGlobal = sel.dataset.countries === 'global';
+    sel.innerHTML = (withGlobal && !myCountries().length ? '<option value="Global">Global (all countries)</option>' : '') +
+      countries.map(c => `<option>${String(c).replace(/</g, '&lt;')}</option>`).join('');
+    if (cur && [...sel.options].some(o => o.value === cur)) sel.value = cur;
+    const single = mySingleCountry();
+    if (single && !withGlobal) { sel.value = single; sel.disabled = true; }
+  });
+  if (typeof syncLocationField === 'function') syncLocationField();
+}
 function canEdit()       { return window.CURRENT_USER && ['admin','editor'].includes(window.CURRENT_USER.role); }
 function isIT()          { return window.CURRENT_USER && window.CURRENT_USER.team === 'IT'; }
 function isITAdmin()     { return isIT() && window.CURRENT_USER.role === 'admin'; }   // e.g. Viet
@@ -143,11 +176,11 @@ function applyAssetGating() {
   // Hide every asset-related destination for HR-only users.
   document.querySelectorAll([
     '.sidebar nav a[href="/"]', '.sidebar nav a[href="/inventory.html"]',
-    '#nav-add', '#nav-servers', '#nav-maintenance', '#nav-licenses', '#nav-reports'
+    '#nav-add', '#nav-servers', '#nav-devices', '#nav-maintenance', '#nav-licenses', '#nav-reports'
   ].join(',')).forEach(a => a.style.display = 'none');
 
   const assetPages = ['/', '/index.html', '/inventory.html',
-    '/server-inventory.html', '/maintenance.html', '/licenses.html', '/reports.html', '/alerts.html'];
+    '/server-inventory.html', '/devices.html', '/maintenance.html', '/licenses.html', '/reports.html', '/alerts.html'];
   if (assetPages.includes(window.location.pathname)) {
     window.location.href = '/user-inventory.html';
   }
@@ -175,12 +208,8 @@ async function changePassword() {
 
 // Hide create/edit/delete affordances for viewers.
 function applyRoleGates() {
-  // Regional managers: lock the Country field in the asset form to their country.
-  const myCountry = window.CURRENT_USER && window.CURRENT_USER.country;
-  if (myCountry) {
-    const fc = document.getElementById('f-country');
-    if (fc) { fc.value = myCountry; fc.disabled = true; }
-  }
+  // Country pickers list the user's countries; a single-country user is locked to theirs.
+  fillCountrySelects();
   if (typeof syncLocationField === 'function') syncLocationField();
 
   if (canEdit()) return;

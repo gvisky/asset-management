@@ -9,7 +9,7 @@
    Needs app.js (apiGet/apiPut, showToast, missingInfoTags, typeRank, SITE_COUNTRY)
    and auth.js (canEdit, isIT, ensureAuth). */
 (function () {
-  const COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+  const CORE = ['Vietnam', 'Thailand', 'Malaysia'];
   const SITES = ['Office', 'Factory'];
   const PROTECTED = ['serial_no', 'asset_code'];      // IT-only fields (server: PROTECTED_FIELDS)
   const AD_MISSING = 'AD Name missing';
@@ -94,7 +94,7 @@
     async function load() {
       try {
         if (!window.CURRENT_USER && typeof ensureAuth === 'function') await ensureAuth();
-        const order = (c) => { const i = COUNTRIES.indexOf(c); return i < 0 ? COUNTRIES.length : i; };
+        const order = (c) => { const i = CORE.indexOf(c); return i < 0 ? CORE.length : i; };
         st.rows = (await cfg.load()).map(a => ({ ...a, _issues: cfg.issuesOf(a) })).filter(a => a._issues.length)
           .sort((x, y) => order(x.country) - order(y.country) || typeRank(x.asset_type) - typeRank(y.asset_type) || x.id - y.id);
         render();
@@ -107,8 +107,12 @@
     function render() {
       if (!st.rows) return;
       const tbody = $('tbody');
-      const userCountry = window.CURRENT_USER && window.CURRENT_USER.country;
+      const userCountry = typeof mySingleCountry === 'function' ? mySingleCountry() : null;
       const country = userCountry || (st.country !== null ? st.country : (opts.scope ? opts.scope() : '')) || '';
+      // Tabs: the countries that have something to fix (core countries first).
+      const present = [...new Set(st.rows.map(a => a.country).filter(Boolean))];
+      const COUNTRIES = [...CORE.filter(c => present.includes(c)), ...present.filter(c => !CORE.includes(c)).sort()];
+      if (country && !COUNTRIES.includes(country)) COUNTRIES.push(country);
 
       const badge = $('count');
       badge.textContent = `${fmt(st.rows.length)} to fix`;
@@ -120,13 +124,21 @@
       if (userCountry) {
         tabs.innerHTML = `<span class="seg-fixed">${esc(userCountry)}</span>`;
       } else {
-        tabs.innerHTML = [['', 'All'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
-          `<button type="button" role="tab" class="seg-btn${v === country ? ' active' : ''}" data-v="${v}" aria-selected="${v === country}">${label}<span class="seg-count">${fmt(inCountry(v).length)}</span></button>`).join('');
-        tabs.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
-          st.country = btn.dataset.v; st.issue = '';
+        const pickCountry = (v) => {
+          st.country = v; st.issue = '';
           if (st.country && st.country !== SITE_COUNTRY) st.site = '';
           render();
-        }));
+        };
+        if (COUNTRIES.length <= 4) {
+          tabs.innerHTML = [['', 'All'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
+            `<button type="button" role="tab" class="seg-btn${v === country ? ' active' : ''}" data-v="${esc(v)}" aria-selected="${v === country}">${esc(label)}<span class="seg-count">${fmt(inCountry(v).length)}</span></button>`).join('');
+          tabs.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => pickCountry(btn.dataset.v)));
+        } else {
+          // Many countries → a dropdown instead of tabs.
+          tabs.innerHTML = `<select class="filter-select" aria-label="Country">${[['', 'All'], ...COUNTRIES.map(c => [c, c])].map(([v, label]) =>
+            `<option value="${esc(v)}"${v === country ? ' selected' : ''}>${esc(label)} (${fmt(inCountry(v).length)})</option>`).join('')}</select>`;
+          tabs.querySelector('select').addEventListener('change', (e) => pickCountry(e.target.value));
+        }
       }
 
       // Office / Factory buttons (Vietnam only — shown for All and Vietnam).

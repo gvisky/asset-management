@@ -145,7 +145,7 @@ async function loadCountries() {
     sel.innerHTML = '<option value="">All Countries</option>' +
       (countries || []).map(c => `<option value="${c}">${c}</option>`).join('');
     // Scoped users (one country) don't need the country filter.
-    if (window.CURRENT_USER && window.CURRENT_USER.country) sel.style.display = 'none';
+    if (mySingleCountry()) sel.style.display = 'none';
   } catch (e) { console.error(e); }
 }
 
@@ -159,20 +159,22 @@ async function loadPeople(page = 1) {
   const params = new URLSearchParams({ page, limit: PAGE_SIZE });
   if (search)    params.set('search', search);
   if (country)   params.set('country', country);
-  if (status)    params.set('status', status);
+  if (status === '__azure_missing') params.set('azure', 'missing');
+  else if (status) params.set('status', status);
   if (user_type) params.set('user_type', user_type);
 
   try {
     const result = await apiGet(`/api/personnel?${params}`);
     canEditUsers = !!(result.can && result.can.edit);
     renderHint();
+    lastAzureImport = result.last_import || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
     document.getElementById('total-label').textContent = `${result.total} people`;
   } catch (err) {
     const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Failed to load'; } })();
     document.getElementById('people-tbody').innerHTML =
-      `<tr><td colspan="11" class="empty-state">${msg}</td></tr>`;
+      `<tr><td colspan="12" class="empty-state">${msg}</td></tr>`;
   }
 }
 
@@ -182,10 +184,12 @@ function renderHint() {
   else el.textContent = 'View only — only an IT admin can edit User Inventory records.';
 }
 
+let lastAzureImport = null;
+
 function renderTable(rows) {
   const tbody = document.getElementById('people-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No people found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">No people found.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(p => {
@@ -200,15 +204,23 @@ function renderTable(rows) {
         ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets('${adName.replace(/'/g, "\\'")}','${esc(p.display_name)}')">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
         : `<span class="badge badge-active">${cnt}</span>`;
     }
+    const dcnt = Number(p.device_count || 0);
+    const devicesCell = !dcnt ? '<span class="text-muted">—</span>'
+      : canSeeAssets ? `<a class="btn btn-ghost btn-sm" href="/devices.html?search=${encodeURIComponent(p.email || '')}" title="Intune / Entra devices of this person">${dcnt} device${dcnt !== 1 ? 's' : ''}</a>`
+      : `<span class="badge badge-office">${dcnt}</span>`;
+    // In User Inventory but missing from the latest Azure user export → left / disabled / renamed?
+    const notInAzure = lastAzureImport && p.azure_seen_at && p.azure_seen_at < lastAzureImport
+      ? ' <span class="badge badge-retired" title="Not in the latest Azure user export (left, disabled or renamed?)">not in Azure</span>' : '';
     const dept = p.department || '';
     const cc   = p.cost_center || '';
     const editBtn = canEditUsers ? `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
         onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(p.country)}', '${esc(dept)}', '${esc(cc)}')">✏️</button> ` : '';
     return `
       <tr>
-        <td><strong>${esc(p.display_name) || '—'}</strong></td>
+        <td><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}</td>
         <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
         <td>${assetsCell}</td>
+        <td>${devicesCell}</td>
         <td class="text-sm">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${p.country}</span></td>
@@ -343,6 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Filters passed in the URL (e.g. from the Dashboard tiles): ?status= ?user_type= ?country=
   const urlP = new URLSearchParams(window.location.search);
   if (urlP.get('status'))    document.getElementById('filter-status').value = urlP.get('status');
+  if (urlP.get('search'))    document.getElementById('search-input').value = urlP.get('search');
   if (urlP.get('user_type')) document.getElementById('filter-usertype').value = urlP.get('user_type');
   loadPeople();
   loadCountries().then(() => {
@@ -385,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const text = await file.text();
     try {
       const result = await apiPost('/api/personnel/import', { csv: text });
-      showToast(`Imported: +${result.added} new, ${result.updated} updated (VN ${result.byCountry.Vietnam}, TH ${result.byCountry.Thailand}, MY ${result.byCountry.Malaysia})`);
+      showToast(`Imported: +${result.added} new, ${result.updated} updated, ${result.preserved} kept (edited)${result.notInExport ? `; ${result.notInExport} not in this export` : ''}`);
       document.getElementById('reminder').style.display = 'none';
       loadPeople(1);
     } catch (err) {

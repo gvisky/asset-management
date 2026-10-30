@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { get, all, run } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
+const { scopeList } = require('../lib/scope');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
@@ -15,9 +16,10 @@ function visibility(req) {
   const params = [];
   if (req.user.team) { conds[0] += ' OR audience = ?'; params.push(req.user.team); }
   conds[0] += ')';
-  if (req.user.country) {
-    conds.push('(country IS NULL OR country = ?)');
-    params.push(req.user.country);
+  const list = scopeList(req);
+  if (list) {
+    conds.push(`(country IS NULL OR country IN (${list.map(() => '?').join(', ')}))`);
+    params.push(...list);
   }
   return { clause: conds.join(' AND '), params };
 }

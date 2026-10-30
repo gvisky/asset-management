@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hayat Communication Tools — Devices</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">🖥️ Hayat Communication Tools</div>
+    <div class="logo-sub">Asset &amp; User Management</div>
+  </div>
+  <nav>
+    <div class="nav-section-label">Menu</div>
+    <a href="/" class="nav-link" id="nav-dashboard">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/inventory.html" class="nav-link">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg>
+      Asset Inventory
+    </a>
+    <a href="/server-inventory.html" class="nav-link" id="nav-servers">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      Server Inventory
+    </a>
+    <a href="/devices.html" class="nav-link active" id="nav-devices">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      Devices
+    </a>
+    <a href="/maintenance.html" class="nav-link" id="nav-maintenance">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg>
+      Maintenance
+    </a>
+    <a href="/licenses.html" class="nav-link" id="nav-licenses">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M9 11l3 3L22 4"/></svg>
+      Licenses
+    </a>
+    <a href="/reports.html" class="nav-link" id="nav-reports">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      Reports
+    </a>
+  </nav>
+</aside>
+
+<div class="main-wrap">
+  <header class="topbar">
+    <span class="topbar-title">Devices <span class="text-muted text-sm" style="font-weight:400">· Intune &amp; Entra</span></span>
+    <span id="total-label" class="text-muted text-sm"></span>
+    <span id="alert-btn-slot"></span>
+    <button class="btn btn-ghost btn-sm" id="btn-fill" style="display:none" title="Fill empty Serial / Computer No / AD Name / User on linked assets">🔗 Fill assets from Intune</button>
+    <button class="btn btn-primary btn-sm" id="btn-import" style="display:none">⬆ Import exports</button>
+  </header>
+
+  <main class="content">
+    <div class="text-muted text-sm" id="last-import" style="margin:-6px 0 12px"></div>
+    <div class="kpi-grid kpi-6" id="dev-tiles"></div>
+
+    <div class="card">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <div class="search-box" style="min-width:240px;flex:1">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" placeholder="Search device, user, email, serial, model…">
+        </div>
+        <select class="filter-select" id="f-country"><option value="">All countries</option></select>
+        <select class="filter-select" id="f-os"><option value="">All OS</option></select>
+        <select class="filter-select" id="f-source">
+          <option value="">Intune + Entra</option>
+          <option value="intune">Managed in Intune</option>
+          <option value="entra">Entra only (not in Intune)</option>
+        </select>
+        <select class="filter-select" id="f-compliant">
+          <option value="">Any compliance</option>
+          <option value="1">Compliant</option>
+          <option value="0">Not compliant</option>
+        </select>
+        <select class="filter-select" id="f-asset">
+          <option value="">Asset link: any</option>
+          <option value="linked">Linked to an asset</option>
+          <option value="unlinked">Not in Asset Inventory</option>
+        </select>
+        <select class="filter-select" id="f-extra">
+          <option value="">All devices</option>
+          <option value="stale">No sign-in for 90+ days</option>
+          <option value="nouser">No user</option>
+          <option value="disabled">Disabled in Entra</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Device</th>
+              <th>Country</th>
+              <th>User</th>
+              <th>OS</th>
+              <th>Serial #</th>
+              <th>Managed</th>
+              <th>Compliant</th>
+              <th>Last sign-in</th>
+              <th>Asset</th>
+            </tr>
+          </thead>
+          <tbody id="dev-tbody"><tr><td colspan="9" class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="page-info" id="page-info"></span>
+        <div style="flex:1"></div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Import modal -->
+<div class="modal-overlay" id="import-overlay">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-header">
+      <span class="modal-title">Import Microsoft exports</span>
+      <button class="modal-close" id="import-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="text-sm" style="margin-top:0">Upload one, two or all three CSV files. Each file is recognised by its columns, so the order doesn't matter.</p>
+      <ul class="text-sm" style="margin:0 0 12px;padding-left:18px;line-height:1.7">
+        <li><b>Azure users</b> — Entra ID → Users → Download users → updates <b>User Inventory</b> (all countries, people only)</li>
+        <li><b>Intune devices</b> — Intune → Devices → All devices → Export</li>
+        <li><b>Entra devices</b> — Entra ID → Devices → All devices → Download devices</li>
+      </ul>
+      <p class="text-muted text-sm">Devices are replaced by the new snapshot. People are matched by email; HR/IT edits (User Type, Status, Leaving Date, Department) are kept.</p>
+      <input type="file" id="import-files" accept=".csv" multiple class="form-control">
+      <div id="import-picked" class="text-sm" style="margin-top:8px"></div>
+      <div id="import-result" class="text-sm" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="import-cancel">Close</button>
+      <button class="btn btn-primary" id="import-go" disabled>Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fill-from-Intune modal -->
+<div class="modal-overlay" id="fill-overlay">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <span class="modal-title">Fill assets from Intune / Entra</span>
+      <button class="modal-close" id="fill-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="fill-body">Loading…</div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="fill-cancel">Close</button>
+      <button class="btn btn-primary" id="fill-go" disabled>Fill empty fields</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<script src="/js/auth.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/alerts.js"></script>
+<script src="/js/devices.js"></script>
+</body>
+</html>

@@ -1,7 +1,24 @@
 /* Dashboard page logic */
 
-const COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
-const COUNTRY_SHORT = { Vietnam: 'VN', Thailand: 'TH', Malaysia: 'MY' };
+// Countries shown on the asset part of the Dashboard: those that have assets (or the
+// user's own countries). Recomputed on every load — see setDashCountries().
+let COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+const CORE = ['Vietnam', 'Thailand', 'Malaysia'];
+const CODES = { Vietnam: 'VN', Thailand: 'TH', Malaysia: 'MY', Turkey: 'TR', Russia: 'RU', Egypt: 'EG', Algeria: 'DZ',
+  Romania: 'RO', 'Bosnia and Herzegovina': 'BA', Pakistan: 'PK', Nigeria: 'NG', Bulgaria: 'BG', Italy: 'IT', Iran: 'IR',
+  Morocco: 'MA', Kenya: 'KE', Norway: 'NO', 'United Arab Emirates': 'AE', Unknown: '?' };
+const countryCode = (c) => CODES[c] || String(c || '?').slice(0, 3).toUpperCase();
+function setDashCountries(rows, scopeList) {
+  if (scopeList && scopeList.length) { COUNTRIES = [...scopeList]; return; }
+  const counts = new Map();
+  (rows || []).forEach(r => counts.set(r.country, (counts.get(r.country) || 0) + r.cnt));
+  COUNTRIES = [...counts.keys()].filter(Boolean).sort((a, b) => {
+    const ia = CORE.indexOf(a), ib = CORE.indexOf(b);
+    if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    return counts.get(b) - counts.get(a);
+  });
+  if (!COUNTRIES.length) COUNTRIES = [...CORE];
+}
 const STATUSES = [
   { key: 'Active', color: '#16a34a' },
   { key: 'Broken', color: '#dc2626' },
@@ -62,12 +79,19 @@ function renderScopeSwitch(scopedTo) {
   if (scopedTo) {
     el.innerHTML = `<span class="seg-fixed">${escHtml(scopedTo)}</span>`;
   } else {
-    el.innerHTML = segButtons([['', 'All countries'], ...COUNTRIES.map(c => [c, c])], dashScope, 'country');
-    el.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
-      dashScope = btn.dataset.country;
-      dashSite = '';
-      loadStats();
-    }));
+    if (COUNTRIES.length <= 4) {
+      el.innerHTML = segButtons([['', 'All countries'], ...COUNTRIES.map(c => [c, c])], dashScope, 'country');
+      el.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
+        dashScope = btn.dataset.country;
+        dashSite = '';
+        loadStats();
+      }));
+    } else {
+      // Many countries → a dropdown instead of buttons.
+      el.innerHTML = `<select class="filter-select" aria-label="Country"><option value="">All countries</option>${
+        COUNTRIES.map(c => `<option${c === dashScope ? ' selected' : ''}>${escHtml(c)}</option>`).join('')}</select>`;
+      el.querySelector('select').addEventListener('change', (e) => { dashScope = e.target.value; dashSite = ''; loadStats(); });
+    }
   }
   // Second switch: Office / Factory, for a country that has sites (e.g. Vietnam).
   const country = scopedTo || dashScope;
@@ -100,7 +124,7 @@ function renderKpis(stats, scopedTo) {
     if (!scope) {
       sub = COUNTRIES.map(c => {
         const ct = byCountry.get(c) || EMPTY();
-        return `<a class="kpi-split" href="${invLink({ country: c, status: t.status })}" title="${c}">${COUNTRY_SHORT[c]} <b>${fmt(ct[t.key])}</b></a>`;
+        return `<a class="kpi-split" href="${invLink({ country: c, status: t.status })}" title="${escHtml(c)}">${countryCode(c)} <b>${fmt(ct[t.key])}</b></a>`;
       }).join('');
     } else if (sites) {
       sub = sites.map(([site, st]) => site
@@ -172,6 +196,7 @@ async function loadStats() {
     const scopedTo = stats.scope || '';
     if (!dashScope && !dashSite) allBreakdown = stats.breakdown;
     else if (!allBreakdown) allBreakdown = (await apiGet('/api/assets/stats')).breakdown;
+    setDashCountries(allBreakdown, stats.scopeList);
 
     renderScopeSwitch(scopedTo);
     renderKpis(stats, scopedTo);
@@ -277,7 +302,7 @@ function renderPersonnel() {
   const grid = document.getElementById('personnel-grid');
   if (!grid || !_personnel) return;
   const rows = _personnel.breakdown || [];
-  const scope = (window.CURRENT_USER && window.CURRENT_USER.country) || dashScope;
+  const scope = mySingleCountry() || dashScope;
   const metrics = [
     { label: 'Total People',     color: '#4338ca', test: () => true,                              params: {} },
     { label: 'Hayat: No',        color: '#dc2626', test: r => r.user_type === 'No Hayat Member', params: { user_type: 'No Hayat Member' } },
@@ -298,7 +323,14 @@ function renderPersonnel() {
       const tot = totalIn(scope);
       sub = m === metrics[0] ? escHtml(scope) : `${tot ? ((value / tot) * 100).toFixed(1) : '0.0'}% of ${escHtml(scope)}`;
     } else {
-      sub = COUNTRIES.map(c => `<a class="kpi-split" href="${uiLink({ ...m.params, country: c })}" title="${c}">${COUNTRY_SHORT[c]} <b>${fmt(count(m, c))}</b></a>`).join('');
+      // People span many countries: the 3 largest for this tile, then "+N others".
+      const per = new Map();
+      rows.filter(m.test).forEach(r => per.set(r.country, (per.get(r.country) || 0) + r.cnt));
+      const top = [...per.entries()].filter(([c]) => c).sort((a, b) => b[1] - a[1]);
+      const shown = (top.length ? top : COUNTRIES.map(c => [c, 0])).slice(0, 3);
+      const rest = top.slice(3).reduce((n, [, v]) => n + v, 0);
+      sub = shown.map(([c, v]) => `<a class="kpi-split" href="${uiLink({ ...m.params, country: c })}" title="${escHtml(c)}">${countryCode(c)} <b>${fmt(v)}</b></a>`).join('')
+        + (rest ? `<span class="kpi-split" title="${top.slice(3).map(([c, v]) => `${c}: ${v}`).join('\n')}">+${top.length - 3} <b>${fmt(rest)}</b></span>` : '');
     }
     return kpiTile({ label: m.label, color: m.color, value, href: uiLink({ ...m.params, country: scope }), sub });
   }).join('');

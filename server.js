@@ -21,6 +21,8 @@ app.use('/api/licenses', require('./routes/licenses'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/budget', require('./routes/budget'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/countries', require('./routes/countries'));
+app.use('/api/devices', require('./routes/devices'));
 
 // Public files that must load before login (login page + shared CSS/JS)
 const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico'];

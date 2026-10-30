@@ -31,6 +31,10 @@
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
       Server Inventory
     </a>
+    <a href="/devices.html" class="nav-link" id="nav-devices">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      Devices
+    </a>
     <a href="/maintenance.html" class="nav-link" id="nav-maintenance">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg>
       Maintenance
@@ -53,7 +57,7 @@
     <span id="alert-btn-slot"></span>
     <input type="file" id="csv-file" accept=".csv" style="display:none">
     <button class="btn btn-ghost btn-sm" id="btn-adduser" style="display:none;margin-left:auto">+ Add User</button>
-    <button class="btn btn-primary btn-sm" id="btn-upload" style="display:none;margin-left:auto">⬆ Upload Azure CSV</button>
+    <button class="btn btn-primary btn-sm" id="btn-upload" style="display:none;margin-left:auto">⬆ Upload Azure users CSV</button>
   </header>
 
   <main class="content">
@@ -68,7 +72,7 @@
           <div style="font-weight:600;font-size:14px">Time to refresh the User Inventory</div>
           <div class="text-muted text-sm" id="reminder-text"></div>
         </div>
-        <button class="btn btn-primary btn-sm" id="btn-upload-2">⬆ Upload Azure CSV</button>
+        <button class="btn btn-primary btn-sm" id="btn-upload-2">⬆ Upload Azure users CSV</button>
       </div>
     </div>
 
@@ -88,6 +92,7 @@
           <option>to be delete</option>
           <option value="pending delete">Confirmed Delete</option>
           <option>deleted</option>
+          <option value="__azure_missing">⚠ Not in latest Azure export</option>
         </select>
         <select class="filter-select" id="filter-usertype">
           <option value="">All User Types</option>
@@ -106,6 +111,7 @@
               <th>Display Name</th>
               <th>Email</th>
               <th>Assets</th>
+              <th>Devices</th>
               <th>Department</th>
               <th>Cost Center</th>
               <th>Country</th>
@@ -117,7 +123,7 @@
             </tr>
           </thead>
           <tbody id="people-tbody">
-            <tr><td colspan="11" class="empty-state">Loading…</td></tr>
+            <tr><td colspan="12" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -142,7 +148,7 @@
       <div class="form-grid">
         <div class="form-group"><label class="form-label">Display Name *</label><input class="form-control" id="au-display_name" type="text"></div>
         <div class="form-group"><label class="form-label">Email *</label><input class="form-control" id="au-email" type="text" placeholder="name@hayat.com.tr"></div>
-        <div class="form-group"><label class="form-label">Country *</label><select class="form-control" id="au-country"><option>Vietnam</option><option>Thailand</option><option>Malaysia</option></select></div>
+        <div class="form-group"><label class="form-label">Country *</label><select class="form-control" id="au-country" data-countries><option>Vietnam</option><option>Thailand</option><option>Malaysia</option></select></div>
         <div class="form-group"><label class="form-label">User Type</label><select class="form-control" id="au-user_type"><option value="">—</option><option>Hayat Member</option><option>No Hayat Member</option></select></div>
         <div class="form-group"><label class="form-label">Status</label><select class="form-control" id="au-status"><option>Active</option><option>to be delete</option><option value="pending delete">Confirmed Delete</option><option>deleted</option></select></div>
         <div class="form-group"><label class="form-label">Department</label><select class="form-control" id="au-department"></select></div>

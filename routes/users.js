@@ -5,15 +5,18 @@ const { hashPassword } = require('../db/auth-utils');
 const { requireGlobalAdmin } = require('../middleware/auth');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
-const VALID_COUNTRIES = ['Vietnam', 'Thailand', 'Malaysia'];
+const { normCountry: canonCountry } = require('../lib/countries');
 
 // User management is GLOBAL-admin only. Regional admins cannot manage users.
 router.use(requireGlobalAdmin);
 
-// Normalise a country value: '' / undefined → null (= global, all countries).
+// Normalise the countries a user manages: '' / [] → null (= global, all countries);
+// otherwise a comma-separated list, e.g. "Vietnam,Thailand". Accepts an array or a string.
 function normCountry(c) {
-  if (!c) return null;
-  return VALID_COUNTRIES.includes(c) ? c : null;
+  const list = (Array.isArray(c) ? c : String(c || '').split(','))
+    .map(canonCountry).filter(Boolean);
+  const uniq = [...new Set(list)];
+  return uniq.length ? uniq.join(',') : null;
 }
 // Team: 'IT' / 'HR' / null (none).
 function normTeam(t) { return (t === 'IT' || t === 'HR') ? t : null; }
