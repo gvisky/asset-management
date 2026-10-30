@@ -959,6 +959,25 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_devices_country ON devices(country);
     CREATE INDEX IF NOT EXISTS idx_personnel_email ON personnel(email);
   `);
+
+  // Remembered device → asset links ("intune:<id>" / "entra:<id>" → asset id). Device rows are
+  // replaced on every import; these keep "already added" devices linked whatever files come next.
+  await backend.script(`CREATE TABLE IF NOT EXISTS device_links (ref TEXT PRIMARY KEY, asset_id INTEGER NOT NULL);`);
+  // First time each device (by Intune / Entra id or name) was seen — kept across all imports.
+  await backend.script(`CREATE TABLE IF NOT EXISTS device_seen (ref TEXT PRIMARY KEY, first_seen_at TEXT NOT NULL);`);
+  // Asset ⇄ Intune / Entra device link that survives re-imports ("intune:<id>|entra:<id>").
+  const acols3 = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
+  if (!acols3.includes('device_ref')) await backend.run("ALTER TABLE assets ADD COLUMN device_ref TEXT DEFAULT ''");
+  // When a device first appeared in an import (kept across imports → "New" = new devices only).
+  const dcols = (await backend.all('PRAGMA table_info(devices)')).map(c => c.name);
+  if (!dcols.includes('first_seen_at')) {
+    await backend.run('ALTER TABLE devices ADD COLUMN first_seen_at TEXT DEFAULT NULL');
+    await backend.run('UPDATE devices SET first_seen_at = imported_at WHERE first_seen_at IS NULL');
+  }
+  // Baselines: the first big import is the starting point — records from it are not shown as "New".
+  // (Set once; assets get theirs when the first "Add all to Asset Inventory" completes.)
+  await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_personnel', datetime('now'))");
+  await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_devices', datetime('now'))");
 }
 
 // Create a notification for a given audience/country/scope.

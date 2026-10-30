@@ -168,6 +168,7 @@ async function loadPeople(page = 1) {
     canEditUsers = !!(result.can && result.can.edit);
     renderHint();
     lastAzureImport = result.last_import || null;
+    peopleBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
     document.getElementById('total-label').textContent = `${result.total} people`;
@@ -185,6 +186,7 @@ function renderHint() {
 }
 
 let lastAzureImport = null;
+let peopleBaseline = null;   // first big import — rows from it get no New / Edited badge
 
 function renderTable(rows) {
   const tbody = document.getElementById('people-tbody');
@@ -218,7 +220,7 @@ function renderTable(rows) {
     return `
       <tr>
         <td><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}</td>
-        <td class="when-cell">${whenCell(p.created_at, p.updated_at)}</td>
+        <td class="when-cell">${whenCell(p.created_at, p.updated_at, peopleBaseline)}</td>
         <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
         <td>${assetsCell}</td>
         <td>${devicesCell}</td>
