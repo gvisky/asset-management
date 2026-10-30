@@ -86,11 +86,27 @@ async function setup() {
   if (USE_TURSO) {
     const { createClient } = require('@libsql/client/web');
     const client = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
+    // Turso closes idle HTTP connections. If the event loop was busy (e.g. parsing a big CSV) when
+    // that happened, the next request can go out on the dead connection and fail with "fetch failed /
+    // other side closed". Such a request never reached the database, so it is retried on a new one.
+    const isDropped = (e) => {
+      const txt = `${e && e.message} ${e && e.cause && (e.cause.code || '')} ${e && e.cause && (e.cause.message || '')}`;
+      return /fetch failed|other side closed|UND_ERR_SOCKET|ECONNRESET|EPIPE|socket hang up|ETIMEDOUT/i.test(txt);
+    };
+    const execute = async (stmt) => {
+      for (let attempt = 0; ; attempt++) {
+        try { return await client.execute(stmt); }
+        catch (e) {
+          if (attempt >= 2 || !isDropped(e)) throw e;
+          await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+        }
+      }
+    };
     backend = {
-      async get(sql, args = []) { const r = await client.execute({ sql, args }); return r.rows[0]; },
-      async all(sql, args = []) { const r = await client.execute({ sql, args }); return r.rows; },
+      async get(sql, args = []) { const r = await execute({ sql, args }); return r.rows[0]; },
+      async all(sql, args = []) { const r = await execute({ sql, args }); return r.rows; },
       async run(sql, args = []) {
-        const r = await client.execute({ sql, args });
+        const r = await execute({ sql, args });
         return {
           changes: Number(r.rowsAffected || 0),
           lastInsertRowid: r.lastInsertRowid != null ? Number(r.lastInsertRowid) : null,
