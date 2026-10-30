@@ -54,6 +54,7 @@
     <button class="btn btn-primary btn-sm" id="btn-addall" style="display:none" title="Add every device of a known country to Asset Inventory">➕ Add all to Asset Inventory</button>
     <button class="btn btn-ghost btn-sm" id="btn-fill" style="display:none" title="Fill empty Serial / Computer No / AD Name / User on linked assets">🔗 Fill assets from Intune</button>
     <button class="btn btn-primary btn-sm" id="btn-import" style="display:none">⬆ Import exports</button>
+    <button class="btn btn-ghost btn-sm" id="btn-undo" style="display:none" title="Remove what the Microsoft imports added">↩ Undo Microsoft import</button>
   </header>
 
   <main class="content">
@@ -130,6 +131,21 @@
       </div>
     </div>
   </main>
+</div>
+
+<!-- Undo import modal -->
+<div class="modal-overlay" id="undo-overlay">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <span class="modal-title">Undo the Microsoft import</span>
+      <button class="modal-close" id="undo-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="undo-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="undo-cancel">Close</button>
+      <button class="btn btn-danger" id="undo-go" disabled>Undo import</button>
+    </div>
+  </div>
 </div>
 
 <!-- Import modal -->

@@ -148,6 +148,7 @@ async function loadDevStats() {
       ? `Last import: ${s.lastImport} UTC` : 'No import yet — an IT admin can upload the Intune / Entra exports.';
     document.getElementById('btn-import').style.display = s.canImport ? '' : 'none';
     document.getElementById('btn-fill').style.display = s.canImport ? '' : 'none';
+    document.getElementById('btn-undo').style.display = s.canUndo ? '' : 'none';
     const addAll = document.getElementById('btn-addall');
     addAll.style.display = s.importsEnabled && canEdit() && s.addableAll ? '' : 'none';
     addAll.textContent = `➕ Add all to Asset Inventory (${dFmt(s.addableAll)})`;
@@ -492,6 +493,47 @@ function setupFill() {
   document.getElementById('fill-cancel').addEventListener('click', close);
 }
 
+function setupUndo() {
+  const overlay = document.getElementById('undo-overlay');
+  const body = document.getElementById('undo-body');
+  const go = document.getElementById('undo-go');
+  const close = () => overlay.classList.remove('open');
+  const split = (m) => Object.entries(m).map(([c, n]) => `${dEsc(c)} ${dFmt(n)}`).join(' · ') || '—';
+  const show = (r) => {
+    const nothing = !r.assets.remove && !r.people.remove && !r.fills.assets && !r.devices && !r.links && !r.azureRefs;
+    body.innerHTML = `
+      <p class="text-sm" style="margin-top:0">${r.done ? '✅ Done. Removed:' : `This removes what the Intune / Entra / Azure imports added since ${dEsc(r.since)} UTC:`}</p>
+      <ul class="text-sm" style="line-height:1.8">
+        <li><b>${dFmt(r.assets.remove)}</b> assets created from devices <span class="text-muted">(${split(r.assets.byCountry)})</span></li>
+        <li><b>${dFmt(r.people.remove)}</b> people added to User Inventory <span class="text-muted">(${split(r.people.byCountry)})</span></li>
+        <li>Intune fills on <b>${dFmt(r.fills.assets)}</b> existing assets (${dFmt(r.fills.fields)} fields back to empty)</li>
+        <li>The Devices list (<b>${dFmt(r.devices)}</b> devices) and ${dFmt(r.links)} remembered links</li>
+        <li>Azure reference fields (Entra ID, Employee ID, AD department) on ${dFmt(r.azureRefs)} people</li>
+      </ul>
+      ${r.assets.keptCount || r.people.keptCount ? `<p class="text-sm"><b>Kept</b> because someone edited them by hand: ${dFmt(r.assets.keptCount)} assets, ${dFmt(r.people.keptCount)} people.</p>
+        <div class="text-sm" style="max-height:160px;overflow-y:auto">
+          ${r.assets.kept.map(a => `<a href="/inventory.html?edit=${a.id}">${dEsc(a.label)}</a> <span class="text-muted">${dEsc(a.country)}</span>`).join('<br>')}
+          ${r.people.kept.map(p => `${dEsc(p.name)} <span class="text-muted">${dEsc(p.country)}</span>`).join('<br>')}
+        </div>` : ''}
+      ${r.done ? '' : '<p class="text-sm text-muted">Assets and people that existed before the import stay. Details the import refreshed on existing people (name, company, position, country) can\'t be rolled back.</p>'}`;
+    if (nothing && !r.done) body.innerHTML = '<p>Nothing left to undo.</p>';
+    go.disabled = r.done || nothing;
+  };
+  document.getElementById('btn-undo').addEventListener('click', async () => {
+    overlay.classList.add('open'); body.innerHTML = 'Checking…'; go.disabled = true;
+    try { show(await apiGet('/api/devices/undo-import')); } catch (e) { body.innerHTML = 'Could not load.'; }
+  });
+  go.addEventListener('click', async () => {
+    if (!confirm('Remove the imported assets and people now?')) return;
+    go.disabled = true; go.textContent = 'Undoing…';
+    try { show(await apiPost('/api/devices/undo-import', {})); showToast('Import undone'); refresh(); }
+    catch (err) { let m = 'Could not undo'; try { m = JSON.parse(err.message).error || m; } catch {} showToast(m, 'error'); go.disabled = false; }
+    go.textContent = 'Undo import';
+  });
+  document.getElementById('undo-close').addEventListener('click', close);
+  document.getElementById('undo-cancel').addEventListener('click', close);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const p = new URLSearchParams(window.location.search);
   if (p.get('search')) {
@@ -502,6 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
   refresh();
   setupImport();
   setupFill();
+  setupUndo();
   setupAdd();
   setupAddAll();
   if (typeof loadAlertButton === 'function') loadAlertButton('alert-btn-slot', '');

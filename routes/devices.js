@@ -118,6 +118,7 @@ router.get('/stats', wrap(async (req, res) => {
     lastImport: await getMeta('directory_last_import'),
     canImport: IMPORTS_ENABLED && isITAdmin(req.user),
     importsEnabled: IMPORTS_ENABLED,
+    canUndo: isITAdmin(req.user),
   });
 }));
 
@@ -539,6 +540,117 @@ router.post('/to-assets-all', requireRole('admin', 'editor'), wrap(async (req, r
   // The first complete "Add all" is the asset baseline: those assets are not shown as "New".
   if (remaining === 0) await run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_assets', datetime('now'))");
   res.json({ created, linked: links.length - created, processed: devices.length, remaining });
+}));
+
+// ── Undo the Microsoft import (IT admin) ──────────────────────────────────────
+// GET  /api/devices/undo-import → what would be removed (preview)
+// POST /api/devices/undo-import → remove it
+// Removes what the Intune / Entra / Azure imports added since the feature went live:
+//   • assets created from devices (Add / Add all) that nobody has edited since
+//   • people added by the import that HR / IT never edited (touched = 0)
+//   • the values "Fill assets from Intune" put into empty asset fields (if still unchanged)
+//   • the Devices list, its remembered links / first-seen dates, and the Azure reference columns
+// Assets or people someone edited by hand are kept and listed.
+const UNDO_SINCE = '2026-10-30 03:20:00';   // UTC — the import feature went live after this
+const FILL_LABEL = { Serial: 'serial_no', 'Computer No': 'computer_no', 'AD Name': 'ad_name', User: 'user_name' };
+
+async function undoPlan() {
+  const used = new Set([
+    ...(await all("SELECT asset_id AS id FROM maintenance_log WHERE asset_type = 'asset'")).map(r => Number(r.id)),
+    ...(await all("SELECT assignee_ref AS id FROM license_assignments WHERE assignee_type = 'asset'")).map(r => Number(r.id)),
+  ]);
+  const created = await all(`SELECT id, country, asset_type, brand_model, computer_no, serial_no, asset_code, asset_s4,
+        created_at, updated_at FROM assets
+      WHERE deleted_at IS NULL AND created_at >= ?
+        AND (device_ref <> '' OR history_usage LIKE '%created from Intune / Entra device%')`, [UNDO_SINCE]);
+  const edited = (a) => a.asset_code || a.asset_s4 || (a.updated_at && a.created_at && a.updated_at > a.created_at) || used.has(Number(a.id));
+  const assetsRemove = created.filter(a => !edited(a));
+  const assetsKept = created.filter(a => edited(a));
+
+  // "Filled from Intune" lines in History Usage → put those fields back to empty.
+  const removeIds = new Set(assetsRemove.map(a => a.id));
+  const fills = [];
+  for (const a of await all(`SELECT id, asset_code, brand_model, serial_no, computer_no, ad_name, user_name, history_usage
+      FROM assets WHERE deleted_at IS NULL AND history_usage LIKE '%filled from Intune (%'`)) {
+    if (removeIds.has(a.id)) continue;
+    const lines = String(a.history_usage || '').split('\n');
+    const set = {};
+    const keep = lines.filter(line => {
+      const m = line.match(/ UTC: filled from Intune \(.*?\) — (.*) by \S+$/);
+      if (!m) return true;
+      for (const part of m[1].split('; ')) {
+        const f = part.match(/^(Serial|Computer No|AD Name|User): "(.*)"$/);
+        if (f && String(a[FILL_LABEL[f[1]]] || '') === f[2]) set[FILL_LABEL[f[1]]] = '';
+      }
+      return false;
+    });
+    fills.push({ id: a.id, label: a.asset_code || a.brand_model || `#${a.id}`, set, history: keep.join('\n') });
+  }
+
+  const people = await all('SELECT id, display_name, email, country, touched FROM personnel WHERE created_at >= ?', [UNDO_SINCE]);
+  const peopleRemove = people.filter(p => !p.touched);
+  const peopleKept = people.filter(p => p.touched);
+  const count = async (sql) => Number((await get(sql)).c);
+  return {
+    since: UNDO_SINCE, assetsRemove, assetsKept, fills, peopleRemove, peopleKept,
+    devices: await count('SELECT COUNT(*) AS c FROM devices'),
+    links: await count('SELECT COUNT(*) AS c FROM device_links'),
+    azureRefs: await count("SELECT COUNT(*) AS c FROM personnel WHERE entra_id <> '' OR employee_id <> '' OR ad_department <> '' OR azure_seen_at IS NOT NULL"),
+  };
+}
+
+function undoSummary(p) {
+  const byCountry = (rows) => rows.reduce((m, r) => { const c = r.country || 'Unknown'; m[c] = (m[c] || 0) + 1; return m; }, {});
+  return {
+    since: p.since,
+    assets: { remove: p.assetsRemove.length, byCountry: byCountry(p.assetsRemove),
+              kept: p.assetsKept.slice(0, 50).map(a => ({ id: a.id, label: a.asset_code || a.brand_model || a.computer_no || `#${a.id}`, country: a.country })),
+              keptCount: p.assetsKept.length },
+    fills: { assets: p.fills.length, fields: p.fills.reduce((n, f) => n + Object.keys(f.set).length, 0) },
+    people: { remove: p.peopleRemove.length, byCountry: byCountry(p.peopleRemove),
+              kept: p.peopleKept.slice(0, 50).map(r => ({ id: r.id, name: r.display_name || r.email, country: r.country })),
+              keptCount: p.peopleKept.length },
+    devices: p.devices, links: p.links, azureRefs: p.azureRefs,
+  };
+}
+
+router.get('/undo-import', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can undo the import' });
+  res.json(undoSummary(await undoPlan()));
+}));
+
+router.post('/undo-import', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can undo the import' });
+  const plan = await undoPlan();
+  const summary = undoSummary(plan);
+  const chunked = (prefix, ids, per = 400) => updateIds(prefix, [], ids, per);
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  try {
+    await batch([
+      ...chunked('DELETE FROM assets', plan.assetsRemove.map(a => a.id)),
+      ...plan.fills.map(f => {
+        const keys = Object.keys(f.set);
+        const hist = `${f.history ? f.history + '\n' : ''}${ts} UTC: Intune fill undone by ${req.user.username}`;
+        return { sql: `UPDATE assets SET ${keys.map(k => `${k} = ''`).concat('history_usage = ?').join(', ')} WHERE id = ?`, args: [hist, f.id] };
+      }),
+      ...chunked('DELETE FROM personnel', plan.peopleRemove.map(p => p.id)),
+      { sql: "UPDATE personnel SET entra_id = '', employee_id = '', ad_department = '', azure_seen_at = NULL WHERE entra_id <> '' OR employee_id <> '' OR ad_department <> '' OR azure_seen_at IS NOT NULL", args: [] },
+      { sql: 'DELETE FROM devices', args: [] },
+      { sql: 'DELETE FROM device_links', args: [] },
+      { sql: 'DELETE FROM device_seen', args: [] },
+      { sql: "DELETE FROM app_meta WHERE key IN ('directory_last_import', 'baseline_assets', 'baseline_devices', 'baseline_personnel')", args: [] },
+    ], 100);
+  } catch (e) {
+    console.error('[undo-import]', e);
+    return res.status(500).json({ error: `Undo failed: ${errorText(e)} — nothing is lost; run it again.` });
+  }
+  resetCountryCache();
+  const msg = `${req.user.full_name} undid the Microsoft import: removed ${summary.assets.remove} assets and ${summary.people.remove} people added by it, `
+    + `reverted Intune fills on ${summary.fills.assets} assets, cleared ${summary.devices} devices`
+    + (summary.assets.keptCount || summary.people.keptCount ? ` (kept ${summary.assets.keptCount} edited assets, ${summary.people.keptCount} edited people).` : '.');
+  await audit(req.user, 'IMPORT', null, msg);
+  await notify({ audience: 'IT', scope: 'system', message: msg });
+  res.json({ done: true, ...summary });
 }));
 
 // GET /api/devices/owners?ids= — device owners not yet in User Inventory (one row per email).
