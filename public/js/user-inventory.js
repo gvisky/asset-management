@@ -175,7 +175,7 @@ async function loadPeople(page = 1) {
   } catch (err) {
     const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Failed to load'; } })();
     document.getElementById('people-tbody').innerHTML =
-      `<tr><td colspan="13" class="empty-state">${msg}</td></tr>`;
+      `<tr><td colspan="11" class="empty-state">${msg}</td></tr>`;
   }
 }
 
@@ -191,7 +191,7 @@ let peopleBaseline = null;   // first big import — rows from it get no New / E
 function renderTable(rows) {
   const tbody = document.getElementById('people-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="13" class="empty-state">No people found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="empty-state">No people found.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(p => {
@@ -206,10 +206,6 @@ function renderTable(rows) {
         ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets('${adName.replace(/'/g, "\\'")}','${esc(p.display_name)}')">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
         : `<span class="badge badge-active">${cnt}</span>`;
     }
-    const dcnt = Number(p.device_count || 0);
-    const devicesCell = !dcnt ? '<span class="text-muted">—</span>'
-      : canSeeAssets ? `<a class="btn btn-ghost btn-sm" href="/devices.html?search=${encodeURIComponent(p.email || '')}" title="Intune / Entra devices of this person">${dcnt} device${dcnt !== 1 ? 's' : ''}</a>`
-      : `<span class="badge badge-office">${dcnt}</span>`;
     // In User Inventory but missing from the latest Azure user export → left / disabled / renamed?
     const notInAzure = lastAzureImport && p.azure_seen_at && p.azure_seen_at < lastAzureImport
       ? ' <span class="badge badge-retired" title="Not in the latest Azure user export (left, disabled or renamed?)">not in Azure</span>' : '';
@@ -219,29 +215,28 @@ function renderTable(rows) {
         onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(p.country)}', '${esc(dept)}', '${esc(cc)}')">✏️</button> ` : '';
     return `
       <tr>
-        <td><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}</td>
+        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}
+          <div class="text-muted text-sm">${esc(p.email) || '—'}</div></td>
         <td class="when-cell">${whenCell(p.created_at, p.updated_at, peopleBaseline)}</td>
-        <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
         <td>${assetsCell}</td>
-        <td>${devicesCell}</td>
-        <td class="text-sm">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${p.country}</span></td>
         <td>
           ${canEditUsers
-            ? `<select class="form-control" style="min-width:150px;padding:5px 8px" onchange="savePerson(${p.id}, 'user_type', this.value)">${optionList(USER_TYPES, p.user_type)}</select>`
+            ? `<select class="form-control" style="width:132px;padding:5px 6px" onchange="savePerson(${p.id}, 'user_type', this.value)">${optionList(USER_TYPES, p.user_type)}</select>`
             : (p.user_type ? p.user_type : '<span class="text-muted">—</span>')}
         </td>
         <td>
           ${canEditUsers
-            ? `<select class="form-control" style="min-width:140px;padding:5px 8px" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status, STATUS_LABELS)}</select>`
+            ? `<select class="form-control" style="width:132px;padding:5px 6px" onchange="savePerson(${p.id}, 'status', this.value)">${optionList(STATUSES, p.status, STATUS_LABELS)}</select>`
             : statusPill(p.status)}
         </td>
-        <td class="text-muted text-sm">${esc(p.company_name) || '—'}</td>
-        <td class="text-muted text-sm">${esc(p.position) || '—'}</td>
+        <td class="text-muted text-sm wrap-cell">${esc(p.company_name) || '—'}</td>
+        <td class="text-muted text-sm wrap-cell">${esc(p.position) || '—'}</td>
         <td>
           ${canEditUsers
-            ? `<input type="date" class="form-control" style="min-width:140px;padding:5px 8px" value="${esc(p.leaving_date)}" ${ldDisabled} onchange="savePerson(${p.id}, 'leaving_date', this.value)" title="${ldDisabled ? 'Set User Type first' : ''}">`
+            ? `<input type="date" class="form-control" style="width:128px;padding:5px 6px" value="${esc(p.leaving_date)}" ${ldDisabled} onchange="savePerson(${p.id}, 'leaving_date', this.value)" title="${ldDisabled ? 'Set User Type first' : ''}">`
             : (p.leaving_date ? esc(p.leaving_date) : '<span class="text-muted">—</span>')}
         </td>
       </tr>`;
