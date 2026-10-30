@@ -99,6 +99,11 @@
           <option>Hayat Member</option>
           <option>No Hayat Member</option>
         </select>
+        <select class="filter-select" id="sort-by" title="Order of the list">
+          <option value="updated">Sort: last updated first</option>
+          <option value="created">Sort: newest added first</option>
+          <option value="name">Sort: name A → Z</option>
+        </select>
         <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
       </div>
 
@@ -109,6 +114,7 @@
           <thead>
             <tr>
               <th>Display Name</th>
+              <th>Last updated</th>
               <th>Email</th>
               <th>Assets</th>
               <th>Devices</th>
@@ -123,7 +129,7 @@
             </tr>
           </thead>
           <tbody id="people-tbody">
-            <tr><td colspan="12" class="empty-state">Loading…</td></tr>
+            <tr><td colspan="13" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
       </div>

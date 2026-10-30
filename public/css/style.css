@@ -215,6 +215,7 @@ a.bar-item:hover .bar-fill { filter: brightness(1.1); }
 .na-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; border-bottom: 1px solid var(--border); background: #fafbfc; }
 .seg-sm .seg-btn { padding: 4px 10px; font-size: 12px; }
 .na-type { min-width: 170px; }
+.when-cell { min-width: 92px; line-height: 1.5; }
 .bulk-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 20px; background: #eff6ff; border-bottom: 1px solid #bfdbfe; font-size: 13px; }
 .add-table td, .add-table th { padding: 6px 6px; vertical-align: top; }
 .add-table input.form-control, .add-table select.form-control { padding: 4px 6px; font-size: 12.5px; min-width: 90px; }

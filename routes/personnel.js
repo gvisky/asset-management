@@ -30,7 +30,13 @@ router.use((req, res, next) => {
 
 // ── GET /api/personnel — list (country-scoped) ────────────────────────────────
 router.get('/', wrap(async (req, res) => {
-  const { search = '', country = '', status = '', user_type = '', page = 1, limit = 50 } = req.query;
+  const { search = '', country = '', status = '', user_type = '', page = 1, limit = 50, sort = 'updated' } = req.query;
+  // List order: last updated first (default) — just-added / just-edited people on top.
+  const ORDER = {
+    updated: 'COALESCE(p.updated_at, p.created_at) DESC, p.display_name COLLATE NOCASE',
+    created: 'p.id DESC',
+    name: 'p.display_name COLLATE NOCASE',
+  };
   const conditions = [];
   const params = [];
 
@@ -62,7 +68,7 @@ router.get('/', wrap(async (req, res) => {
   const data = await all(
     `SELECT p.*, (SELECT COUNT(*) FROM assets a WHERE ${adMatch}) AS asset_count,
             (SELECT COUNT(*) FROM devices d WHERE d.person_id = p.id) AS device_count
-     FROM personnel p ${where} ORDER BY display_name COLLATE NOCASE LIMIT ? OFFSET ?`,
+     FROM personnel p ${where} ORDER BY ${ORDER[sort] || ORDER.updated} LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );
   const lastImport = await getMeta('personnel_last_import');

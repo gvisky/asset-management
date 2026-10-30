@@ -101,6 +101,11 @@
         <button class="btn btn-ghost btn-sm" id="btn-incomplete">⚠️ Needs Attention — Missing Info</button>
         <button class="btn btn-ghost btn-sm" id="btn-adaudit">⚠️ Needs Attention — Missing AD &amp; Asset</button>
         <button class="btn btn-ghost btn-sm" id="btn-history">🕓 History Usage</button>
+        <select class="filter-select" id="sort-by" title="Order of the list">
+          <option value="updated">Sort: last updated first</option>
+          <option value="created">Sort: newest added first</option>
+          <option value="id">Sort: # (1 → …)</option>
+        </select>
         <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
       </div>
 
@@ -110,6 +115,7 @@
           <thead>
             <tr>
               <th>#</th>
+              <th>Last updated</th>
               <th>Asset Code</th>
               <th>Brand / Model</th>
               <th>Computer No</th>
@@ -125,7 +131,7 @@
             </tr>
           </thead>
           <tbody id="assets-tbody">
-            <tr><td colspan="12" class="empty-state">Loading…</td></tr>
+            <tr><td colspan="14" class="empty-state">Loading…</td></tr>
           </tbody>
         </table>
       </div>

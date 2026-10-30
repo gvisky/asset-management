@@ -156,7 +156,7 @@ async function loadPeople(page = 1) {
   const status    = document.getElementById('filter-status').value;
   const user_type = document.getElementById('filter-usertype').value;
 
-  const params = new URLSearchParams({ page, limit: PAGE_SIZE });
+  const params = new URLSearchParams({ page, limit: PAGE_SIZE, sort: (document.getElementById('sort-by') || {}).value || 'updated' });
   if (search)    params.set('search', search);
   if (country)   params.set('country', country);
   if (status === '__azure_missing') params.set('azure', 'missing');
@@ -174,7 +174,7 @@ async function loadPeople(page = 1) {
   } catch (err) {
     const msg = (() => { try { return JSON.parse(err.message).error; } catch { return 'Failed to load'; } })();
     document.getElementById('people-tbody').innerHTML =
-      `<tr><td colspan="12" class="empty-state">${msg}</td></tr>`;
+      `<tr><td colspan="13" class="empty-state">${msg}</td></tr>`;
   }
 }
 
@@ -189,7 +189,7 @@ let lastAzureImport = null;
 function renderTable(rows) {
   const tbody = document.getElementById('people-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="12" class="empty-state">No people found.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="empty-state">No people found.</td></tr>`;
     return;
   }
   tbody.innerHTML = rows.map(p => {
@@ -218,6 +218,7 @@ function renderTable(rows) {
     return `
       <tr>
         <td><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}</td>
+        <td class="when-cell">${whenCell(p.created_at, p.updated_at)}</td>
         <td class="text-muted text-sm">${esc(p.email) || '—'}</td>
         <td>${assetsCell}</td>
         <td>${devicesCell}</td>
@@ -414,11 +415,13 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filter-country').addEventListener('change', () => loadPeople(1));
   document.getElementById('filter-status').addEventListener('change', () => loadPeople(1));
   document.getElementById('filter-usertype').addEventListener('change', () => loadPeople(1));
+  document.getElementById('sort-by').addEventListener('change', () => loadPeople(1));
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
     document.getElementById('filter-country').value = '';
     document.getElementById('filter-status').value = '';
     document.getElementById('filter-usertype').value = '';
+    document.getElementById('sort-by').value = 'updated';
     loadPeople(1);
   });
 });

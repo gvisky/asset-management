@@ -28,6 +28,31 @@ function locationBadge(loc) {
   return `<span class="badge ${cls}">${loc}</span>`;
 }
 
+// ── "Last updated" cell: relative time + New / Edited badge (recent changes) ───
+// SQLite stores UTC "YYYY-MM-DD HH:MM:SS"; shown in the viewer's local time.
+function parseDbTime(v) {
+  if (!v) return null;
+  const d = new Date(String(v).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(v) ? '' : 'Z'));
+  return isNaN(d) ? null : d;
+}
+function whenCell(created, updated) {
+  const u = parseDbTime(updated) || parseDbTime(created);
+  if (!u) return '<span class="text-muted">—</span>';
+  const c = parseDbTime(created);
+  const mins = Math.floor((Date.now() - u.getTime()) / 60000);
+  const pad = (n) => String(n).padStart(2, '0');
+  const time = `${pad(u.getHours())}:${pad(u.getMinutes())}`;
+  const date = `${u.getFullYear()}-${pad(u.getMonth() + 1)}-${pad(u.getDate())}`;
+  const rel = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 24 * 60 && new Date().getDate() === u.getDate()
+    ? `today ${time}` : mins < 48 * 60 ? `yesterday ${time}` : date;
+  // New = created recently and not edited since; Edited = changed recently.
+  const isNew = c && Math.abs(u - c) < 2 * 60000;
+  const recent = mins < 7 * 24 * 60;
+  const badge = recent ? (isNew ? '<br><span class="badge badge-active" style="font-size:10px">New</span>'
+                                : '<br><span class="badge badge-office" style="font-size:10px">Edited</span>') : '';
+  return `<span class="text-sm" title="${date} ${time}${c ? ' · created ' + String(created).slice(0, 16) + ' UTC' : ''}">${rel}</span>${badge}`;
+}
+
 // ── Missing-info rules (mirror routes/assets.js) ──────────────────────────────
 // PC No and AD Name are only required for laptops and desktops.
 function needsPcAd(assetType) { return ['laptop', 'desktop'].includes(String(assetType || '').trim().toLowerCase()); }
