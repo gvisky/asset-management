@@ -123,7 +123,7 @@ async function loadAssets(page = 1) {
   const costCenter = (document.getElementById('filter-cost-center') || {}).value || '';
   const assetType  = (document.getElementById('filter-asset-type') || {}).value || '';
 
-  const params = new URLSearchParams({ page, limit: PAGE_SIZE });
+  const params = new URLSearchParams({ page, limit: PAGE_SIZE, sort: (document.getElementById('sort-by') || {}).value || 'updated' });
   if (search)        params.set('search',     search);
   if (country)       params.set('country',    country);
   if (location)      params.set('location',   location);
@@ -148,7 +148,7 @@ async function loadAssets(page = 1) {
 function renderTable(rows) {
   const tbody = document.getElementById('assets-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="13"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="14"><div class="empty-state">
       <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
       <p>No assets found.</p>
     </div></td></tr>`;
@@ -158,6 +158,7 @@ function renderTable(rows) {
   tbody.innerHTML = rows.map((a, i) => `
     <tr class="${a.ad_issue_reason ? 'row-adissue' : ((a.fields_locked || a.user_locked) ? 'row-locked' : '')}">
       <td class="text-muted text-sm">${a.id}</td>
+      <td class="when-cell">${whenCell(a.created_at, a.updated_at)}</td>
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
           : `<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code>`}</td>
@@ -680,6 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
   syncLocationFilter();
   document.getElementById('filter-country').addEventListener('change',    () => { syncLocationFilter(); loadAssets(1); });
   document.getElementById('filter-location').addEventListener('change',   () => loadAssets(1));
+  document.getElementById('sort-by').addEventListener('change',           () => loadAssets(1));
   document.getElementById('filter-status').addEventListener('change',     () => loadAssets(1));
   document.getElementById('filter-brand').addEventListener('change',      () => loadAssets(1));
   document.getElementById('filter-department').addEventListener('change', () => loadAssets(1));
@@ -715,6 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filter-department').value = '';
     const ccr = document.getElementById('filter-cost-center'); if (ccr) ccr.value = '';
     const atr = document.getElementById('filter-asset-type'); if (atr) atr.value = '';
+    document.getElementById('sort-by').value = 'updated';
     if (naMode) { naMode = ''; closeNeedsAttention(); }
     loadAssets(1);
   });

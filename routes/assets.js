@@ -59,10 +59,17 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 // narrowed by ?country=. Returns { clause, params }.
 const countryFilter = (req) => countrySql(req, 'country');
 
+// List order: last updated first (default) — so just-added / just-edited assets are on top.
+const ASSET_ORDER = {
+  updated: "COALESCE(updated_at, created_at) DESC, id DESC",
+  created: 'id DESC',
+  id: 'id ASC',
+};
+
 // ── GET /api/assets — list (excludes soft-deleted) with search & filter ───────
 router.get('/', wrap(async (req, res) => {
   const { search = '', status = '', location = '', brand = '', department = '',
-          cost_center = '', asset_type = '', incomplete = '', ad_issue = '', page = 1, limit = 50 } = req.query;
+          cost_center = '', asset_type = '', incomplete = '', ad_issue = '', page = 1, limit = 50, sort = 'updated' } = req.query;
 
   const conditions = ['deleted_at IS NULL'];
   const params = [];
@@ -124,7 +131,7 @@ router.get('/', wrap(async (req, res) => {
 
   const totalRow = await get(`SELECT COUNT(*) as cnt FROM assets ${where}`, params);
   const rows = await all(
-    `SELECT *${adReasonSel} FROM assets ${where} ORDER BY id DESC LIMIT ? OFFSET ?`,
+    `SELECT *${adReasonSel} FROM assets ${where} ORDER BY ${ASSET_ORDER[sort] || ASSET_ORDER.updated} LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );
 
