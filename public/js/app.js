@@ -220,6 +220,47 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Render a row of small summary cards into a #grid. cards = [[label, value, bg, fg]].
+// Summary tiles in the Dashboard style: big number + a row of country chips.
+// tiles: [{ label, color, value, onClick, splits: [{ country, count, onClick }] }]
+// Countries: VN / TH / MY first, then the largest others; past 3 chips the rest go into "+N".
+const KPI_CODES = { Vietnam: 'VN', Thailand: 'TH', Malaysia: 'MY', Turkey: 'TR', Russia: 'RU', Egypt: 'EG', Unknown: '?' };
+const kpiCode = (c) => KPI_CODES[c] || String(c || '?').slice(0, 3).toUpperCase();
+function kpiCountryOrder(counts) {
+  const core = ['Vietnam', 'Thailand', 'Malaysia'];
+  const others = Object.keys(counts).filter(c => c && !core.includes(c)).sort((a, b) => counts[b] - counts[a]);
+  const present = core.filter(c => c in counts || !others.length);
+  return [...present, ...others];
+}
+function renderKpiTiles(gridId, tiles) {
+  const grid = document.getElementById(gridId);
+  if (!grid) return;
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const handlers = [];
+  const on = (fn) => { handlers.push(fn); return handlers.length - 1; };
+  grid.classList.add('kpi-grid');
+  grid.style.gridTemplateColumns = `repeat(${tiles.length}, minmax(0, 1fr))`;
+  grid.innerHTML = tiles.map(t => {
+    const splits = t.splits || [];
+    const shown = splits.slice(0, 3), rest = splits.slice(3);
+    const restN = rest.reduce((n, x) => n + (x.count || 0), 0);
+    const chip = (x) => `<a class="kpi-split" href="#" data-k="${on(x.onClick)}" title="${esc(x.country)}">${esc(kpiCode(x.country))} <b>${Number(x.count || 0).toLocaleString()}</b></a>`;
+    const sub = shown.map(chip).join('')
+      + (restN ? `<span class="kpi-split" title="${esc(rest.map(x => `${x.country}: ${x.count}`).join('\n'))}">+${rest.length} <b>${restN.toLocaleString()}</b></span>` : '');
+    return `<div class="kpi" style="--kpi-color:${t.color}">
+      <a class="kpi-main" href="#" data-k="${on(t.onClick)}">
+        <div class="kpi-label"><span class="kpi-dot"></span>${esc(t.label)}</div>
+        <div class="kpi-value">${Number(t.value || 0).toLocaleString()}</div>
+      </a>
+      <div class="kpi-sub">${sub || '<span class="text-muted">—</span>'}</div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('[data-k]').forEach(el => el.addEventListener('click', (e) => {
+    e.preventDefault();
+    const fn = handlers[Number(el.dataset.k)];
+    if (typeof fn === 'function') fn();
+  }));
+}
+
 function renderSummaryCards(gridId, cards) {
   const grid = document.getElementById(gridId);
   if (!grid) return;

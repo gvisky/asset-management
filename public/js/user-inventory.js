@@ -307,12 +307,26 @@ function pagRange(c, t) {
 async function loadSummary() {
   try {
     const s = await apiGet('/api/personnel/summary');
-    renderSummaryCards('summary-grid', [
-      ['Total People', s.total, '#e0e7ff', '#4338ca'],
-      ['Hayat: No', s.noHayat || 0, '#fee2e2', '#dc2626'],
-      ['To Be Delete', s.byStatus['to be delete'] || 0, '#fef9c3', '#ca8a04'],
-      ['Confirmed Delete', s.byStatus['pending delete'] || 0, '#ffedd5', '#ea580c'],
-      ['Deleted', s.byStatus['deleted'] || 0, '#fee2e2', '#b91c1c'],
+    const rows = s.breakdown || [];
+    const order = kpiCountryOrder(s.byCountry || {});
+    const show = (country, status, userType) => {
+      document.getElementById('filter-country').value = country || '';
+      document.getElementById('filter-status').value = status || '';
+      document.getElementById('filter-usertype').value = userType || '';
+      loadPeople(1);
+      document.querySelector('.table-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    const tile = (label, color, test, status, userType) => {
+      const counts = rows.filter(test).reduce((m, r) => { m[r.country] = (m[r.country] || 0) + r.cnt; return m; }, {});
+      return { label, color, value: Object.values(counts).reduce((a, b) => a + b, 0), onClick: () => show('', status, userType),
+        splits: order.map(c => ({ country: c, count: counts[c] || 0, onClick: () => show(c, status, userType) })) };
+    };
+    renderKpiTiles('summary-grid', [
+      tile('Total People', '#4338ca', () => true),
+      tile('Hayat: No', '#dc2626', r => r.user_type === 'No Hayat Member', '', 'No Hayat Member'),
+      tile('To Be Delete', '#ca8a04', r => r.status === 'to be delete', 'to be delete'),
+      tile('Confirmed Delete', '#ea580c', r => r.status === 'pending delete', 'pending delete'),
+      tile('Deleted', '#b91c1c', r => r.status === 'deleted', 'deleted'),
     ]);
   } catch (e) { /* ignore */ }
 }

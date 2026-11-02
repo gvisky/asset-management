@@ -185,6 +185,8 @@ router.get('/stats', wrap(async (req, res) => {
       ${MISSING_PC_AD_SQL}
     )`, NOT_FLAGGED_SQL];
   const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, [...lp, ...NO_FLAG_TYPES])).cnt);
+  const incompleteByCountry = (await all(`SELECT country, COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')} GROUP BY country`, [...lp, ...NO_FLAG_TYPES]))
+    .reduce((acc, r) => { acc[r.country || ''] = Number(r.cnt); return acc; }, {});
 
   // Warranty expiring/expired within 90 days (live assets that have a date set).
   const warCond = [...liveCond, "warranty_expiry <> ''", "date(warranty_expiry) <= date('now','+90 days')"];
@@ -195,7 +197,7 @@ router.get('/stats', wrap(async (req, res) => {
   if (cf.clause) { repCond.push(cf.clause); rp.push(...cf.params); }
   const openRepairs = Number((await get(`SELECT COUNT(*) as cnt FROM maintenance_log WHERE ${repCond.join(' AND ')}`, rp)).cnt);
 
-  res.json({ total, byStatus, byLocation, byCountry, byBrand, breakdown, recentlyAdded, deletedCount, incompleteCount,
+  res.json({ total, byStatus, byLocation, byCountry, byBrand, breakdown, recentlyAdded, deletedCount, incompleteCount, incompleteByCountry,
              warrantyExpiring, openRepairs, scope: singleScope(req), scopeList: scopeList(req) });
 }));
 
