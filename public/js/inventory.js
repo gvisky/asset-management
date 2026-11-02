@@ -57,12 +57,33 @@ async function unlockUser(id) {
 async function loadSummary() {
   try {
     const s = await apiGet('/api/assets/stats');
-    renderSummaryCards('summary-grid', [
-      ['Total Assets', s.total, '#dbeafe', '#1a56db'],
-      ['Active', s.byStatus.Active || 0, '#dcfce7', '#16a34a'],
-      ['Broken', s.byStatus.Broken || 0, '#fee2e2', '#dc2626'],
-      ['Stock', s.byStatus.Stock || 0, '#fef3c7', '#d97706'],
-      ['Needs Info', s.incompleteCount || 0, '#fde68a', '#92400e'],
+    // Count per country (and per status) from the breakdown rows.
+    const per = (status) => (s.breakdown || []).reduce((m, r) => {
+      if (!status || r.status === status) m[r.country] = (m[r.country] || 0) + r.cnt;
+      return m;
+    }, {});
+    const order = kpiCountryOrder(s.byCountry || {});
+    const show = (country, status) => {
+      if (naMode) closeNeedsAttention();
+      document.getElementById('filter-status').value = status || '';
+      const cSel = document.getElementById('filter-country');
+      cSel.value = country || '';
+      cSel.dispatchEvent(new Event('change'));          // updates the Location filter and reloads the list
+      document.querySelector('.table-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    const tile = (label, color, status) => {
+      const counts = per(status);
+      return { label, color, value: status ? (s.byStatus[status] || 0) : s.total, onClick: () => show('', status),
+        splits: order.map(c => ({ country: c, count: counts[c] || 0, onClick: () => show(c, status) })) };
+    };
+    const inc = s.incompleteByCountry || {};
+    renderKpiTiles('summary-grid', [
+      tile('Total Assets', '#1a56db', ''),
+      tile('Active', '#16a34a', 'Active'),
+      tile('Broken', '#dc2626', 'Broken'),
+      tile('Stock', '#d97706', 'Stock'),
+      { label: 'Needs Info', color: '#92400e', value: s.incompleteCount || 0, onClick: () => { if (naMode) closeNeedsAttention(); openNeedsAttention('missing'); },
+        splits: order.map(c => ({ country: c, count: inc[c] || 0, onClick: () => { if (naMode) closeNeedsAttention(); openNeedsAttention('missing', { country: c }); } })) },
     ]);
   } catch (e) { /* ignore */ }
 }
