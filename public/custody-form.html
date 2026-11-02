@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Custody Agreement</title>
   <style>
-    @page { size: A4; margin: 12mm 14mm 12mm 8mm; }
+    @page { size: A4; margin: 0; }   /* no browser margins → no date / URL lines, one sheet */
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Tahoma, Verdana, "Segoe UI", Arial, sans-serif; font-size: 8.6pt; color: #111; background: #e5e7eb; }
     .toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; align-items: center; padding: 10px 16px;
@@ -13,37 +13,37 @@
     .toolbar button { border: 0; border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; background: #1a56db; color: #fff; }
     .toolbar button.ghost { background: transparent; border: 1px solid #4b5563; }
     .toolbar .hint { opacity: .75; }
-    .page { position: relative; width: 210mm; min-height: 297mm; margin: 16px auto; padding: 12mm 14mm 12mm 20mm; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
-    .form-code { position: absolute; left: 6mm; top: 12mm; transform: rotate(180deg); writing-mode: vertical-rl; font-size: 7pt; color: #333; }
-    .head { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; margin-bottom: 9mm; }
+    .page { position: relative; width: 210mm; height: 297mm; overflow: hidden; margin: 16px auto; padding: 8mm 10mm 6mm 16mm; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+    .form-code { position: absolute; left: 5mm; top: 8mm; transform: rotate(180deg); writing-mode: vertical-rl; font-size: 7pt; color: #333; }
+    .head { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; margin-bottom: 4mm; }
     .head img { height: 11mm; }
     .head .title { text-align: center; font-weight: 700; font-size: 10pt; }
     .head .date { text-align: right; }
     .meta div { margin: 1px 0; }
-    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 7mm 0 3mm; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; margin: 4mm 0 2mm; }
     .row3 > div:nth-child(2) { text-align: center; }
     .row3 > div:nth-child(3) { text-align: right; }
-    .confirm { font-weight: 700; font-size: 9.2pt; text-align: justify; margin-bottom: 8mm; }
-    h4 { margin: 0 0 3mm; font-size: 9.5pt; }
+    .confirm { font-weight: 700; font-size: 9.2pt; text-align: justify; margin-bottom: 4mm; }
+    h4 { margin: 0 0 2mm; font-size: 9.5pt; }
     ol.terms { margin: 0; padding-left: 13mm; }
-    ol.terms > li { margin-bottom: 2mm; text-align: justify; line-height: 1.4; }
+    ol.terms > li { margin-bottom: 1.2mm; text-align: justify; line-height: 1.3; }
     ol.terms > li::marker { font-weight: 700; font-size: 11pt; }
-    .terms p { margin: 1.6mm 0; }
+    .terms p { margin: 1mm 0; }
     .terms ul { margin: 1mm 0; padding-left: 8mm; list-style: circle; }
-    .terms ul li { margin-bottom: 1.5mm; }
-    .ack { margin-top: 5mm; }
+    .terms ul li { margin-bottom: .8mm; }
+    .ack { margin-top: 3mm; }
     .sign { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4mm; margin-top: 2mm; }
     .sign b { display: block; }
-    .sign .name { min-height: 20mm; }
-    .rule { border-top: 1.5px solid #111; margin: 6mm 0 4mm; }
+    .sign .name { min-height: 17mm; }
+    .rule { border-top: 1.5px solid #111; margin: 3mm 0 3mm; }
     .return-head { display: grid; grid-template-columns: 2fr 1fr; }
     .page-break { break-before: page; }
     .muted { color: #6b7280; }
     @media print {
       body { background: #fff; }
       .toolbar { display: none; }
-      .page { margin: 0; padding: 0 0 0 12mm; width: auto; min-height: 0; box-shadow: none; }
-      .form-code { left: 0; top: 0; }
+      body > :not(.page) { display: none; }
+      .page { margin: 0; box-shadow: none; break-after: avoid; }
     }
   </style>
 </head>
@@ -56,6 +56,7 @@
 
   <div class="page" id="form" hidden>
     <div class="form-code">FR.GLB.16-001/ Rev.No.:0 / 10.07.2026</div>
+    <div id="fit">
 
     <div class="head">
       <img src="/img/hayat-logo.png" alt="HAYAT">
@@ -113,7 +114,7 @@
       I have read, understood, and agree to all the terms above. I accept full responsibility as outlined.
     </div>
 
-    <p style="margin-top:7mm">Delivered Equipment:</p>
+    <p style="margin:4mm 0 2mm">Delivered Equipment:</p>
     <b>CUSTODY DELIVERY:</b>
     <div class="sign">
       <div class="name"><b>Delivery Party:</b><b>Date: <span style="font-weight:400" data-f="date"></span></b><span data-f="deliveredBy"></span></div>
@@ -127,6 +128,7 @@
       <div><b>Delivering Party:</b><b>Date:</b></div>
       <div><b>Receiving Party :</b><b>Date:</b></div>
       <div><b>Inventory:</b><b>Date:</b></div>
+    </div>
     </div>
   </div>
 

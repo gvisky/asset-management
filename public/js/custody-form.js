@@ -32,6 +32,18 @@ async function getJson(url) {
   return r.json();
 }
 
+// Shrink the form so it always fits one A4 sheet (same on screen and on paper).
+function fitOnePage() {
+  const page = document.getElementById('form'), fit = document.getElementById('fit');
+  if (!page || page.hidden || !fit) return;
+  fit.style.zoom = '';
+  const cs = getComputedStyle(page);
+  const room = page.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const need = fit.scrollHeight;
+  if (need > room) fit.style.zoom = String(Math.floor((room / need) * 1000) / 1000);
+}
+window.addEventListener('beforeprint', fitOnePage);
+
 document.addEventListener('DOMContentLoaded', async () => {
   const hint = document.getElementById('hint');
   const id = new URLSearchParams(window.location.search).get('id');
@@ -55,6 +67,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.querySelectorAll('[data-f]').forEach(el => { el.textContent = values[el.dataset.f] || ''; });
     document.title = `Custody Agreement — ${values.assetNo || 'Asset #' + a.id}${values.receivedBy ? ' — ' + values.receivedBy : ''}`;
     document.getElementById('form').hidden = false;
+    fitOnePage();
+    if (document.fonts) document.fonts.ready.then(fitOnePage);
     const missing = [['Asset Type', values.type], ['Asset Code', values.assetNo], ['Serial', values.serial], ['User Name', values.receivedBy]]
       .filter(([, v]) => !v).map(([k]) => k);
     hint.textContent = missing.length ? `⚠ Not filled in this asset: ${missing.join(', ')}` : 'Ready — use Print / Save as PDF.';
