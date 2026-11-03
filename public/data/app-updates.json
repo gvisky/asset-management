@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-03",
+    "title": "Location & Operations and User Inventory tiles: evenly spread",
+    "items": [
+      "The small figures under each tile are chips spread evenly across the tile (like Justify in Word): label on the left, number on the right."
+    ]
+  },
+  {
+    "date": "2026-11-03",
     "title": "Smaller summary tiles",
     "items": [
       "Number and country split on one line — Dashboard, Asset Inventory and User Inventory tiles take about half the height."
