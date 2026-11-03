@@ -243,7 +243,11 @@ function kpiTile({ label, color, value, href, sub }) {
     <div class="kpi-sub kpi-note">${sub}</div>
   </div>`;
 }
-const statusNote = (t) => STATUSES.map(s => `<b>${fmt(t[s.key])}</b> ${s.key.toLowerCase()}`).join(' · ');
+// Evenly spread chips under a tile ("justified"): [[label, number], …]; a plain string = one full-width note.
+const noteChips = (pairs) => pairs.map(p => (typeof p === 'string'
+  ? `<span class="kpi-split kpi-split-text">${p}</span>`
+  : `<span class="kpi-split">${escHtml(p[0])} <b>${fmt(p[1])}</b></span>`)).join('');
+const statusNote = (t) => noteChips(STATUSES.map(s => [s.key, t[s.key]]));
 
 // ── Location & Operations: VN Office / VN Factory (status split) + warranty, repairs, licenses, servers ──
 let _opsExtra = { lic: null, srv: null };
@@ -263,13 +267,13 @@ function renderOps(stats, scopedTo) {
       href: invLink({ country: SITE_COUNTRY, location: 'Factory' }), sub: statusNote(site('Factory')) });
   }
   tiles.push({ label: 'Warranty ≤90d', color: '#d97706', value: stats.warrantyExpiring || 0, href: '/maintenance.html',
-    sub: srv ? `assets · servers <b>${fmt(srv.warrantyExpiring)}</b>` : 'assets' });
+    sub: noteChips([['Assets', stats.warrantyExpiring || 0], ...(srv ? [['Servers', srv.warrantyExpiring || 0]] : [])]) });
   tiles.push({ label: 'Open Repairs', color: '#dc2626', value: stats.openRepairs || 0, href: '/maintenance.html',
-    sub: 'in maintenance log' });
+    sub: noteChips(['in maintenance log']) });
   tiles.push({ label: 'Licenses ≤30d', color: '#0891b2', value: lic ? lic.expiring : 0, href: '/licenses.html',
-    sub: lic ? `of <b>${fmt(lic.total)}</b> licenses` : '' });
+    sub: lic ? noteChips([['Total licenses', lic.total || 0]]) : '' });
   tiles.push({ label: 'Servers', color: '#1a56db', value: srv ? srv.total : 0, href: '/server-inventory.html',
-    sub: srv ? (Object.entries(srv.byStatus || {}).map(([k, v]) => `<b>${fmt(v)}</b> ${escHtml(k).toLowerCase()}`).join(' · ') || '—') : '…' });
+    sub: srv ? (noteChips(Object.entries(srv.byStatus || {})) || '—') : '…' });
   grid.innerHTML = tiles.map(kpiTile).join('');
 
   // Licenses / servers come from their own modules — fetch, then re-render once.
