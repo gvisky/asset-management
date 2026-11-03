@@ -1,29 +1,91 @@
 [
-  { "date": "2026-11-03", "title": "\"New app function update\" box on the Dashboard",
-    "items": ["See what was deployed lately, newest first."] },
-  { "date": "2026-11-02", "title": "Asset & User Inventory: new summary tiles",
-    "items": ["Same style as the Dashboard: big number + split by country.",
-              "Click a tile or a country chip to filter the list (Needs Info opens Needs Attention for that country)."] },
-  { "date": "2026-11-02", "title": "Custody Agreement prints on one A4 page",
-    "items": ["No more second page when printing."] },
-  { "date": "2026-10-30", "title": "User Inventory fits the screen",
-    "items": ["Email shows under the name, Devices column removed — all columns visible without scrolling sideways."] },
-  { "date": "2026-10-30", "title": "Lists show the latest changes first",
-    "items": ["Asset Inventory and User Inventory are sorted by last updated, with a Last updated column and New / Edited tags."] },
-  { "date": "2026-10-30", "title": "Devices page (Intune & Entra) — IT admin",
-    "items": ["Microsoft device list linked to assets and users.",
-              "Bulk import is paused for now; the first import was undone."] },
-  { "date": "2026-10-30", "title": "Users can manage one or more countries",
-    "items": ["Viewer / Editor / Admin can be global (all countries) or limited to the countries they manage."] },
-  { "date": "2026-10-13", "title": "Custody Agreement (HQ form)",
-    "items": ["New 🖨️ button in asset details prints the HQ custody form, incl. Asset No (S/4)."] },
-  { "date": "2026-10-12", "title": "Needs Attention: fix missing info on the spot",
-    "items": ["Split by country, edit directly in the list — no need to open each asset.",
-              "Missing AD Name / PC No only checked for laptops and desktops."] },
-  { "date": "2026-10-12", "title": "Dashboard redesign",
-    "items": ["Totals split by country and status, Assets by Country / Type, Vietnam Office & Factory.",
-              "Top Models and Alerts side by side; Alerts is a pop-up button on the inventory pages."] },
-  { "date": "2026-10-12", "title": "Asset Inventory improvements",
-    "items": ["Years in Use column (from purchase date), Asset Type filter, Office / Factory filter.",
-              "Laptops, desktops and phones listed first; \"Code\" renamed to \"Asset code\"."] }
+  {
+    "date": "2026-11-03",
+    "title": "Smaller summary tiles",
+    "items": [
+      "Number and country split on one line — Dashboard, Asset Inventory and User Inventory tiles take about half the height."
+    ]
+  },
+  {
+    "date": "2026-11-03",
+    "title": "\"New app function update\" box on the Dashboard",
+    "items": [
+      "See what was deployed lately, newest first."
+    ]
+  },
+  {
+    "date": "2026-11-02",
+    "title": "Asset & User Inventory: new summary tiles",
+    "items": [
+      "Same style as the Dashboard: big number + split by country.",
+      "Click a tile or a country chip to filter the list (Needs Info opens Needs Attention for that country)."
+    ]
+  },
+  {
+    "date": "2026-11-02",
+    "title": "Custody Agreement prints on one A4 page",
+    "items": [
+      "No more second page when printing."
+    ]
+  },
+  {
+    "date": "2026-10-30",
+    "title": "User Inventory fits the screen",
+    "items": [
+      "Email shows under the name, Devices column removed — all columns visible without scrolling sideways."
+    ]
+  },
+  {
+    "date": "2026-10-30",
+    "title": "Lists show the latest changes first",
+    "items": [
+      "Asset Inventory and User Inventory are sorted by last updated, with a Last updated column and New / Edited tags."
+    ]
+  },
+  {
+    "date": "2026-10-30",
+    "title": "Devices page (Intune & Entra) — IT admin",
+    "items": [
+      "Microsoft device list linked to assets and users.",
+      "Bulk import is paused for now; the first import was undone."
+    ]
+  },
+  {
+    "date": "2026-10-30",
+    "title": "Users can manage one or more countries",
+    "items": [
+      "Viewer / Editor / Admin can be global (all countries) or limited to the countries they manage."
+    ]
+  },
+  {
+    "date": "2026-10-13",
+    "title": "Custody Agreement (HQ form)",
+    "items": [
+      "New 🖨️ button in asset details prints the HQ custody form, incl. Asset No (S/4)."
+    ]
+  },
+  {
+    "date": "2026-10-12",
+    "title": "Needs Attention: fix missing info on the spot",
+    "items": [
+      "Split by country, edit directly in the list — no need to open each asset.",
+      "Missing AD Name / PC No only checked for laptops and desktops."
+    ]
+  },
+  {
+    "date": "2026-10-12",
+    "title": "Dashboard redesign",
+    "items": [
+      "Totals split by country and status, Assets by Country / Type, Vietnam Office & Factory.",
+      "Top Models and Alerts side by side; Alerts is a pop-up button on the inventory pages."
+    ]
+  },
+  {
+    "date": "2026-10-12",
+    "title": "Asset Inventory improvements",
+    "items": [
+      "Years in Use column (from purchase date), Asset Type filter, Office / Factory filter.",
+      "Laptops, desktops and phones listed first; \"Code\" renamed to \"Asset code\"."
+    ]
+  }
 ]
