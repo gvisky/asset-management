@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-03",
+    "title": "New: System Health page (IT)",
+    "items": [
+      "Live status of routers, switches, servers and internal web apps, refreshed every 30 seconds.",
+      "First system: the DrayTek router — up time, WAN 1 / 2 / 4G backup up or down, live traffic.",
+      "IT gets an alert when something goes down or an office stops reporting."
+    ]
+  },
+  {
+    "date": "2026-11-03",
     "title": "Location & Operations and User Inventory tiles: evenly spread",
     "items": [
       "The small figures under each tile are chips spread evenly across the tile (like Justify in Word): label on the left, number on the right."

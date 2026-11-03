@@ -104,6 +104,21 @@ function renderUserChrome() {
     }
   }
 
+  // System Health link — IT team only, right after Devices.
+  if (u.team === 'IT') {
+    const nav = document.querySelector('.sidebar nav');
+    if (nav && !document.getElementById('nav-health')) {
+      const link = document.createElement('a');
+      link.href = '/system-health.html';
+      link.id = 'nav-health';
+      link.className = 'nav-link';
+      link.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> System Health`;
+      const dev = document.getElementById('nav-devices');
+      if (dev) dev.insertAdjacentElement('afterend', link); else nav.appendChild(link);
+      if (window.location.pathname.includes('system-health')) link.classList.add('active');
+    }
+  }
+
   // User Inventory link — for HR and IT members (appears on every page).
   if (u.team === 'HR' || u.team === 'IT') {
     const nav = document.querySelector('.sidebar nav');

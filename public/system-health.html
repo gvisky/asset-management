@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hayat Communication Tools — System Health</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">🖥️ Hayat Communication Tools</div>
+    <div class="logo-sub">Asset &amp; User Management</div>
+  </div>
+  <nav>
+    <div class="nav-section-label">Menu</div>
+    <a href="/" class="nav-link" id="nav-dashboard">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/inventory.html" class="nav-link">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg>
+      Asset Inventory
+    </a>
+    <a href="/server-inventory.html" class="nav-link" id="nav-servers">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      Server Inventory
+    </a>
+    <a href="/devices.html" class="nav-link" id="nav-devices">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      Devices
+    </a>
+    <a href="/maintenance.html" class="nav-link" id="nav-maintenance">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg>
+      Maintenance
+    </a>
+    <a href="/licenses.html" class="nav-link" id="nav-licenses">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M9 11l3 3L22 4"/></svg>
+      Licenses
+    </a>
+    <a href="/reports.html" class="nav-link" id="nav-reports">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      Reports
+    </a>
+  </nav>
+</aside>
+
+<div class="main-wrap">
+  <header class="topbar">
+    <span class="topbar-title">System Health <span class="text-muted text-sm" style="font-weight:400">· live status from the offices</span></span>
+    <span id="hl-updated" class="text-muted text-sm"></span>
+    <span id="alert-btn-slot"></span>
+    <button class="btn btn-ghost btn-sm" id="btn-refresh">⟳ Refresh</button>
+    <button class="btn btn-primary btn-sm" id="btn-add-col" style="display:none">➕ Add collector</button>
+  </header>
+
+  <main class="content">
+    <div class="kpi-grid" id="hl-tiles"></div>
+
+    <div class="card" id="hl-empty" style="display:none;margin-bottom:20px">
+      <div class="card-body">
+        <h3 style="margin:0 0 6px">No systems reporting yet</h3>
+        <p class="text-sm text-muted" style="margin:0 0 10px">The website runs in the cloud and can't reach the office network, so a small <b>collector</b>
+          program on an always-on PC in each office checks the router, switches, servers and web apps every minute and sends the results here.</p>
+        <ol class="text-sm" style="margin:0;padding-left:18px;line-height:1.8">
+          <li>Turn on SNMP (read-only) on the router: <b>System Maintenance → SNMP</b>, set your own Get Community and the collector PC as Manager Host.</li>
+          <li>Click <b>➕ Add collector</b> (IT admin) and copy the key.</li>
+          <li>On the office PC: install Node.js LTS, copy the <code>collector</code> folder from the project, put the key in <code>config.json</code>,
+            run <code>npm install</code> and <code>node collector.js --once</code>, then <code>install-windows.ps1</code>. Full steps: <code>collector/README.md</code>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div id="hl-sites"></div>
+
+    <div class="grid-2" style="align-items:start;margin-top:20px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">Recent status changes</span></div>
+        <div class="table-wrap" style="max-height:360px;overflow-y:auto"><table>
+          <thead><tr><th>When</th><th>System</th><th>Change</th><th>Details</th></tr></thead>
+          <tbody id="hl-events"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Collectors</span><span class="text-muted text-sm">office PCs that send the checks</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Site</th><th>Last report</th><th>Version / IP</th><th></th></tr></thead>
+          <tbody id="hl-collectors"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Add collector modal -->
+<div class="modal-overlay" id="col-overlay">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title">Add a collector</span>
+      <button class="modal-close" id="col-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="col-body">
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-control" id="col-name" placeholder="e.g. HCM office PC"></div>
+      <div class="form-group"><label class="form-label">Site</label><input class="form-control" id="col-site" placeholder="e.g. HCM Office, Factory, Bangkok"></div>
+      <div class="form-group"><label class="form-label">Country</label><select class="form-control" id="col-country" data-countries><option value="">—</option></select></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="col-cancel">Close</button>
+      <button class="btn btn-primary" id="col-save">Create key</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/alerts.js"></script>
+<script src="/js/system-health.js"></script>
+</body>
+</html>

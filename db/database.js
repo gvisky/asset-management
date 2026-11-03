@@ -978,6 +978,51 @@ async function migrate() {
   // (Set once; assets get theirs when the first "Add all to Asset Inventory" completes.)
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_personnel', datetime('now'))");
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_devices', datetime('now'))");
+
+  // System Health ← on-site collectors (router / switch / server / web-app checks pushed every minute).
+  await backend.script(`
+    CREATE TABLE IF NOT EXISTS health_collectors (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      name         TEXT    NOT NULL DEFAULT '',
+      site         TEXT    DEFAULT '',
+      country      TEXT    DEFAULT '',
+      token_hash   TEXT    NOT NULL,
+      created_by   TEXT    DEFAULT '',
+      created_at   TEXT    DEFAULT (datetime('now')),
+      last_seen_at TEXT    DEFAULT NULL,
+      last_ip      TEXT    DEFAULT '',
+      version      TEXT    DEFAULT '',
+      revoked      INTEGER NOT NULL DEFAULT 0,
+      offline_notified INTEGER NOT NULL DEFAULT 0   -- 1 once IT was told it stopped reporting
+    );
+    CREATE TABLE IF NOT EXISTS health_checks (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      collector_id  INTEGER NOT NULL,
+      check_key     TEXT    NOT NULL,
+      name          TEXT    DEFAULT '',
+      kind          TEXT    DEFAULT '',        -- snmp | ping | http
+      target        TEXT    DEFAULT '',
+      status        TEXT    DEFAULT 'unknown', -- up | warn | down | unknown
+      summary       TEXT    DEFAULT '',
+      latency_ms    INTEGER DEFAULT NULL,
+      detail        TEXT    DEFAULT '',        -- JSON (uptime, interfaces, …)
+      status_since  TEXT    DEFAULT (datetime('now')),
+      last_seen_at  TEXT    DEFAULT (datetime('now')),
+      UNIQUE (collector_id, check_key)
+    );
+    CREATE TABLE IF NOT EXISTS health_events (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      collector_id INTEGER,
+      check_key    TEXT,
+      name         TEXT,
+      from_status  TEXT,
+      to_status    TEXT,
+      summary      TEXT,
+      created_at   TEXT DEFAULT (datetime('now'))
+    );
+  `);
+  const hcols = (await backend.all('PRAGMA table_info(health_collectors)')).map(c => c.name);
+  if (!hcols.includes('offline_notified')) await backend.run('ALTER TABLE health_collectors ADD COLUMN offline_notified INTEGER NOT NULL DEFAULT 0');
 }
 
 // Create a notification for a given audience/country/scope.
