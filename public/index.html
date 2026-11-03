@@ -75,12 +75,22 @@
 
     <!-- Breakdown: by country, by asset type -->
     <div class="grid-2" style="margin-bottom:28px">
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">Assets by Country</span>
-          <span class="status-legend"></span>
+      <div class="dash-col">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Assets by Country</span>
+            <span class="status-legend"></span>
+          </div>
+          <div class="table-wrap"><table class="breakdown-table" id="bd-country"></table></div>
         </div>
-        <div class="table-wrap"><table class="breakdown-table" id="bd-country"></table></div>
+        <!-- What's new: entries come from /data/app-updates.json (add one with every deployment) -->
+        <div class="card updates-card">
+          <div class="card-header">
+            <span class="card-title">🚀 New app function update</span>
+            <span class="text-muted text-sm" id="updates-count"></span>
+          </div>
+          <div class="updates-list" id="updates-list"><div class="text-muted text-sm" style="padding:16px 20px">Loading…</div></div>
+        </div>
       </div>
       <div class="card">
         <div class="card-header">

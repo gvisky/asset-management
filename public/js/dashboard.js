@@ -410,8 +410,31 @@ let naPanel = null;
 // ── Save handler (modal save on dashboard page) ───────────────────────────────
 let _saveMode = 'add';
 
+// ── "New app function update" box — latest deployments, newest first ──────────
+async function loadAppUpdates() {
+  const list = document.getElementById('updates-list');
+  if (!list) return;
+  try {
+    const r = await fetch('/data/app-updates.json?v=' + Date.now(), { cache: 'no-store' });
+    const ups = (await r.json()).slice().sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const now = Date.now();
+    const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const fresh = (d) => now - new Date(d + 'T00:00:00').getTime() < 7 * 86400000;
+    const newCount = ups.filter(u => fresh(u.date)).length;
+    document.getElementById('updates-count').textContent = newCount ? `${newCount} new this week` : '';
+    list.innerHTML = ups.map(u => `<div class="update-item">
+        <div class="update-date">${escHtml(fmtDate(u.date))}</div>
+        <div><div class="update-title">${escHtml(u.title)}${fresh(u.date) ? '<span class="badge badge-active">New</span>' : ''}</div>
+          ${(u.items || []).length ? `<ul>${u.items.map(i => `<li>${escHtml(i)}</li>`).join('')}</ul>` : ''}</div>
+      </div>`).join('') || '<div class="text-muted text-sm" style="padding:16px 20px">No updates yet.</div>';
+  } catch (e) {
+    list.innerHTML = '<div class="text-muted text-sm" style="padding:16px 20px">Could not load updates.</div>';
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadStats();
+  loadAppUpdates();
   naPanel = NeedsAttention({ root: document.getElementById('na-root'), mode: 'missing',
     scope: () => dashScope, showOpenLink: true });
   loadPersonnelSummary();               // User Inventory summary cards
