@@ -11,3 +11,7 @@ db/budget-seed.json
 !.claude/settings.json
 !.claude/hooks/
 backups/
+
+# System Health collector: real settings hold the collector key / SNMP community
+collector/config.json
+collector/*.log

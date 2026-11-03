@@ -1,0 +1,15 @@
+{
+  "name": "hayat-health-collector",
+  "version": "1.0.0",
+  "description": "Checks routers / switches / servers / web apps inside the office and reports to asset.hayat.io.vn (System Health)",
+  "main": "collector.js",
+  "private": true,
+  "scripts": {
+    "start": "node collector.js",
+    "test-run": "node collector.js --dry-run"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "net-snmp": "^3.20.0"
+  }
+}

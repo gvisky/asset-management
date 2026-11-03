@@ -1,0 +1,22 @@
+{
+  "server": "https://asset.hayat.io.vn",
+  "key": "hc_PASTE_THE_COLLECTOR_KEY_FROM_THE_SYSTEM_HEALTH_PAGE",
+  "intervalSeconds": 60,
+  "checks": [
+    {
+      "name": "DrayTek Vigor2133 (main router)",
+      "type": "snmp",
+      "host": "192.168.3.1",
+      "version": "2c",
+      "community": "CHANGE_ME_read_only_community",
+      "interfaces": [
+        { "match": "^wan1$|wan 1|ppp.*1", "label": "WAN 1" },
+        { "match": "^wan2$|wan 2|ppp.*2", "label": "WAN 2" },
+        { "match": "wan3|usb|lte",         "label": "WAN 3 (4G backup)", "required": false },
+        { "match": "^lan|lan1|br",         "label": "LAN", "required": false }
+      ]
+    },
+    { "name": "Router web page", "type": "http", "url": "https://192.168.3.1/", "slowMs": 3000 },
+    { "name": "Internet (Google DNS)", "type": "ping", "host": "8.8.8.8", "slowMs": 150 }
+  ]
+}
