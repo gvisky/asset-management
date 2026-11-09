@@ -301,6 +301,7 @@ function renderGrouped(r) {
     const logon = p && p.ad_seen_at ? (p.ad_never_logon ? 'never' : daysTxt(daysAgo(p.ad_last_logon))) : '';
     const head = g.key === 'none' ? '<b>No user assigned</b>'
       : `<b>${hEsc(g.label || g.key.replace(/^\w+:/, ''))}</b>${email ? ` <span class="text-muted">· ${email}</span>` : ` <span class="text-muted">· ${hEsc(g.key.replace(/^\w+:/, ''))}</span>`}
+         ${p && (p.position || p.department) ? ` <span class="inv-pos" title="Position${p.department ? ' · Department' : ''} (User Inventory)">· ${hEsc(p.position || '')}${p.position && p.department ? ' — ' : ''}${p.department ? hEsc(p.department) : ''}</span>` : ''}
          ${p ? '' : ' <span class="badge badge-retired" style="font-size:10px" title="No person with this AD Name in User Inventory">not in User Inventory</span>'}
          ${p && p.status && p.status !== 'Active' ? ` <span class="badge badge-broken" style="font-size:10px">${hEsc(p.status === 'pending delete' ? 'Confirmed Delete' : p.status)}</span>` : ''}`;
     const meta = [`${g.assets.length} asset${g.assets.length !== 1 ? 's' : ''}`,
