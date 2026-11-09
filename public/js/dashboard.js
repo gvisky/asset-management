@@ -218,11 +218,11 @@ async function loadStats() {
     }
     tbody.innerHTML = stats.recentlyAdded.map(a => `
       <tr>
-        <td><code style="font-size:12px">${a.asset_code || '—'}</code></td>
-        <td>${a.brand_model || '—'}</td>
+        <td><code style="font-size:12px">${htmlEsc(a.asset_code) || '—'}</code></td>
+        <td>${htmlEsc(a.brand_model) || '—'}</td>
         <td>${locationBadge(a.location)}</td>
-        <td class="truncate" title="${a.department || ''}">${a.department || '—'}</td>
-        <td>${a.user_name || '—'}</td>
+        <td class="truncate" title="${htmlEsc(a.department)}">${htmlEsc(a.department) || '—'}</td>
+        <td>${htmlEsc(a.user_name) || '—'}</td>
         <td>${statusBadge(a.status)}</td>
       </tr>
     `).join('');
@@ -354,7 +354,7 @@ async function loadTopModels(assetType) {
     const d = await apiGet('/api/assets/top-models' + (q ? '?asset_type=' + encodeURIComponent(q) : ''));
 
     sel.innerHTML = (d.assetTypes || []).map(t =>
-      `<option value="${String(t.type).replace(/"/g, '&quot;')}"${t.type === d.selected ? ' selected' : ''}>${t.type} (${t.count})</option>`).join('')
+      `<option value="${htmlEsc(t.type)}"${t.type === d.selected ? ' selected' : ''}>${htmlEsc(t.type)} (${t.count})</option>`).join('')
       || '<option value="">No types</option>';
     sel.value = d.selected || '';
 

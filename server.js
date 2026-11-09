@@ -7,8 +7,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
-app.use(express.json({ limit: '75mb' }));   // large enough for raw Azure CSV + base64 .xlsx uploads (budget report ~50mb)
-app.use(express.urlencoded({ extended: true, limit: '75mb' }));
+// Request bodies: 1 MB normally; up to 75 MB (raw CSV / base64 .xlsx uploads, budget report ~50 MB)
+// only for a logged-in user — so nobody can tie up the server with huge bodies before logging in.
+const smallJson = express.json({ limit: '1mb' }), bigJson = express.json({ limit: '75mb' });
+const smallForm = express.urlencoded({ extended: true, limit: '1mb' }), bigForm = express.urlencoded({ extended: true, limit: '75mb' });
+app.use(async (req, res, next) => {
+  try {
+    const large = Number(req.headers['content-length'] || 0) > 1024 * 1024
+      && !req.path.startsWith('/api/auth') && !req.path.startsWith('/api/health/ingest')
+      && !!(await getUserFromRequest(req));
+    (large ? bigJson : smallJson)(req, res, (err) => (err ? next(err) : (large ? bigForm : smallForm)(req, res, next)));
+  } catch (e) { next(e); }
+});
 
 // API routes
 app.use('/api/auth',      require('./routes/auth'));
@@ -56,6 +66,8 @@ app.get(/^(?!\/api).*$/, (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.too.large') return res.status(413).json({ error: 'The upload is too large (or you are not logged in).' });
+  if (err && err.type === 'entity.parse.failed') return res.status(400).json({ error: 'Invalid request data' });
   console.error(err);
   res.status(500).json({ error: 'Server error' });
 });

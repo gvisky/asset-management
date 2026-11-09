@@ -16,7 +16,7 @@ const router = express.Router();
 const { get, all, run, batch, audit, notify } = require('../db/database');
 const { getUserFromRequest, isITAdmin } = require('../middleware/auth');
 const { newToken, hashToken } = require('../db/auth-utils');
-const { inScope } = require('../lib/scope');
+const { inScope, scopeList } = require('../lib/scope');
 const { normCountry } = require('../lib/countries');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
@@ -128,7 +128,7 @@ router.get('/', wrap(async (req, res) => {
   const collectors = (await all(`SELECT id, name, site, country, created_by, created_at, last_seen_at, last_ip, version, revoked,
         CAST((julianday('now') - julianday(last_seen_at)) * 86400 AS INTEGER) AS age_s
       FROM health_collectors ORDER BY country, site, name`))
-    .filter(c => !c.country || inScope(req, c.country));
+    .filter(c => (c.country ? inScope(req, c.country) : !scopeList(req)));
   const ids = new Set(collectors.map(c => c.id));
   const checks = (await all(`SELECT *, CAST((julianday('now') - julianday(last_seen_at)) * 86400 AS INTEGER) AS age_s
       FROM health_checks ORDER BY name`))
@@ -139,7 +139,7 @@ router.get('/', wrap(async (req, res) => {
       const stale = c.age_s == null || c.age_s > STALE_SECONDS;
       return { ...c, detail, stale, shown_status: stale ? 'stale' : c.status };
     });
-  const events = (await all('SELECT * FROM health_events ORDER BY id DESC LIMIT 60')).filter(e => ids.has(e.collector_id));
+  const events = (await all('SELECT * FROM health_events ORDER BY id DESC LIMIT 1000')).filter(e => ids.has(e.collector_id)).slice(0, 60);
   res.json({
     collectors: collectors.map(c => ({ ...c, online: !c.revoked && c.age_s != null && c.age_s <= STALE_SECONDS })),
     checks, events, staleSeconds: STALE_SECONDS, canManage: isITAdmin(req.user),
@@ -152,6 +152,7 @@ router.post('/collectors', itAdminOnly, wrap(async (req, res) => {
   const name = str(b.name, 80);
   if (!name) return res.status(400).json({ error: 'Give the collector a name (e.g. "HCM office PC")' });
   const country = normCountry(str(b.country, 60)) || '';
+  if (scopeList(req) && (!country || !inScope(req, country))) return res.status(403).json({ error: 'Pick one of your countries for this collector' });
   const key = 'hc_' + newToken();
   const r = await run('INSERT INTO health_collectors (name, site, country, token_hash, created_by) VALUES (?, ?, ?, ?, ?)',
     [name, str(b.site, 80), country, hashToken(key), req.user.username]);
@@ -159,9 +160,11 @@ router.post('/collectors', itAdminOnly, wrap(async (req, res) => {
   res.status(201).json({ id: r.lastInsertRowid, name, key });
 }));
 
+const collectorNotYours = (req, c) => !!scopeList(req) && (!c.country || !inScope(req, c.country));
 router.post('/collectors/:id/revoke', itAdminOnly, wrap(async (req, res) => {
   const c = await get('SELECT * FROM health_collectors WHERE id = ?', [req.params.id]);
   if (!c) return res.status(404).json({ error: 'Collector not found' });
+  if (collectorNotYours(req, c)) return res.status(403).json({ error: 'Not in your region' });
   await run('UPDATE health_collectors SET revoked = 1 WHERE id = ?', [c.id]);
   await audit(req.user, 'HEALTH', null, `Revoked System Health collector "${c.name}"`);
   res.json({ ok: true });
@@ -170,6 +173,7 @@ router.post('/collectors/:id/revoke', itAdminOnly, wrap(async (req, res) => {
 router.delete('/collectors/:id', itAdminOnly, wrap(async (req, res) => {
   const c = await get('SELECT * FROM health_collectors WHERE id = ?', [req.params.id]);
   if (!c) return res.status(404).json({ error: 'Collector not found' });
+  if (collectorNotYours(req, c)) return res.status(403).json({ error: 'Not in your region' });
   await batch([
     { sql: 'DELETE FROM health_checks WHERE collector_id = ?', args: [c.id] },
     { sql: 'DELETE FROM health_events WHERE collector_id = ?', args: [c.id] },

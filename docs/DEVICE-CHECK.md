@@ -138,3 +138,16 @@ PF25Y0MX", while Intune has PF25Y0MX as VNHCMC0198 of Haluk Ozgur Acar. Now:
   **Intune / Entra devices** matching the search (name, serial, user) with who uses them and their asset.
 - Device Check flags `sap_desc` (12 on the local copy). `lib/device-recheck.js` has a rules version so stored
   differences are worked out again after a rules change.
+
+## Bug review (10 Nov 2026) — fixed
+- Several assets with the same Computer No: the device now takes the one with its serial, else its user (was: the
+  first one → false conflict / serial / user differences, e.g. VNHCMC0246 → #94 instead of #242).
+- Intune has two records for one PC (old ConfigMgr without user + current): the Entra row joins the one with the
+  same user; Entra's older duplicate records (same name + user) are skipped, newest sign-in first.
+- Merge follows manual-edit locks: locked holder kept, locked Serial / model stops the merge, locked Brand / Asset
+  code left as is, and Serial / Brand / Asset code / holder changes lock the record. Device links move too.
+- Use Intune value → Serial locks also when filling an empty Serial.
+- Country scope: Mark as checked / Merge / Use Intune value only on devices + assets of the user's countries;
+  the Intune + Entra upload and the AD upload are global IT admin only; search shows only in-scope devices.
+- Two uploads at the same time are refused (409); first-seen dates are kept across uploads.
+- Recheck signature includes a checksum of the compared fields.

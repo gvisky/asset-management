@@ -65,6 +65,8 @@ async function loadSummary() {
     const order = kpiCountryOrder(s.byCountry || {});
     const show = (country, status) => {
       if (naMode) closeNeedsAttention();
+      // The tiles count every asset type — clear the type filter (the page opens on Laptop) so the list matches.
+      const at = document.getElementById('filter-asset-type'); if (at) at.value = '';
       document.getElementById('filter-status').value = status || '';
       const cSel = document.getElementById('filter-country');
       cSel.value = country || '';
@@ -99,18 +101,18 @@ async function loadFilters() {
     const atSel       = document.getElementById('filter-asset-type');
     const atList      = document.getElementById('asset-type-options');
     brandSel.innerHTML = '<option value="">All Models</option>' +
-      brands.map(b => `<option value="${b.replace(/"/g,'&quot;')}">${b}</option>`).join('');
+      brands.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
     deptSel.innerHTML = '<option value="">All Departments</option>' +
-      (departments || []).map(d => `<option value="${d.replace(/"/g,'&quot;')}">${d}</option>`).join('');
+      (departments || []).map(d => `<option value="${esc(d)}">${esc(d)}</option>`).join('');
     countrySel.innerHTML = '<option value="">All Countries</option>' +
-      (countries || []).map(c => `<option value="${c}">${c}</option>`).join('');
+      (countries || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     if (ccSel) ccSel.innerHTML = '<option value="">All Cost Centers</option>' +
       (costCenters || []).map(cc => {
         const lbl = cc.descr ? `${cc.code} — ${cc.descr} (${cc.count})` : `${cc.code} (${cc.count})`;
-        return `<option value="${String(cc.code).replace(/"/g,'&quot;')}">${lbl}</option>`;
+        return `<option value="${esc(cc.code)}">${esc(lbl)}</option>`;
       }).join('');
     if (atSel) atSel.innerHTML = '<option value="">All Asset Types</option>' +
-      (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}">${t.type} (${t.count})</option>`).join('') +
+      (assetTypes || []).map(t => `<option value="${esc(t.type)}">${esc(t.type)} (${t.count})</option>`).join('') +
       (noTypeCount ? `<option value="__none">Type not set (${noTypeCount})</option>` : '');
     if (atList) atList.innerHTML = (assetTypes || []).map(t => `<option value="${String(t.type).replace(/"/g,'&quot;')}"></option>`).join('');
 
@@ -198,16 +200,16 @@ function assetRowHtml(a, devHtml = '', extraClass = '') {
       <td class="text-muted text-sm">${a.id}</td>
       <td class="when-cell">${whenCell(a.created_at, a.updated_at, assetBaseline)}</td>
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
-          ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
-          : `<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code>`}</td>
-      <td>${a.asset_type ? `<span class="badge badge-office" style="font-size:10px">${esc(a.asset_type)}</span><br>` : ''}${a.brand_model || '—'}${descHint(a)}</td>
-      <td class="text-muted text-sm">${a.computer_no || '—'}${devHtml}${(a.device_refs || []).map(r => `<div class="inv-diff" title="${hEsc(r.text)}">⚠ SAP description names ${hEsc(r.serial)} = Intune <b>${hEsc(r.device)}</b> (${hEsc(String(r.upn || '').split('@')[0])})</div>`).join('')}</td>
-      <td><span class="badge badge-factory">${a.country || '—'}</span></td>
+          ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${esc(a.asset_s4)}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${esc(a.asset_code) || '—'}</span>`
+          : `<code style="font-size:12px;color:var(--brand)">${esc(a.asset_code) || '—'}</code>`}</td>
+      <td>${a.asset_type ? `<span class="badge badge-office" style="font-size:10px">${esc(a.asset_type)}</span><br>` : ''}${esc(a.brand_model) || '—'}${descHint(a)}</td>
+      <td class="text-muted text-sm">${esc(a.computer_no) || '—'}${devHtml}${(a.device_refs || []).map(r => `<div class="inv-diff" title="${hEsc(r.text)}">⚠ SAP description names ${hEsc(r.serial)} = Intune <b>${hEsc(r.device)}</b> (${hEsc(String(r.upn || '').split('@')[0])})</div>`).join('')}</td>
+      <td><span class="badge badge-factory">${esc(a.country) || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
-      <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${a.department || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
-      <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${a.user_name || '—'}</td>
+      <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}>${esc(a.department) || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
+      <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${esc(a.user_name) || '—'}</td>
       <td class="text-muted text-sm">${adNameCell(a)}</td>
-      <td class="text-muted text-sm">${a.serial_no || '—'}</td>
+      <td class="text-muted text-sm">${esc(a.serial_no) || '—'}</td>
       <td class="text-sm" title="${a.purchase_date ? 'Purchased ' + esc(a.purchase_date) : 'No purchase date'}">${yearsInUse(a.purchase_date) || '—'}</td>
       <td>${statusBadge(a.status)}</td>
       <td>
@@ -218,7 +220,7 @@ function assetRowHtml(a, devHtml = '', extraClass = '') {
           <button class="btn btn-ghost btn-sm" onclick="onEdit(${a.id})" title="Edit">
             <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
-          <button class="btn btn-danger btn-sm" onclick="onDelete(${a.id}, '${esc(a.asset_code || a.brand_model)}')" title="Delete">
+          <button class="btn btn-danger btn-sm" onclick="onDelete(${a.id}, ${jsArg(a.asset_code || a.brand_model)})" title="Delete">
             <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           </button>
         </div>
@@ -325,9 +327,7 @@ function yearsInUse(purchaseDate) {
   return `${years.toFixed(1)} yrs`;
 }
 
-function esc(str) {
-  return String(str || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-}
+function esc(str) { return htmlEsc(str == null ? '' : str); }
 
 // AD Name cell — when the "Missing AD & Asset" filter is on, show WHY it's flagged.
 function adNameCell(a) {
@@ -335,9 +335,9 @@ function adNameCell(a) {
     return '<span class="badge badge-broken" title="Active asset with no AD Name — add it">⚠ missing AD</span>';
   }
   if (a.ad_issue_reason === 'unmatched') {
-    return `<span class="badge badge-retired" title="This AD Name is not found in User Inventory (no matching email before @hayat.com.tr)">⚠ ${a.ad_name || ''} — no user</span>`;
+    return `<span class="badge badge-retired" title="This AD Name is not found in User Inventory (no matching email before @hayat.com.tr)">⚠ ${esc(a.ad_name)} — no user</span>`;
   }
-  return a.ad_name || '<span style="color:var(--broken)">—</span>';
+  return esc(a.ad_name) || '<span style="color:var(--broken)">—</span>';
 }
 
 function renderPagination(total, page, limit) {
@@ -401,7 +401,7 @@ async function onView(id) {
       ['Date Assigned', a.date_assigned],
       ['Purchase Date', a.purchase_date],
       ['Years in Use',  yearsInUse(a.purchase_date)],
-      ['Warranty',      warrantyBadge(a.warranty_expiry) || a.warranty_expiry],
+      ['Warranty',      warrantyBadge(a.warranty_expiry) || esc(a.warranty_expiry)],
       ['Vendor',        a.vendor],
       ['Cost',          a.cost],
       ['PO Number',     a.po_number],
@@ -414,7 +414,7 @@ async function onView(id) {
         ${fields.map(([label, val]) => `
           <div>
             <div class="form-label" style="margin-bottom:3px">${label}</div>
-            <div style="font-size:13.5px;white-space:pre-line">${val || '<span class="text-muted">—</span>'}</div>
+            <div style="font-size:13.5px;white-space:pre-line">${val ? (label === 'Status' || label === 'Warranty' || label === 'Location' ? val : esc(val)) : '<span class="text-muted">—</span>'}</div>
           </div>
         `).join('')}
       </div>
@@ -664,7 +664,7 @@ async function refreshBrandOptions() {
   try {
     const { brands } = await apiGet('/api/assets/filters?' + params.toString());
     sel.innerHTML = '<option value="">All Models</option>' +
-      (brands || []).map(b => `<option value="${b.replace(/"/g, '&quot;')}">${b}</option>`).join('');
+      (brands || []).map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
     sel.value = (cur && (brands || []).includes(cur)) ? cur : '';   // keep selection if still valid
   } catch (e) { /* leave as-is */ }
 }

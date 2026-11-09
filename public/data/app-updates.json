@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Bug fixes after a full review",
+    "items": [
+      "Needs Info tile = Needs Attention list; tiles clear the Laptop filter; one person no longer split in View by user; sort works there.",
+      "Device Check links the right asset when Computer Nos repeat; merge respects locks; fewer false differences.",
+      "Country limits enforced on device actions, search and uploads; safer display of names (O'Brien etc. work)."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Devices: compliance filter fixed",
     "items": [
       "\"Not compliant\" / \"Compliant\" filters and tiles now use the same status as the Compliance column (Intune first, else Entra)."

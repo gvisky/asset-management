@@ -85,8 +85,8 @@ function renderHealth() {
       <td class="text-sm">${hEsc([c.site, c.country].filter(Boolean).join(' · ')) || '—'}</td>
       <td class="text-sm">${c.revoked ? '—' : c.online ? `<span style="color:#16a34a">● ${ago(c.last_seen_at)}</span>` : `<span style="color:#dc2626">${c.last_seen_at ? ago(c.last_seen_at) : 'never'}</span>`}</td>
       <td class="text-sm text-muted">${hEsc(c.version || '—')}${c.last_ip ? ' · ' + hEsc(c.last_ip) : ''}</td>
-      <td style="white-space:nowrap">${canManage ? `${c.revoked ? '' : `<button class="btn btn-ghost btn-sm" onclick="revokeCollector(${c.id}, '${hEsc(c.name).replace(/'/g, '&#39;')}')">Revoke key</button>`}
-        <button class="btn btn-ghost btn-sm" onclick="deleteCollector(${c.id}, '${hEsc(c.name).replace(/'/g, '&#39;')}')">Delete</button>` : ''}</td></tr>`).join('')
+      <td style="white-space:nowrap">${canManage ? `${c.revoked ? '' : `<button class="btn btn-ghost btn-sm" onclick="revokeCollector(${c.id}, ${jsArg(c.name)})">Revoke key</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="deleteCollector(${c.id}, ${jsArg(c.name)})">Delete</button>` : ''}</td></tr>`).join('')
     : `<tr><td colspan="5" class="empty-state">No collectors yet${canManage ? ' — click ➕ Add collector.' : '.'}</td></tr>`;
 }
 

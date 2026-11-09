@@ -1,3 +1,10 @@
+// Safe text for innerHTML / attributes (escapes & < > " ').
+function htmlEsc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// A string argument inside onclick="fn(…)" — JSON-quoted, then HTML-escaped for the attribute.
+function jsArg(v) { return htmlEsc(JSON.stringify(String(v == null ? '' : v))); }
+
 /* ── Shared utilities used by both dashboard.js and inventory.js ── */
 
 // Toast notifications
@@ -284,11 +291,11 @@ async function populateDeptOptions() {
     const { departments } = await apiGet('/api/assets/filters');
     const depts = departments || [];
     const optEsc = (d) => String(d).replace(/"/g, '&quot;');
-    if (dl) dl.innerHTML = depts.map(d => `<option value="${optEsc(d)}"></option>`).join('');
+    if (dl) dl.innerHTML = depts.map(d => `<option value="${htmlEsc(d)}"></option>`).join('');
     if (sel && sel.tagName === 'SELECT') {
       const cur = sel.value;
       sel.innerHTML = '<option value="">— Select department —</option>'
-        + depts.map(d => `<option value="${optEsc(d)}">${d}</option>`).join('')
+        + depts.map(d => `<option value="${htmlEsc(d)}">${htmlEsc(d)}</option>`).join('')
         + '<option value="__new__">➕ New department…</option>';
       if (cur && cur !== '__new__') sel.value = cur;
     }

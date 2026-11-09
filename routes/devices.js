@@ -38,6 +38,11 @@ router.use((req, res, next) => {
 });
 
 const STALE_DAYS = 90;
+// Uploads / undo that replace data of every country: global IT admins only.
+const globalITAdmin = (req) => isITAdmin(req.user) && !scopeList(req);
+// A country-scoped user may only act on devices / assets of their own countries.
+const outOfScope = (req, ...countries) => !!scopeList(req) && countries.some(c => !c || !inScope(req, c));
+const notYours = (res) => res.status(403).json({ error: 'Not in your region' });
 // Bulk data features (Import exports, Upload Azure users CSV, Add all, Fill assets from Intune) are
 // OFF unless Render sets IMPORTS_ENABLED=1 — turned off after the first import mixed up data.
 const IMPORTS_ENABLED = process.env.IMPORTS_ENABLED === '1';
@@ -132,7 +137,7 @@ router.get('/stats', wrap(async (req, res) => {
     lastImport: await getMeta('directory_last_import'),
     needsCheck: await one("d.issues <> ''"),
     deviceCheckLast: await getMeta('device_check_last'),
-    canCheck: isITAdmin(req.user),
+    canCheck: globalITAdmin(req),
     canImport: IMPORTS_ENABLED && isITAdmin(req.user),
     importsEnabled: IMPORTS_ENABLED,
     // The one-off "Undo Microsoft import" (Oct 2026) is done; it would now also remove assets added from
@@ -634,12 +639,12 @@ function undoSummary(p) {
 }
 
 router.get('/undo-import', wrap(async (req, res) => {
-  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can undo the import' });
+  if (!globalITAdmin(req)) return res.status(403).json({ error: 'Only an IT admin can undo the import' });
   res.json(undoSummary(await undoPlan()));
 }));
 
 router.post('/undo-import', wrap(async (req, res) => {
-  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can undo the import' });
+  if (!globalITAdmin(req)) return res.status(403).json({ error: 'Only an IT admin can undo the import' });
   if (process.env.UNDO_IMPORT_ENABLED !== '1') return res.status(403).json({ error: 'Undo import is switched off (it was a one-off for the October import).' });
   const plan = await undoPlan();
   const summary = undoSummary(plan);
@@ -730,7 +735,7 @@ const CHECK_COLS = ['device_key', 'name', 'country', 'user_upn', 'user_name', 'p
   'account_enabled', 'last_sign_in', 'last_checkin', 'intune_id', 'entra_device_id', 'entra_object_id', 'in_intune', 'in_entra',
   'issues', 'asset_values'];
 router.post('/check-upload', wrap(async (req, res) => {
-  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can upload device exports' });
+  if (!globalITAdmin(req)) return res.status(403).json({ error: 'Only a global IT admin can upload the device exports (they cover every country)' });
   const texts = (req.body && Array.isArray(req.body.files)) ? req.body.files : [];
   if (!texts.length) return res.status(400).json({ error: 'No files received' });
   const files = {};
@@ -744,7 +749,7 @@ router.post('/check-upload', wrap(async (req, res) => {
   await new Promise(r => setImmediate(r));                         // let other requests through after parsing
   const people = await all('SELECT id, email, ad_sam, ad_seen_at, country, display_name FROM personnel');
   if (!people.some(p => p.ad_seen_at)) return res.status(400).json({ error: 'Upload the AD user list in User Inventory first — devices are kept only for people in the AD list.' });
-  const assets = await all('SELECT id, computer_no, serial_no, brand_model, ad_name, user_name, asset_type, asset_code, asset_s4, asset_description FROM assets WHERE deleted_at IS NULL');
+  const assets = await all('SELECT id, computer_no, serial_no, brand_model, ad_name, user_name, asset_type, asset_code, asset_s4, asset_description FROM assets WHERE deleted_at IS NULL ORDER BY id');
   const acks = await all('SELECT device_key, code, value FROM device_ack');
   const { devices, stats } = checkDevices(files, people, assets, acks);
   const sample = devices.filter(d => d.issues).slice(0, 400).map(d => ({ name: d.name, user: d.user_name, upn: d.user_upn, country: d.country,
@@ -752,9 +757,14 @@ router.post('/check-upload', wrap(async (req, res) => {
   const summary = { files: Object.keys(files), stats, sample, acks: acks.length };
   if (!req.body.apply) return res.json({ preview: true, ...summary });
 
+  if (checkUploadRunning) return res.status(409).json({ error: 'Another device upload is being applied right now — try again in a minute.' });
+  checkUploadRunning = true;
+  try {
   const now = (await get("SELECT datetime('now') AS n")).n;
+  // Keep each device's first-seen date from the previous list ("New since the first import").
+  const firstSeen = new Map((await all("SELECT device_key, first_seen_at FROM devices WHERE device_key <> ''")).map(r => [r.device_key, r.first_seen_at]));
   const cols = [...CHECK_COLS, 'imported_at', 'first_seen_at'];
-  const rows = devices.map(d => [...CHECK_COLS.map(c => (d[c] === undefined ? null : d[c])), now, now]);
+  const rows = devices.map(d => [...CHECK_COLS.map(c => (d[c] === undefined ? null : d[c])), now, firstSeen.get(d.device_key) || now]);
   try {
     // New snapshot first, then drop the old one — if anything fails the previous list stays.
     await batch(multiInsert('devices', cols, rows, 25), 50);
@@ -765,13 +775,16 @@ router.post('/check-upload', wrap(async (req, res) => {
     return res.status(500).json({ error: `Upload failed: ${errorText(e)} — the previous Devices list is kept; try again.` });
   }
   await setMeta('device_check_last', now);
+  if (!firstSeen.size) await setMeta('baseline_devices', now);      // first upload = baseline, nothing is "New"
   await recheckDevices(true);
   const msg = `${req.user.full_name} uploaded Intune + Entra devices: ${stats.kept} devices of ${stats.users} AD users, `
     + `${stats.withIssues} with differences from Asset Inventory (${stats.notInAssets} not in Asset Inventory).`;
   await audit(req.user, 'IMPORT', null, msg);
   await notify({ audience: 'IT', scope: 'asset', message: msg });
   res.json({ applied: true, ...summary });
+  } finally { checkUploadRunning = false; }
 }));
+let checkUploadRunning = false;
 
 const issuesOf = (d) => { try { return d.issues ? JSON.parse(d.issues) : []; } catch { return []; } };
 const ts16 = () => new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -783,9 +796,11 @@ router.post('/:id/ack', wrap(async (req, res) => {
   if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can mark differences as checked' });
   const d = await get('SELECT * FROM devices WHERE id = ?', [req.params.id]);
   if (!d) return res.status(404).json({ error: 'Device not found' });
+  if (outOfScope(req, d.country)) return notYours(res);
+  const body = req.body || {};
   const list = issuesOf(d);
-  const other = req.body.other != null ? Number(req.body.other) : null;
-  const it = list.find(i => i.code === req.body.code && (other == null || Number(i.other) === other));
+  const other = body.other != null ? Number(body.other) : null;
+  const it = list.find(i => i.code === body.code && (other == null || Number(i.other) === other));
   if (!it) return res.status(400).json({ error: 'That difference is no longer open' });
   // Duplicates are remembered per other asset ("duplicate:<id>"), the rest per Intune value.
   const perOther = it.code === 'duplicate' || it.code === 'sap_desc' || (it.code === 'conflict' && it.other);
@@ -819,6 +834,7 @@ router.post('/:id/merge', wrap(async (req, res) => {
   const A = d.asset_id ? await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [d.asset_id]) : null;
   const B = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [otherId]);
   if (!A || !B) return res.status(404).json({ error: 'One of the two assets no longer exists' });
+  if (outOfScope(req, d.country, A.country, B.country)) return notYours(res);
   if (serialKey(A.serial_no) !== serialKey(d.serial_no) && serialKey(B.serial_no) !== serialKey(d.serial_no)) {
     return res.status(400).json({ error: 'The serials no longer match the Intune device — check by hand' });
   }
@@ -829,49 +845,70 @@ router.post('/:id/merge', wrap(async (req, res) => {
   const hasCode = (x) => !!codeOf(x);
   const keep = hasCode(A) !== hasCode(B) ? (hasCode(A) ? A : B) : (A.id < B.id ? A : B);
   const drop = keep === A ? B : A;
+  // Same locks as a manual edit (routes/assets.js PUT): locked Serial / Brand / Asset code, locked model,
+  // locked holder. Locked fields are left as they are; a Serial that must change on a locked record stops the merge.
+  let lockedModels = [];
+  try { lockedModels = JSON.parse(await getMeta('locked_models') || '[]'); } catch { lockedModels = []; }
+  const modelLocked = !!keep.brand_model && lockedModels.some(m => lcKey(m) === lcKey(keep.brand_model));
+  const PROTECTED = ['serial_no', 'brand_model', 'asset_code'];
   const sets = {};
   if (d.name && keep.computer_no !== d.name) sets.computer_no = d.name;
   if (d.serial_no && keep.serial_no !== d.serial_no) {
     if (keep.fields_locked) return res.status(403).json({ error: `Serial is locked on asset #${keep.id} — an IT admin must unlock it first (History Usage), then merge.` });
+    if (modelLocked) return res.status(403).json({ error: `Model "${keep.brand_model}" is locked — unlock it in Dashboard → Top Models first, then merge.` });
     sets.serial_no = d.serial_no;
   }
   // The system wins for who uses the machine: the device's user from the AD list
-  // (User Name = AD display name, AD Name = the account before @).
-  const person = d.person_id ? await get('SELECT display_name FROM personnel WHERE id = ?', [d.person_id]) : null;
-  const sysAd = String(d.user_upn || '').split('@')[0];
-  const sysUser = (person && person.display_name) || d.user_name || '';
-  if (sysAd && lcKey(keep.ad_name) !== lcKey(sysAd)) sets.ad_name = sysAd;
-  if (sysUser && String(keep.user_name || '') !== sysUser) sets.user_name = sysUser;
+  // (User Name = AD display name, AD Name = the account before @) — unless the holder is locked.
+  if (!keep.user_locked) {
+    const person = d.person_id ? await get('SELECT display_name FROM personnel WHERE id = ?', [d.person_id]) : null;
+    const sysAd = String(d.user_upn || '').split('@')[0];
+    const sysUser = (person && person.display_name) || d.user_name || '';
+    if (sysAd && lcKey(keep.ad_name) !== lcKey(sysAd)) sets.ad_name = sysAd;
+    if (sysUser && String(keep.user_name || '') !== sysUser) sets.user_name = sysUser;
+  }
   // …and for what describes the machine today, the newer record (created from Intune) wins when it has a value.
   if (drop.id > keep.id) {
-    let lockedModels = [];
-    try { lockedModels = JSON.parse(await getMeta('locked_models') || '[]'); } catch { lockedModels = []; }
-    const modelLocked = keep.brand_model && lockedModels.some(m => lcKey(m) === lcKey(keep.brand_model));
     for (const k of MERGE_SYSTEM) {
-      if (k === 'brand_model' && modelLocked) continue;
+      if (k === 'brand_model' && (modelLocked || keep.fields_locked)) continue;
+      if (k === 'country' && outOfScope(req, drop.country)) continue;
       if (String(drop[k] || '').trim() && String(drop[k]) !== String(keep[k] || '')) sets[k] = drop[k];
     }
   }
   // Accounting / IT details stay from the kept record; only its empty fields are filled from the other.
-  for (const k of MERGE_FILL) if (sets[k] === undefined && !String(keep[k] || '').trim() && String(drop[k] || '').trim()) sets[k] = drop[k];
-  // A real change of holder (another AD account) locks the record, like a manual edit.
-  const holderChanged = sets.ad_name !== undefined && String(keep.ad_name || '').trim() !== '';
+  for (const k of MERGE_FILL) {
+    if (sets[k] !== undefined || String(keep[k] || '').trim() || !String(drop[k] || '').trim()) continue;
+    if (PROTECTED.includes(k) && keep.fields_locked) continue;
+    if (k === 'country' && outOfScope(req, drop.country)) continue;
+    if ((k === 'user_name' || k === 'ad_name') && keep.user_locked) continue;
+    sets[k] = drop[k];
+  }
+  // Office / Factory exist only in Vietnam.
+  const finalCountry = sets.country !== undefined ? sets.country : keep.country;
+  const finalLoc = sets.location !== undefined ? sets.location : keep.location;
+  if (finalCountry !== 'Vietnam' && ['Office', 'Factory'].includes(finalLoc)) sets.location = '';
+  // Locks, as for a manual edit: a protected field changed → fields locked; a holder that had a value changed → user locked.
+  const protectedChanged = PROTECTED.some(k => sets[k] !== undefined);
+  const holderChanged = ['ad_name', 'user_name'].some(k => sets[k] !== undefined && String(keep[k] || '').trim() !== '');
   const ts = ts16();
   const line = `${ts} UTC: merged with asset #${drop.id}${drop.asset_s4 || drop.asset_code ? ` (${drop.asset_s4 || drop.asset_code})` : ''} — same machine as Intune device ${d.name}`
     + `${Object.keys(sets).length ? `; set ${Object.entries(sets).map(([k, v]) => `${k}: "${keep[k] || '∅'}"→"${v}"`).join('; ')}` : ''} by ${req.user.username}`;
   const dropHist = drop.history_usage ? `\n— history of merged asset #${drop.id} —\n${drop.history_usage}` : '';
-  const lockLine = holderChanged ? `\n${ts} UTC: 🔒 locked — User Name & AD Name changed by ${req.user.username} (IT admin to unlock)` : '';
+  const lockLine = (holderChanged ? `\n${ts} UTC: 🔒 locked — User Name & AD Name changed by ${req.user.username} (IT admin to unlock)` : '')
+    + (protectedChanged ? `\n${ts} UTC: 🔒 locked ${PROTECTED.filter(k => sets[k] !== undefined).map(k => ({ serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' })[k]).join(', ')} after merge by ${req.user.username}` : '');
   const hist = (keep.history_usage ? keep.history_usage + '\n' : '') + line + lockLine + dropHist;
   const cols = Object.keys(sets);
   await batch([
     { sql: `UPDATE assets SET ${cols.map(k => `${k} = ?`).concat(['history_usage = ?', 'sap_confirmed = 0',
-             `user_locked = CASE WHEN ${holderChanged ? 1 : 0} = 1 THEN 1 ELSE user_locked END`]).join(', ')} WHERE id = ?`,
+             `user_locked = CASE WHEN ${holderChanged ? 1 : 0} = 1 THEN 1 ELSE user_locked END`,
+             `fields_locked = CASE WHEN ${protectedChanged ? 1 : 0} = 1 THEN 1 ELSE fields_locked END`]).join(', ')} WHERE id = ?`,
       args: [...cols.map(k => sets[k]), hist, keep.id] },
     { sql: "UPDATE assets SET deleted_at = datetime('now'), deleted_by = ?, history_usage = ? WHERE id = ?",
       args: [`${req.user.username} (merged into #${keep.id})`, `${drop.history_usage ? drop.history_usage + '\n' : ''}${ts} UTC: merged into asset #${keep.id} (same serial) by ${req.user.username}`, drop.id] },
     { sql: "UPDATE maintenance_log SET asset_id = ? WHERE asset_id = ? AND asset_type = 'asset'", args: [keep.id, drop.id] },
     { sql: "UPDATE license_assignments SET assignee_ref = ? WHERE assignee_type = 'asset' AND assignee_ref = ?", args: [String(keep.id), String(drop.id)] },
     { sql: 'UPDATE devices SET asset_id = ? WHERE asset_id = ?', args: [keep.id, drop.id] },
+    { sql: 'UPDATE device_links SET asset_id = ? WHERE asset_id = ?', args: [keep.id, drop.id] },
   ]);
   const fresh = await get('SELECT computer_no, serial_no, brand_model, ad_name, user_name FROM assets WHERE id = ?', [keep.id]);
   await run('UPDATE devices SET asset_values = ? WHERE id = ?', [JSON.stringify(fresh), d.id]);
@@ -893,6 +930,7 @@ router.post('/:id/use-intune', wrap(async (req, res) => {
   if (!it || !['pc_no', 'serial', 'user'].includes(code)) return res.status(400).json({ error: 'Only Computer No, Serial and User can be taken from Intune' });
   const a = d.asset_id ? await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [d.asset_id]) : null;
   if (!a) return res.status(404).json({ error: 'The linked asset no longer exists' });
+  if (outOfScope(req, d.country, a.country)) return notYours(res);
   const sets = {};
   if (code === 'pc_no') sets.computer_no = d.name;
   if (code === 'serial') {
@@ -920,7 +958,7 @@ router.post('/:id/use-intune', wrap(async (req, res) => {
   const add = (line) => { hist = hist ? `${hist}\n${line}` : line; };
   if (changes.length) add(`${ts16()} UTC: edited ${changes.map(([k, v]) => `${LABEL[k]}: "${a[k] || '∅'}"→"${v || '∅'}"`).join('; ')} from Intune (${d.name}) by ${req.user.username}`);
   const holderChange = code === 'user' && (a.ad_name || a.user_name) && changes.length;
-  const protectedChange = code === 'serial' && a.serial_no && changes.length;
+  const protectedChange = code === 'serial' && changes.length > 0;     // any Serial change locks, like a manual edit
   if (holderChange) add(`${ts16()} UTC: 🔒 locked — User Name & AD Name changed by ${req.user.username} (IT admin to unlock)`);
   if (protectedChange) add(`${ts16()} UTC: 🔒 locked Serial after edit by ${req.user.username}`);
   if (changes.length) {
