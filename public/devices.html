@@ -54,6 +54,7 @@
     <button class="btn btn-primary btn-sm" id="btn-addall" style="display:none" title="Add every device of a known country to Asset Inventory">➕ Add all to Asset Inventory</button>
     <button class="btn btn-ghost btn-sm" id="btn-fill" style="display:none" title="Fill empty Serial / Computer No / AD Name / User on linked assets">🔗 Fill assets from Intune</button>
     <button class="btn btn-primary btn-sm" id="btn-import" style="display:none">⬆ Import exports</button>
+    <button class="btn btn-primary btn-sm" id="btn-check-upload" style="display:none" title="Upload the Intune and Entra device exports to compare them with Asset Inventory">⬆ Upload Intune + Entra</button>
     <button class="btn btn-ghost btn-sm" id="btn-undo" style="display:none" title="Remove what the Microsoft imports added">↩ Undo Microsoft import</button>
   </header>
 
@@ -68,9 +69,19 @@
           <input type="text" id="search-input" placeholder="Search device, user, email, serial, model…">
         </div>
         <select class="filter-select" id="f-view" title="Which devices to list">
+          <option value="check">Needs check (differs from Asset Inventory)</option>
           <option value="pending">To add (not in Asset / User Inventory)</option>
           <option value="fresh">New since the first import</option>
           <option value="">All devices</option>
+        </select>
+        <select class="filter-select" id="f-issue" title="Which difference">
+          <option value="">All differences</option>
+          <option value="not_in_assets">Not in Asset Inventory</option>
+          <option value="serial">Serial differs / missing</option>
+          <option value="pc_no">Computer No differs</option>
+          <option value="user">User differs / missing</option>
+          <option value="brand">Brand differs</option>
+          <option value="conflict">PC No and serial point to different assets</option>
         </select>
         <select class="filter-select" id="f-country"><option value="">All countries</option></select>
         <select class="filter-select" id="f-os"><option value="">All OS</option></select>
@@ -115,10 +126,10 @@
               <th>User</th>
               <th>OS</th>
               <th>Serial #</th>
-              <th>Managed</th>
-              <th>Compliant</th>
-              <th>Last sign-in</th>
-              <th>Asset</th>
+              <th>Managed / Owner</th>
+              <th>Compliance</th>
+              <th title="Days since the last Intune check-in and the last Entra sign-in">Last seen</th>
+              <th>Asset / differences</th>
             </tr>
           </thead>
           <tbody id="dev-tbody"><tr><td colspan="10" class="empty-state">Loading…</td></tr></tbody>
@@ -131,6 +142,22 @@
       </div>
     </div>
   </main>
+</div>
+
+<!-- Device check upload (Intune + Entra) -->
+<div class="modal-overlay" id="dcheck-overlay">
+  <div class="modal" style="max-width:1000px;width:96vw">
+    <div class="modal-header">
+      <span class="modal-title">Upload Intune + Entra devices</span>
+      <button class="modal-close" id="dcheck-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="dcheck-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <span class="text-muted text-sm" id="dcheck-foot" style="margin-right:auto"></span>
+      <button class="btn btn-ghost" id="dcheck-cancel">Close</button>
+      <button class="btn btn-primary" id="dcheck-apply" disabled>Apply — replace the Devices list</button>
+    </div>
+  </div>
 </div>
 
 <!-- Undo import modal -->
@@ -240,6 +267,6 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
-<script src="/js/devices.js"></script>
+<script src="/js/devices.js?v=20261110b"></script>
 </body>
 </html>

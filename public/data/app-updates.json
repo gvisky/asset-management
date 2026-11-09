@@ -1,6 +1,23 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Asset Inventory: view by user",
+    "items": [
+      "Assets grouped by person, with each asset's Intune status and the person's other devices (PCs not in Asset Inventory highlighted, phones / tablets).",
+      "Switch back any time: View: list."
+    ]
+  },
+  {
+    "date": "2026-11-10",
+    "title": "Device Check: Intune + Entra vs Asset Inventory (IT)",
+    "items": [
+      "Devices → ⬆ Upload Intune + Entra: only devices of people in the AD list; nothing in Asset / User Inventory changes by itself.",
+      "Differences are highlighted (not in Asset Inventory, serial, PC No, user, brand) with Use Intune value / Mark as checked.",
+      "Compliance, company / personal, managed by, and days since the last check-in / sign-in."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "AD upload: resource accounts are kept",
     "items": [
       "Shared mailboxes / email groups (OU …/Resources) are now added to User Inventory too, marked Resource.",
