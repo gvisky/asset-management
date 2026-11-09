@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Merge puts the system first",
+    "items": [
+      "Merging duplicates now takes PC No + Serial from Intune, User Name / AD Name from AD, and Brand / Model, Type, Location, Status from the record created from Intune.",
+      "SAP codes, department, cost center, purchase date and history stay from the old record."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Device Check: merge duplicate assets",
     "items": [
       "Same serial on two assets (typos like O/0 included) and at most one with an SAP code → Merge: keeps the SAP record with the Intune Computer No + Serial, the other goes to the Recycle Bin.",
