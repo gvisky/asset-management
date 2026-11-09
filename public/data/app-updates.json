@@ -1,5 +1,13 @@
 [
   {
+    "date": "2026-11-10",
+    "title": "AD upload: resource accounts are kept",
+    "items": [
+      "Shared mailboxes / email groups (OU …/Resources) are now added to User Inventory too, marked Resource.",
+      "New filter: AD: resource accounts."
+    ]
+  },
+  {
     "date": "2026-11-09",
     "title": "User Inventory: Last logon column",
     "items": [

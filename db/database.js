@@ -925,7 +925,8 @@ async function migrate() {
   if (!pcols2.includes('azure_seen_at'))  await backend.run("ALTER TABLE personnel ADD COLUMN azure_seen_at TEXT DEFAULT NULL");
   // Active Directory export (IT uploads the AD user list): account, manager, OU, last logon.
   for (const [col, type] of [['ad_sam', "TEXT DEFAULT ''"], ['ad_manager', "TEXT DEFAULT ''"], ['ad_ou', "TEXT DEFAULT ''"],
-                             ['ad_last_logon', 'TEXT DEFAULT NULL'], ['ad_never_logon', 'INTEGER NOT NULL DEFAULT 0'], ['ad_seen_at', 'TEXT DEFAULT NULL']]) {
+                             ['ad_last_logon', 'TEXT DEFAULT NULL'], ['ad_never_logon', 'INTEGER NOT NULL DEFAULT 0'], ['ad_seen_at', 'TEXT DEFAULT NULL'],
+                             ['ad_resource', 'INTEGER NOT NULL DEFAULT 0']]) {
     if (!pcols2.includes(col)) await backend.run(`ALTER TABLE personnel ADD COLUMN ${col} ${type}`);
   }
 
