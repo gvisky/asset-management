@@ -160,6 +160,9 @@ async function loadPeople(page = 1) {
   if (search)    params.set('search', search);
   if (country)   params.set('country', country);
   if (status === '__azure_missing') params.set('azure', 'missing');
+  else if (status === '__ad_missing') params.set('ad', 'missing');
+  else if (status === '__ad_stale') params.set('ad', 'stale');
+  else if (status === '__ad_never') params.set('ad', 'never');
   else if (status) params.set('status', status);
   if (user_type) params.set('user_type', user_type);
 
@@ -168,6 +171,9 @@ async function loadPeople(page = 1) {
     canEditUsers = !!(result.can && result.can.edit);
     renderHint();
     lastAzureImport = result.last_import || null;
+    lastAdImport = result.ad_last_import || null;
+    adCountries = result.ad_countries || [];
+    document.getElementById('btn-ad-upload').style.display = canEditUsers ? '' : 'none';
     peopleBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
@@ -186,6 +192,22 @@ function renderHint() {
 }
 
 let lastAzureImport = null;
+let lastAdImport = null, adCountries = [];
+
+// AD line under the email: account · last logon (red after 90 days) · manager.
+function adLine(p) {
+  if (!p.ad_seen_at) return '';
+  let logon;
+  if (p.ad_never_logon) logon = '<span class="text-muted">never logged on</span>';
+  else if (p.ad_last_logon) {
+    const d = new Date(p.ad_last_logon.replace(' ', 'T'));
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    const txt = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+    logon = days > 90 ? `<span style="color:#dc2626;font-weight:600" title="No AD logon for ${days} days">logon ${txt}</span>` : `logon ${txt}`;
+  } else logon = '';
+  return `<div class="text-muted" style="font-size:11.5px;line-height:1.4">AD <b>${esc(p.ad_sam)}</b>${logon ? ' · ' + logon : ''}`
+    + `${p.ad_manager ? `<br>↑ ${esc(p.ad_manager)}` : ''}</div>`;
+}
 let peopleBaseline = null;   // first big import — rows from it get no New / Edited badge
 
 function renderTable(rows) {
@@ -209,14 +231,17 @@ function renderTable(rows) {
     // In User Inventory but missing from the latest Azure user export → left / disabled / renamed?
     const notInAzure = lastAzureImport && p.azure_seen_at && p.azure_seen_at < lastAzureImport
       ? ' <span class="badge badge-retired" title="Not in the latest Azure user export (left, disabled or renamed?)">not in Azure</span>' : '';
+    // In a country the AD list covers, but not in the latest AD upload.
+    const notInAd = lastAdImport && adCountries.includes(p.country) && (!p.ad_seen_at || p.ad_seen_at < lastAdImport) && p.status !== 'deleted'
+      ? ' <span class="badge badge-retired" title="Not in the latest AD user list (left, disabled or renamed?)">not in AD</span>' : '';
     const dept = p.department || '';
     const cc   = p.cost_center || '';
     const editBtn = canEditUsers ? `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
         onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(p.country)}', '${esc(dept)}', '${esc(cc)}')">✏️</button> ` : '';
     return `
       <tr>
-        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}
-          <div class="text-muted text-sm">${esc(p.email) || '—'}</div></td>
+        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}${notInAd}
+          <div class="text-muted text-sm">${esc(p.email) || '—'}</div>${adLine(p)}</td>
         <td class="when-cell">${whenCell(p.created_at, p.updated_at, peopleBaseline)}</td>
         <td>${assetsCell}</td>
         <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
@@ -436,3 +461,105 @@ document.addEventListener('DOMContentLoaded', () => {
     loadPeople(1);
   });
 });
+
+// ── Upload AD user list (IT admin): preview → tick / untick → apply ───────────
+const adH = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function adLogonText(r) {
+  if (r.never) return '<span class="text-muted">never</span>';
+  if (!r.lastLogon) return '—';
+  const d = new Date(r.lastLogon.replace(' ', 'T'));
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  const t = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+  return days > 90 ? `<span style="color:#dc2626">${t}</span>` : t;
+}
+function setupAdUpload() {
+  const input = document.getElementById('ad-file');
+  const ov = document.getElementById('ad-overlay');
+  const body = document.getElementById('ad-body');
+  const apply = document.getElementById('ad-apply');
+  const foot = document.getElementById('ad-foot');
+  let fileB64 = null;
+  const close = () => { ov.classList.remove('open'); fileB64 = null; };
+
+  document.getElementById('btn-ad-upload').addEventListener('click', () => { input.value = ''; input.click(); });
+  input.addEventListener('change', async () => {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    ov.classList.add('open'); apply.disabled = true; foot.textContent = '';
+    body.innerHTML = `Reading <b>${adH(f.name)}</b>…`;
+    const buf = new Uint8Array(await f.arrayBuffer());
+    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    fileB64 = btoa(bin);
+    try { showPreview(await apiPost('/api/personnel/ad-import', { file: fileB64 })); }
+    catch (err) { let m = 'Could not read the file'; try { m = JSON.parse(err.message).error || m; } catch {} body.innerHTML = `<p style="color:#dc2626">${adH(m)}</p>`; }
+  });
+
+  function section(title, open, inner) {
+    return `<details ${open ? 'open' : ''} style="margin:10px 0;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+      <summary style="cursor:pointer;font-weight:600">${title}</summary><div style="margin-top:8px">${inner}</div></details>`;
+  }
+  const tbl = (head, rows) => `<div class="table-wrap" style="max-height:300px;overflow-y:auto"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+
+  function showPreview(r) {
+    const people = r.fresh.filter(x => !x.shared), shared = r.fresh.filter(x => x.shared);
+    const freshRow = (x, checked, cls) => `<tr><td><input type="checkbox" class="${cls}" data-sam="${adH(x.sam)}" ${checked ? 'checked' : ''}></td>
+      <td><b>${adH(x.sam)}</b></td><td>${adH(x.name)}</td><td>${adH(x.country || '—')}</td><td class="text-sm">${adH(x.manager || '—')}</td><td class="text-sm">${adLogonText(x)}</td></tr>`;
+    body.innerHTML = `
+      <div class="kpi-grid" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:8px">
+        ${[['AD accounts', r.accounts, '#1a56db'], ['Matched', r.matched, '#16a34a'], ['New people', people.length, '#0891b2'],
+           ['Doubles to merge', r.merges.length, '#d97706'], ['Not in AD', r.notInAd.length, '#dc2626']]
+          .map(([l, v, c]) => `<div class="kpi" style="--kpi-color:${c}"><div class="kpi-main"><div class="kpi-label"><span class="kpi-dot"></span>${l}</div><div class="kpi-value">${v}</div></div></div>`).join('')}
+      </div>
+      <p class="text-sm text-muted" style="margin:4px 0 8px">Countries in this file: <b>${adH(r.countries.join(', '))}</b> ·
+        ${r.users} user accounts · ${r.resources.length} resource accounts (shared mailboxes / groups) are skipped ·
+        ${r.staleUsers} with no logon for 90+ days · ${r.neverUsers} never logged on.
+        Matched people get their AD account, manager and last logon; nothing else of theirs is changed.</p>
+      ${section(`➕ New people to add (${people.length}) — untick anyone you don't want`, true, people.length
+        ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], people.map(x => freshRow(x, true, 'ad-add')))
+          + '<p class="text-muted text-sm">Email is set to account@ the usual company domain; HR fills User Type.</p>' : '<span class="text-muted">None.</span>')}
+      ${section(`🗂 Looks like shared / function accounts (${shared.length}) — not added unless ticked`, false, shared.length
+        ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], shared.map(x => freshRow(x, false, 'ad-shared'))) : '<span class="text-muted">None.</span>')}
+      ${section(`🔀 Doubles to merge (${r.merges.length}) — the second row is merged into the first, then removed`, true, r.merges.length
+        ? tbl(['Merge', 'Keep (in AD)', 'Double (removed)'], r.merges.map(m => `<tr><td><input type="checkbox" class="ad-merge" data-id="${m.drop.id}" checked></td>
+            <td><b>${adH(m.keep.name)}</b><div class="text-muted text-sm">${adH(m.keep.email)} · AD ${adH(m.sam)}</div></td>
+            <td>${adH(m.drop.name)}<div class="text-muted text-sm">${adH(m.drop.email)} · ${adH(m.drop.status)}${m.drop.user_type ? ' · ' + adH(m.drop.user_type) : ''}</div></td></tr>`))
+          + '<p class="text-muted text-sm">User Type, Leaving Date, Department, Cost Center, Company and Position from the double fill blanks on the kept row.</p>' : '<span class="text-muted">None found.</span>')}
+      ${r.matchedByName.length ? section(`🔗 Matched by name (${r.matchedByName.length}) — AD account differs from the email`, false,
+        tbl(['AD account', 'AD name', 'User Inventory'], r.matchedByName.map(m => `<tr><td><b>${adH(m.ad.sam)}</b></td><td>${adH(m.ad.name)}</td><td>${adH(m.person.name)}<div class="text-muted text-sm">${adH(m.person.email)}</div></td></tr>`))) : ''}
+      ${r.countryDiffs.length ? section(`🌍 Country differs (${r.countryDiffs.length}) — not changed, check by hand`, false,
+        tbl(['Person', 'User Inventory', 'AD OU'], r.countryDiffs.map(d => `<tr><td>${adH(d.name)} <span class="text-muted text-sm">(${adH(d.sam)})</span></td><td>${adH(d.inventory)}</td><td>${adH(d.ad)}</td></tr>`))) : ''}
+      ${section(`⚠ In User Inventory but not in AD (${r.notInAd.length}) — left, disabled or renamed? Not changed; marked "not in AD"`, false, r.notInAd.length
+        ? tbl(['Name', 'Email', 'Country', 'Status'], r.notInAd.map(p => `<tr><td>${adH(p.name)}</td><td class="text-sm">${adH(p.email)}</td><td>${adH(p.country)}</td><td class="text-sm">${adH(p.status)}</td></tr>`)) : '<span class="text-muted">None.</span>')}
+      ${section(`📭 Resource accounts skipped (${r.resources.length})`, false,
+        r.resources.map(x => `<span class="badge" style="margin:2px">${adH(x.name)}</span>`).join(' ') || '<span class="text-muted">None.</span>')}`;
+    const count = () => {
+      const add = body.querySelectorAll('.ad-add:checked, .ad-shared:checked').length;
+      const mer = body.querySelectorAll('.ad-merge:checked').length;
+      foot.textContent = `Will update ${r.matched} matched · add ${add} · merge ${mer}`;
+    };
+    body.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', count));
+    count();
+    apply.disabled = false;
+  }
+
+  apply.addEventListener('click', async () => {
+    if (!fileB64) return;
+    const skipAdd = [...body.querySelectorAll('.ad-add:not(:checked)')].map(c => c.dataset.sam);
+    const addShared = [...body.querySelectorAll('.ad-shared:checked')].map(c => c.dataset.sam);
+    const skipMerge = [...body.querySelectorAll('.ad-merge:not(:checked)')].map(c => Number(c.dataset.id));
+    apply.disabled = true; apply.textContent = 'Applying…';
+    try {
+      const r = await apiPost('/api/personnel/ad-import', { file: fileB64, apply: true, skipAdd, addShared, skipMerge });
+      showToast(`AD list applied: ${r.matched} updated, ${r.added} added, ${r.merged} merged`);
+      close();
+      loadPeople(1); if (typeof loadSummary === 'function') loadSummary();
+    } catch (err) {
+      let m = 'Could not apply'; try { m = JSON.parse(err.message).error || m; } catch {}
+      showToast(m, 'error'); apply.disabled = false;
+    }
+    apply.textContent = 'Apply to User Inventory';
+  });
+  document.getElementById('ad-close').addEventListener('click', close);
+  document.getElementById('ad-cancel').addEventListener('click', close);
+}
+document.addEventListener('DOMContentLoaded', setupAdUpload);

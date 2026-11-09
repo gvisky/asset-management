@@ -1,12 +1,13 @@
 const express = require('express');
 const XLSX = require('xlsx');
 const router = express.Router();
-const { get, all, run, audit, notify, getMeta, setMeta, errorText } = require('../db/database');
+const { get, all, run, batch, audit, notify, getMeta, setMeta, errorText } = require('../db/database');
 const { requireAuth, isITAdmin } = require('../middleware/auth');
 const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
 
 const { normCountry } = require('../lib/countries');
-const { knownCountries } = require('../lib/country-list');
+const { knownCountries, resetCountryCache } = require('../lib/country-list');
+const { parseAdFile, planAdImport } = require('../lib/ad-import');
 const { scopeList, inScope, countrySql, resolveScopedCountry } = require('../lib/scope');
 const { parseCsv } = require('../lib/directory-import');
 
@@ -50,6 +51,16 @@ router.get('/', wrap(async (req, res) => {
   }
   if (status)    { conditions.push('status = ?');    params.push(status); }
   if (user_type) { conditions.push('user_type = ?'); params.push(user_type); }
+  // Active Directory: not in the latest AD upload / no logon for 90+ days / never logged on.
+  if (req.query.ad === 'missing') {
+    conditions.push(`(SELECT value FROM app_meta WHERE key = 'ad_last_import') IS NOT NULL
+      AND instr(COALESCE((SELECT value FROM app_meta WHERE key = 'ad_import_countries'), ''), '"' || country || '"') > 0
+      AND (ad_seen_at IS NULL OR ad_seen_at < (SELECT value FROM app_meta WHERE key = 'ad_last_import'))`);
+  } else if (req.query.ad === 'stale') {
+    conditions.push("ad_last_logon IS NOT NULL AND ad_last_logon < datetime('now', '-90 days')");
+  } else if (req.query.ad === 'never') {
+    conditions.push('ad_seen_at IS NOT NULL AND ad_never_logon = 1');
+  }
   // Not found in the latest Azure user export (left / disabled / renamed?).
   if (req.query.azure === 'missing') {
     conditions.push("azure_seen_at IS NOT NULL AND azure_seen_at < (SELECT value FROM app_meta WHERE key = 'personnel_last_import')");
@@ -72,7 +83,10 @@ router.get('/', wrap(async (req, res) => {
     [...params, Number(limit), offset]
   );
   const lastImport = await getMeta('personnel_last_import');
+  let adCountries = [];
+  try { adCountries = JSON.parse(await getMeta('ad_import_countries') || '[]'); } catch { adCountries = []; }
   res.json({ total, page: Number(page), limit: Number(limit), data, last_import: lastImport, baseline: await getMeta('baseline_personnel'),
+             ad_last_import: await getMeta('ad_last_import'), ad_countries: adCountries,
              can: { edit: isITAdmin(req.user) } });
 }));
 
@@ -237,6 +251,92 @@ router.post('/import', wrap(async (req, res) => {
     console.error('[import]', e);
     res.status(500).json({ error: `Import failed${e.stage ? ` while ${e.stage}` : ''}: ${errorText(e)}` });
   }
+}));
+
+// ── POST /api/personnel/ad-import — upload the Active Directory user list (IT admin) ──
+// Body: { file: base64 xlsx/csv, apply: false → preview only | true → write,
+//         skipAdd: [sam] people not to add, addShared: [sam] shared accounts to add anyway,
+//         skipMerge: [person id] doubles not to merge }
+// Matches AD accounts to people (remembered account → email before @ → same name), refreshes
+// AD account / manager / OU / last logon, adds new people, merges doubles. Resources are skipped.
+router.post('/ad-import', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can upload the AD list' });
+  const b = req.body || {};
+  if (!b.file || typeof b.file !== 'string') return res.status(400).json({ error: 'No file received' });
+  let adRows;
+  try { adRows = parseAdFile(Buffer.from(b.file, 'base64')); }
+  catch (e) { return res.status(400).json({ error: 'Could not read the file — upload the AD export (.xlsx or .csv)' }); }
+  if (!adRows.some(r => !r.resource)) {
+    return res.status(400).json({ error: 'No user accounts found. Expected columns: SAM Account Name, Display Name, Manager, OU Name, Last Logon Time.' });
+  }
+  const people = await all('SELECT * FROM personnel');
+  const plan = planAdImport(adRows, people);
+  const skipAdd = new Set((b.skipAdd || []).map(s => String(s).toLowerCase()));
+  const addShared = new Set((b.addShared || []).map(s => String(s).toLowerCase()));
+  const skipMerge = new Set((b.skipMerge || []).map(Number));
+  const toAdd = plan.fresh.filter(f => (f.shared ? addShared.has(f.sam.toLowerCase()) : !skipAdd.has(f.sam.toLowerCase())));
+  const toMerge = plan.merges.filter(m => !skipMerge.has(Number(m.drop.id)));
+  const brief = (p) => ({ id: p.id, name: p.display_name, email: p.email, country: p.country, status: p.status, user_type: p.user_type });
+  const adBrief = (r) => ({ sam: r.sam, name: r.name, country: r.country, manager: r.manager, ou: r.ou, lastLogon: r.lastLogon, never: r.never });
+  const daysAgo = (d) => (d ? Math.floor((Date.now() - new Date(d.replace(' ', 'T') + 'Z').getTime()) / 86400000) : null);
+  const summary = {
+    accounts: adRows.length, users: plan.users.length, resources: plan.resources.map(adBrief),
+    matched: plan.matched.length,
+    matchedByName: plan.byNameMatch.map(m => ({ ad: adBrief(m.r), person: brief(m.p) })),
+    fresh: plan.fresh.map(f => ({ ...adBrief(f), shared: f.shared })),
+    merges: plan.merges.map(m => ({ keep: brief(m.keep), drop: brief(m.drop), sam: m.sam })),
+    countryDiffs: plan.countryDiffs,
+    notInAd: plan.notInAd.map(brief),
+    staleUsers: plan.users.filter(r => r.lastLogon && daysAgo(r.lastLogon) > 90).length,
+    neverUsers: plan.users.filter(r => r.never).length,
+    countries: plan.covered,
+  };
+  if (!b.apply) return res.json({ preview: true, ...summary });
+
+  // ── Apply ──
+  const now = (await get("SELECT datetime('now') AS n")).n;
+  const domainVotes = people.reduce((m, p) => { const d = String(p.email || '').split('@')[1]; if (d) m[d.toLowerCase()] = (m[d.toLowerCase()] || 0) + 1; return m; }, {});
+  const domain = Object.entries(domainVotes).sort((x, y) => y[1] - x[1])[0]?.[0] || 'hayat.com.tr';
+  const adSet = (r) => [r.sam, r.manager, r.ou, r.lastLogon, r.never ? 1 : 0, now];
+  const stmts = [];
+  for (const m of plan.matched) {
+    stmts.push({ sql: `UPDATE personnel SET ad_sam = ?, ad_manager = ?, ad_ou = ?, ad_last_logon = ?, ad_never_logon = ?, ad_seen_at = ?,
+                         display_name = CASE WHEN COALESCE(display_name, '') = '' THEN ? ELSE display_name END WHERE id = ?`,
+                 args: [...adSet(m.r), m.r.name, m.p.id] });
+  }
+  for (const m of toMerge) {
+    // Keep the row that matches AD; take over what HR / IT filled on the double, then remove the double.
+    const d = m.drop;
+    stmts.push({ sql: `UPDATE personnel SET
+          user_type    = CASE WHEN COALESCE(user_type, '') = '' THEN ? ELSE user_type END,
+          leaving_date = CASE WHEN COALESCE(leaving_date, '') = '' THEN ? ELSE leaving_date END,
+          department   = CASE WHEN COALESCE(department, '') = '' THEN ? ELSE department END,
+          cost_center  = CASE WHEN COALESCE(cost_center, '') = '' THEN ? ELSE cost_center END,
+          company_name = CASE WHEN COALESCE(company_name, '') = '' THEN ? ELSE company_name END,
+          position     = CASE WHEN COALESCE(position, '') = '' THEN ? ELSE position END,
+          touched = CASE WHEN touched = 1 OR ? = 1 THEN 1 ELSE 0 END, updated_at = datetime('now')
+        WHERE id = ?`,
+      args: [d.user_type || '', d.leaving_date || '', d.department || '', d.cost_center || '', d.company_name || '', d.position || '', d.touched ? 1 : 0, m.keep.id] });
+    stmts.push({ sql: 'DELETE FROM personnel WHERE id = ?', args: [d.id] });
+  }
+  for (const f of toAdd) {
+    const email = `${f.sam}@${domain}`;
+    stmts.push({ sql: `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date,
+                         ad_sam, ad_manager, ad_ou, ad_last_logon, ad_never_logon, ad_seen_at)
+                       SELECT ?, ?, ?, '', 'Active', '', '', '', ?, ?, ?, ?, ?, ?
+                        WHERE NOT EXISTS (SELECT 1 FROM personnel WHERE LOWER(email) = LOWER(?))`,
+                 args: [f.country || 'Unknown', f.name, email, ...adSet(f), email] });
+  }
+  try { await batch(stmts, 100); }
+  catch (e) { console.error('[ad-import]', e); return res.status(500).json({ error: `AD upload failed: ${errorText(e)} — run it again, it is safe to repeat.` }); }
+  await setMeta('ad_last_import', now);
+  await setMeta('ad_import_countries', JSON.stringify(plan.covered));
+  resetCountryCache();
+  const msg = `${req.user.full_name} uploaded the AD user list: ${plan.matched.length} matched, ${toAdd.length} added, `
+    + `${toMerge.length} doubles merged, ${plan.resources.length} resource accounts skipped, ${plan.notInAd.length} people not in AD.`;
+  await audit(req.user, 'PERSONNEL', null, msg);
+  await notify({ audience: 'all', scope: 'personnel', message: msg });
+  res.json({ applied: true, ...summary, added: toAdd.length, merged: toMerge.length });
 }));
 
 // ── PUT /api/personnel/:id — edit a record (IT admin only) ────────────────────

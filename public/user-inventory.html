@@ -58,6 +58,8 @@
     <input type="file" id="csv-file" accept=".csv" style="display:none">
     <button class="btn btn-ghost btn-sm" id="btn-adduser" style="display:none;margin-left:auto">+ Add User</button>
     <button class="btn btn-primary btn-sm" id="btn-upload" style="display:none;margin-left:auto">⬆ Upload Azure users CSV</button>
+    <input type="file" id="ad-file" accept=".xlsx,.xls,.csv" style="display:none">
+    <button class="btn btn-primary btn-sm" id="btn-ad-upload" style="display:none" title="Upload the user list exported from Active Directory">⬆ Upload AD list</button>
   </header>
 
   <main class="content">
@@ -93,6 +95,9 @@
           <option value="pending delete">Confirmed Delete</option>
           <option>deleted</option>
           <option value="__azure_missing">⚠ Not in latest Azure export</option>
+          <option value="__ad_missing">⚠ Not in latest AD list</option>
+          <option value="__ad_stale">AD: no logon for 90+ days</option>
+          <option value="__ad_never">AD: never logged on</option>
         </select>
         <select class="filter-select" id="filter-usertype">
           <option value="">All User Types</option>
@@ -142,6 +147,22 @@
 </div>
 
 <!-- Add User modal (IT admin) -->
+<!-- Upload AD list: preview → apply -->
+<div class="modal-overlay" id="ad-overlay">
+  <div class="modal" style="max-width:980px;width:96vw">
+    <div class="modal-header">
+      <span class="modal-title">Upload AD user list</span>
+      <button class="modal-close" id="ad-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="ad-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <span class="text-muted text-sm" id="ad-foot" style="margin-right:auto"></span>
+      <button class="btn btn-ghost" id="ad-cancel">Close</button>
+      <button class="btn btn-primary" id="ad-apply" disabled>Apply to User Inventory</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="adduser-overlay">
   <div class="modal" style="max-width:560px">
     <div class="modal-header">
