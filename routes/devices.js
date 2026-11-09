@@ -46,6 +46,13 @@ const DEVICE_COLS = ['name', 'country', 'user_upn', 'user_name', 'os', 'os_versi
   'serial_no', 'managed_by', 'ownership', 'category', 'join_type', 'is_managed', 'is_compliant', 'account_enabled',
   'last_sign_in', 'intune_id', 'entra_device_id', 'entra_object_id', 'in_intune', 'in_entra'];
 
+// Compliance as shown in the list: Intune's status when the device is in Intune (Compliant /
+// Noncompliant / InGracePeriod), else Entra's isCompliant. 1 = compliant, 0 = not, NULL = unknown.
+// (Entra often still says "not compliant" for devices Intune reports as compliant.)
+const COMPLIANT_SQL = `(CASE WHEN COALESCE(d.compliance, '') <> '' THEN
+    CASE LOWER(d.compliance) WHEN 'compliant' THEN 1 WHEN 'noncompliant' THEN 0 WHEN 'ingraceperiod' THEN 0 ELSE NULL END
+  ELSE d.is_compliant END)`;
+
 // Shared WHERE for list/stats/export: scope + filters from the query string.
 function deviceWhere(req) {
   const q = req.query;
@@ -61,8 +68,8 @@ function deviceWhere(req) {
   if (q.os)        { cond.push('d.os = ?'); params.push(q.os); }
   if (q.source === 'intune') cond.push('d.in_intune = 1');
   if (q.source === 'entra')  cond.push('d.in_intune = 0');
-  if (q.compliant === '1') cond.push('d.is_compliant = 1');
-  if (q.compliant === '0') cond.push('d.is_compliant = 0');
+  if (q.compliant === '1') cond.push(`${COMPLIANT_SQL} = 1`);
+  if (q.compliant === '0') cond.push(`${COMPLIANT_SQL} = 0`);
   if (q.enabled === '0')   cond.push('d.account_enabled = 0');
   if (q.user === 'none')   cond.push("d.user_upn = ''");
   if (q.user === 'notin')  cond.push("d.user_upn <> '' AND d.person_id IS NULL");   // owner not in User Inventory
@@ -107,8 +114,8 @@ router.get('/stats', wrap(async (req, res) => {
   res.json({
     total,
     intune: await one('d.in_intune = 1'),
-    compliant: await one('d.is_compliant = 1'),
-    notCompliant: await one('d.is_compliant = 0'),
+    compliant: await one(`${COMPLIANT_SQL} = 1`),
+    notCompliant: await one(`${COMPLIANT_SQL} = 0`),
     disabled: await one('d.account_enabled = 0'),
     noUser: await one("d.user_upn = ''"),
     linkedAsset: await one('d.asset_id IS NOT NULL'),
