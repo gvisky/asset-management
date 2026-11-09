@@ -737,7 +737,7 @@ router.post('/check-upload', wrap(async (req, res) => {
   await new Promise(r => setImmediate(r));                         // let other requests through after parsing
   const people = await all('SELECT id, email, ad_sam, ad_seen_at, country, display_name FROM personnel');
   if (!people.some(p => p.ad_seen_at)) return res.status(400).json({ error: 'Upload the AD user list in User Inventory first — devices are kept only for people in the AD list.' });
-  const assets = await all('SELECT id, computer_no, serial_no, brand_model, ad_name, user_name, asset_type, asset_code, asset_s4 FROM assets WHERE deleted_at IS NULL');
+  const assets = await all('SELECT id, computer_no, serial_no, brand_model, ad_name, user_name, asset_type, asset_code, asset_s4, asset_description FROM assets WHERE deleted_at IS NULL');
   const acks = await all('SELECT device_key, code, value FROM device_ack');
   const { devices, stats } = checkDevices(files, people, assets, acks);
   const sample = devices.filter(d => d.issues).slice(0, 400).map(d => ({ name: d.name, user: d.user_name, upn: d.user_upn, country: d.country,
@@ -781,8 +781,8 @@ router.post('/:id/ack', wrap(async (req, res) => {
   const it = list.find(i => i.code === req.body.code && (other == null || Number(i.other) === other));
   if (!it) return res.status(400).json({ error: 'That difference is no longer open' });
   // Duplicates are remembered per other asset ("duplicate:<id>"), the rest per Intune value.
-  const perOther = it.code === 'duplicate' || (it.code === 'conflict' && it.other);
-  const ackCode = perOther ? 'duplicate' : it.code;
+  const perOther = it.code === 'duplicate' || it.code === 'sap_desc' || (it.code === 'conflict' && it.other);
+  const ackCode = it.code === 'sap_desc' ? 'sap_desc' : perOther ? 'duplicate' : it.code;
   const ackValue = perOther ? String(it.other) : lcKey(it.intune);
   await run(`INSERT INTO device_ack (device_key, code, value, by_user) VALUES (?, ?, ?, ?)
              ON CONFLICT (device_key, code) DO UPDATE SET value = excluded.value, by_user = excluded.by_user, at = datetime('now')`,

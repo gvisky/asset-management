@@ -200,8 +200,8 @@ function assetRowHtml(a, devHtml = '', extraClass = '') {
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
           : `<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code>`}</td>
-      <td>${a.asset_type ? `<span class="badge badge-office" style="font-size:10px">${esc(a.asset_type)}</span><br>` : ''}${a.brand_model || '—'}</td>
-      <td class="text-muted text-sm">${a.computer_no || '—'}${devHtml}</td>
+      <td>${a.asset_type ? `<span class="badge badge-office" style="font-size:10px">${esc(a.asset_type)}</span><br>` : ''}${a.brand_model || '—'}${descHint(a)}</td>
+      <td class="text-muted text-sm">${a.computer_no || '—'}${devHtml}${(a.device_refs || []).map(r => `<div class="inv-diff" title="${hEsc(r.text)}">⚠ SAP description names ${hEsc(r.serial)} = Intune <b>${hEsc(r.device)}</b> (${hEsc(String(r.upn || '').split('@')[0])})</div>`).join('')}</td>
       <td><span class="badge badge-factory">${a.country || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
       <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${a.department || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
@@ -225,6 +225,15 @@ function assetRowHtml(a, devHtml = '', extraClass = '') {
       </td>
     </tr>
   `;
+}
+
+// When the search only matched the SAP asset description, say so (e.g. it names another serial).
+function descHint(a) {
+  const q = (document.getElementById('search-input').value || '').trim().toLowerCase();
+  if (!q || !a.asset_description || !a.asset_description.toLowerCase().includes(q)) return '';
+  const visible = [a.serial_no, a.computer_no, a.brand_model, a.asset_code, a.asset_s4, a.user_name, a.ad_name, a.department]
+    .some(v => String(v || '').toLowerCase().includes(q));
+  return visible ? '' : `<div class="inv-diff" style="border-left-color:#6b7280;background:#f3f4f6;color:#374151" title="Matched in the SAP asset description">🔎 found in SAP description: ${hEsc(a.asset_description)}</div>`;
 }
 
 // ── View by user ──────────────────────────────────────────────────────────────
@@ -271,8 +280,13 @@ function looseDeviceRow(d) {
 }
 function renderGrouped(r) {
   const tbody = document.getElementById('assets-tbody');
-  if (!r.groups.length) { tbody.innerHTML = '<tr><td colspan="14"><div class="empty-state"><p>No assets found.</p></div></td></tr>'; return; }
-  tbody.innerHTML = r.groups.map(g => {
+  // Devices in Intune / Entra matching the search (name, serial, user) — who really has that machine.
+  const hits = (r.deviceHits || []).length ? `<tr class="inv-hits"><td colspan="14">🔎 <b>In Intune / Entra:</b> ${r.deviceHits.map(h =>
+      `<span class="inv-hit">${isComputerOs(h.os) ? '💻' : '📱'} <b>${hEsc(h.name || '—')}</b> · SN ${hEsc(h.serial || '—')} · ${hEsc(h.model || '')} · used by <b>${hEsc(h.user || '—')}</b>`
+      + ` · ${h.asset_id ? `asset #${h.asset_id}` : '<span style="color:#dc2626">not in Asset Inventory</span>'}`
+      + ` <a href="/devices.html?search=${encodeURIComponent(h.name || h.serial || '')}">open →</a></span>`).join('')}</td></tr>` : '';
+  if (!r.groups.length) { tbody.innerHTML = hits + '<tr><td colspan="14"><div class="empty-state"><p>No assets found.</p></div></td></tr>'; return; }
+  tbody.innerHTML = hits + r.groups.map(g => {
     const p = g.person;
     const linked = new Map();
     g.devices.forEach(d => { if (d.asset_id) { if (!linked.has(d.asset_id)) linked.set(d.asset_id, []); linked.get(d.asset_id).push(d); } });

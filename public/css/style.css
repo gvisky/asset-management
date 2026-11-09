@@ -780,3 +780,5 @@ tbody tr.inv-loose.inv-missing > td { background: #fff7ed; color: var(--text, #1
 tbody tr.inv-loose > td:first-child { box-shadow: inset 3px 0 0 #c7d2e8; }
 .inv-dev { margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--muted); min-width: 160px; }
 .inv-diff { color: #b45309; background: #fffbeb; border-left: 3px solid #d97706; padding: 1px 5px; margin-top: 2px; border-radius: 3px; white-space: normal; }
+tbody tr.inv-hits > td { background: #eff6ff; border-bottom: 2px solid #bfdbfe; font-size: 12.5px; line-height: 1.7; }
+.inv-hit { display: block; }
