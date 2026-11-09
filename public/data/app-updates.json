@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Devices: compliance filter fixed",
+    "items": [
+      "\"Not compliant\" / \"Compliant\" filters and tiles now use the same status as the Compliance column (Intune first, else Entra)."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Asset Inventory: position next to each user",
     "items": [
       "The user's Position and department (from User Inventory) are shown next to the name and email in View: by user."
