@@ -185,7 +185,7 @@ async function loadPeople(page = 1) {
     lastAzureImport = result.last_import || null;
     lastAdImport = result.ad_last_import || null;
     adCountries = result.ad_countries || [];
-    document.getElementById('btn-ad-upload').style.display = canEditUsers ? '' : 'none';
+    document.getElementById('btn-dirsync-upload').style.display = canEditUsers ? '' : 'none';
     peopleBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
@@ -499,19 +499,19 @@ let adUploadReady = false;
 function setupAdUpload() {
   if (adUploadReady) return;
   adUploadReady = true;
-  const input = document.getElementById('ad-file');
-  const ov = document.getElementById('ad-overlay');
+  const input = document.getElementById('dirsync-file');
+  const ov = document.getElementById('dirsync-overlay');
   if (!ov) throw new Error('the upload window is missing from the page (old copy of the page?)');
-  const body = document.getElementById('ad-body');
-  const apply = document.getElementById('ad-apply');
-  const foot = document.getElementById('ad-foot');
+  const body = document.getElementById('dirsync-body');
+  const apply = document.getElementById('dirsync-apply');
+  const foot = document.getElementById('dirsync-foot');
   let fileB64 = null;
   const close = () => { ov.classList.remove('open'); fileB64 = null; };
 
   // The button opens the window first, with a visible file picker in it (no hidden input to rely on).
   const pickerHtml = `<p style="margin-top:0">Choose the user list exported from Active Directory (<b>.xlsx</b> or <b>.csv</b>) with the columns
       <i>SAM Account Name, Display Name, Manager, OU Name, Last Logon Time</i>.</p>
-    <input type="file" id="ad-file-pick" accept=".xlsx,.xls,.csv" class="form-control">
+    <input type="file" id="dirsync-file-pick" accept=".xlsx,.xls,.csv" class="form-control">
     <p class="text-muted text-sm">You'll see a preview first — nothing is saved until you click <b>Apply to User Inventory</b>.</p>`;
   const showError = (m) => { body.innerHTML = pickerHtml + `<p style="color:#dc2626;font-weight:600">${adH(m)}</p>`; wirePicker(); };
   async function handleFile(f) {
@@ -532,7 +532,7 @@ function setupAdUpload() {
     }
   }
   function wirePicker() {
-    const pick = document.getElementById('ad-file-pick');
+    const pick = document.getElementById('dirsync-file-pick');
     if (pick) pick.addEventListener('change', () => handleFile(pick.files && pick.files[0]));
   }
   window.openAdUpload = () => {
@@ -563,12 +563,12 @@ function setupAdUpload() {
         ${r.staleUsers} with no logon for 90+ days · ${r.neverUsers} never logged on.
         Matched people get their AD account, manager and last logon; nothing else of theirs is changed.</p>
       ${section(`➕ New people to add (${people.length}) — untick anyone you don't want`, true, people.length
-        ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], people.map(x => freshRow(x, true, 'ad-add')))
+        ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], people.map(x => freshRow(x, true, 'dirsync-add')))
           + '<p class="text-muted text-sm">Email is set to account@ the usual company domain; HR fills User Type.</p>' : '<span class="text-muted">None.</span>')}
       ${section(`🗂 Looks like shared / function accounts (${shared.length}) — not added unless ticked`, false, shared.length
-        ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], shared.map(x => freshRow(x, false, 'ad-shared'))) : '<span class="text-muted">None.</span>')}
+        ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], shared.map(x => freshRow(x, false, 'dirsync-shared'))) : '<span class="text-muted">None.</span>')}
       ${section(`🔀 Doubles to merge (${r.merges.length}) — the second row is merged into the first, then removed`, true, r.merges.length
-        ? tbl(['Merge', 'Keep (in AD)', 'Double (removed)'], r.merges.map(m => `<tr><td><input type="checkbox" class="ad-merge" data-id="${m.drop.id}" checked></td>
+        ? tbl(['Merge', 'Keep (in AD)', 'Double (removed)'], r.merges.map(m => `<tr><td><input type="checkbox" class="dirsync-merge" data-id="${m.drop.id}" checked></td>
             <td><b>${adH(m.keep.name)}</b><div class="text-muted text-sm">${adH(m.keep.email)} · AD ${adH(m.sam)}</div></td>
             <td>${adH(m.drop.name)}<div class="text-muted text-sm">${adH(m.drop.email)} · ${adH(m.drop.status)}${m.drop.user_type ? ' · ' + adH(m.drop.user_type) : ''}</div></td></tr>`))
           + '<p class="text-muted text-sm">User Type, Leaving Date, Department, Cost Center, Company and Position from the double fill blanks on the kept row.</p>' : '<span class="text-muted">None found.</span>')}
@@ -581,8 +581,8 @@ function setupAdUpload() {
       ${section(`📭 Resource accounts skipped (${r.resources.length})`, false,
         r.resources.map(x => `<span class="badge" style="margin:2px">${adH(x.name)}</span>`).join(' ') || '<span class="text-muted">None.</span>')}`;
     const count = () => {
-      const add = body.querySelectorAll('.ad-add:checked, .ad-shared:checked').length;
-      const mer = body.querySelectorAll('.ad-merge:checked').length;
+      const add = body.querySelectorAll('.dirsync-add:checked, .dirsync-shared:checked').length;
+      const mer = body.querySelectorAll('.dirsync-merge:checked').length;
       foot.textContent = `Will update ${r.matched} matched · add ${add} · merge ${mer}`;
     };
     body.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', count));
@@ -592,9 +592,9 @@ function setupAdUpload() {
 
   apply.addEventListener('click', async () => {
     if (!fileB64) return;
-    const skipAdd = [...body.querySelectorAll('.ad-add:not(:checked)')].map(c => c.dataset.sam);
-    const addShared = [...body.querySelectorAll('.ad-shared:checked')].map(c => c.dataset.sam);
-    const skipMerge = [...body.querySelectorAll('.ad-merge:not(:checked)')].map(c => Number(c.dataset.id));
+    const skipAdd = [...body.querySelectorAll('.dirsync-add:not(:checked)')].map(c => c.dataset.sam);
+    const addShared = [...body.querySelectorAll('.dirsync-shared:checked')].map(c => c.dataset.sam);
+    const skipMerge = [...body.querySelectorAll('.dirsync-merge:not(:checked)')].map(c => Number(c.dataset.id));
     apply.disabled = true; apply.textContent = 'Applying…';
     try {
       const r = await apiPost('/api/personnel/ad-import', { file: fileB64, apply: true, skipAdd, addShared, skipMerge });
@@ -607,8 +607,8 @@ function setupAdUpload() {
     }
     apply.textContent = 'Apply to User Inventory';
   });
-  document.getElementById('ad-close').addEventListener('click', close);
-  document.getElementById('ad-cancel').addEventListener('click', close);
+  document.getElementById('dirsync-close').addEventListener('click', close);
+  document.getElementById('dirsync-cancel').addEventListener('click', close);
 }
 const adSetupSafe = () => { try { setupAdUpload(); } catch (e) { console.error('[AD upload setup]', e); } };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', adSetupSafe); else adSetupSafe();
