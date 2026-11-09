@@ -481,18 +481,39 @@ function setupAdUpload() {
   let fileB64 = null;
   const close = () => { ov.classList.remove('open'); fileB64 = null; };
 
-  document.getElementById('btn-ad-upload').addEventListener('click', () => { input.value = ''; input.click(); });
-  input.addEventListener('change', async () => {
-    const f = input.files && input.files[0];
+  // The button opens the window first, with a visible file picker in it (no hidden input to rely on).
+  const pickerHtml = `<p style="margin-top:0">Choose the user list exported from Active Directory (<b>.xlsx</b> or <b>.csv</b>) with the columns
+      <i>SAM Account Name, Display Name, Manager, OU Name, Last Logon Time</i>.</p>
+    <input type="file" id="ad-file-pick" accept=".xlsx,.xls,.csv" class="form-control">
+    <p class="text-muted text-sm">You'll see a preview first — nothing is saved until you click <b>Apply to User Inventory</b>.</p>`;
+  const showError = (m) => { body.innerHTML = pickerHtml + `<p style="color:#dc2626;font-weight:600">${adH(m)}</p>`; wirePicker(); };
+  async function handleFile(f) {
     if (!f) return;
-    ov.classList.add('open'); apply.disabled = true; foot.textContent = '';
-    body.innerHTML = `Reading <b>${adH(f.name)}</b>…`;
-    const buf = new Uint8Array(await f.arrayBuffer());
-    let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-    fileB64 = btoa(bin);
-    try { showPreview(await apiPost('/api/personnel/ad-import', { file: fileB64 })); }
-    catch (err) { let m = 'Could not read the file'; try { m = JSON.parse(err.message).error || m; } catch {} body.innerHTML = `<p style="color:#dc2626">${adH(m)}</p>`; }
+    apply.disabled = true; foot.textContent = '';
+    body.innerHTML = `⏳ Reading <b>${adH(f.name)}</b> and comparing with User Inventory…`;
+    try {
+      const buf = new Uint8Array(await f.arrayBuffer());
+      let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      fileB64 = btoa(bin);
+      showPreview(await apiPost('/api/personnel/ad-import', { file: fileB64 }));
+    } catch (err) {
+      console.error('[AD upload]', err);
+      let m = err && err.message ? err.message : String(err);
+      try { m = JSON.parse(m).error || m; } catch { /* not JSON */ }
+      if (/<html|<!doctype/i.test(m)) m = 'The server or the network blocked the upload (got a web page instead of an answer). Try again, or tell IT.';
+      showError(`Could not load the preview: ${String(m).slice(0, 300)}`);
+    }
+  }
+  function wirePicker() {
+    const pick = document.getElementById('ad-file-pick');
+    if (pick) pick.addEventListener('change', () => handleFile(pick.files && pick.files[0]));
+  }
+  document.getElementById('btn-ad-upload').addEventListener('click', () => {
+    fileB64 = null; apply.disabled = true; foot.textContent = '';
+    body.innerHTML = pickerHtml; wirePicker();
+    ov.classList.add('open');
   });
+  input.addEventListener('change', () => { ov.classList.add('open'); handleFile(input.files && input.files[0]); });
 
   function section(title, open, inner) {
     return `<details ${open ? 'open' : ''} style="margin:10px 0;border:1px solid var(--border);border-radius:8px;padding:8px 12px">
@@ -562,4 +583,4 @@ function setupAdUpload() {
   document.getElementById('ad-close').addEventListener('click', close);
   document.getElementById('ad-cancel').addEventListener('click', close);
 }
-document.addEventListener('DOMContentLoaded', setupAdUpload);
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupAdUpload); else setupAdUpload();

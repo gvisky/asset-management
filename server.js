@@ -44,7 +44,10 @@ app.use(async (req, res, next) => {
 });
 
 // Static files (served after the gate above)
-app.use(express.static(path.join(__dirname, 'public')));
+// Pages, scripts and styles change with every deploy: browsers / Cloudflare must check for a newer copy.
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, file) => { if (/\.(html|js|css|json)$/i.test(file)) res.setHeader('Cache-Control', 'no-cache'); },
+}));
 
 // Fallback for any other GET → index.html (already gated above)
 app.get(/^(?!\/api).*$/, (req, res) => {

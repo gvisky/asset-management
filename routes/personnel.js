@@ -265,7 +265,7 @@ router.post('/ad-import', wrap(async (req, res) => {
   if (!b.file || typeof b.file !== 'string') return res.status(400).json({ error: 'No file received' });
   let adRows;
   try { adRows = parseAdFile(Buffer.from(b.file, 'base64')); }
-  catch (e) { return res.status(400).json({ error: 'Could not read the file — upload the AD export (.xlsx or .csv)' }); }
+  catch (e) { return res.status(400).json({ error: /SAM Account Name/.test(e.message) ? e.message : 'Could not read the file — upload the AD export (.xlsx or .csv)' }); }
   if (!adRows.some(r => !r.resource)) {
     return res.status(400).json({ error: 'No user accounts found. Expected columns: SAM Account Name, Display Name, Manager, OU Name, Last Logon Time.' });
   }
