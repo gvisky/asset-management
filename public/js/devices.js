@@ -12,7 +12,8 @@ function devFilters() {
   const extra = v('f-extra');
   return {
     search: v('search-input').trim(), country: v('f-country'), os: v('f-os'), source: v('f-source'),
-    view: v('f-view') === 'pending' ? 'pending' : '', fresh: v('f-view') === 'fresh' ? '1' : '',
+    view: ['pending', 'check'].includes(v('f-view')) ? v('f-view') : '', fresh: v('f-view') === 'fresh' ? '1' : '',
+    issue: v('f-issue'),
     compliant: v('f-compliant'), asset: v('f-asset'),
     stale: extra === 'stale' ? '1' : '', enabled: extra === 'disabled' ? '0' : '',
     user: extra === 'nouser' ? 'none' : extra === 'user_notin' ? 'notin' : '',
@@ -29,6 +30,34 @@ function signInCell(v) {
   const days = Math.floor((Date.now() - d.getTime()) / 86400000);
   const txt = String(v).slice(0, 10);
   return days > 90 ? `<span class="badge badge-retired" title="${days} days ago">${txt}</span>` : `<span class="text-sm">${txt}</span>`;
+}
+// Days since a UTC "YYYY-MM-DD HH:MM:SS" / ISO time; null when unknown.
+function daysSince(t) {
+  if (!t) return null;
+  const d = new Date(String(t).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(t) ? '' : 'Z'));
+  return isNaN(d) ? null : Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+}
+function daysChip(label, t) {
+  const n = daysSince(t);
+  if (n == null) return `<div class="text-muted text-sm">${label}: —</div>`;
+  const color = n > 90 ? '#dc2626' : n > 30 ? '#d97706' : 'var(--muted)';
+  return `<div class="text-sm" title="${dEsc(label)} ${dEsc(String(t).slice(0, 16))} UTC">${label}: <b style="color:${color}">${n === 0 ? 'today' : n + ' d'}</b></div>`;
+}
+function complianceCell(d) {
+  const c = d.compliance || (d.is_compliant === 1 ? 'Compliant' : d.is_compliant === 0 ? 'Noncompliant' : '');
+  if (!c) return '<span class="text-muted">—</span>';
+  const cls = /^compliant$/i.test(c) ? 'badge-active' : /noncompliant/i.test(c) ? 'badge-broken' : 'badge-retired';
+  return `<span class="badge ${cls}">${dEsc(c)}</span>`;
+}
+// Differences with Asset Inventory + the IT admin buttons.
+const FIXABLE = ['pc_no', 'serial', 'user'];
+function issuesHtml(d) {
+  let list = [];
+  try { list = d.issues ? JSON.parse(d.issues) : []; } catch { list = []; }
+  if (!list.length) return '';
+  return list.map(i => `<div class="dc-issue">⚠ <b>${dEsc(i.text)}</b>${i.code === 'not_in_assets' ? '' : `<br><span class="text-muted">Asset: ${dEsc(i.asset || '∅')} · Intune: ${dEsc(i.intune || '∅')}</span>`}
+      ${isITAdmin() ? `<div style="margin-top:3px">${FIXABLE.includes(i.code) ? `<button class="btn btn-ghost btn-sm dc-use" data-id="${d.id}" data-code="${i.code}" title="Copy the Intune value to the asset (History Usage + audit log)">Use Intune value</button>` : ''}
+        <button class="btn btn-ghost btn-sm dc-ack" data-id="${d.id}" data-code="${i.code}" title="It's correct as it is — don't flag it again while the Intune value stays the same">Mark as checked</button></div>` : ''}</div>`).join('');
 }
 function compliantCell(v) {
   if (v === 1) return '<span class="badge badge-active">Yes</span>';
@@ -47,14 +76,15 @@ async function loadDevices(page = devPage) {
     if (!r.data.length) {
       const view = document.getElementById('f-view').value;
       tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><p>${
-        view === 'pending' ? '✅ Nothing to add — every device here is in Asset Inventory and its user is in User Inventory. Choose “All devices” to see them all.'
+        view === 'check' ? '✅ Nothing to check — every device of the AD users matches Asset Inventory (or was marked as checked).'
+        : view === 'pending' ? '✅ Nothing to add — every device here is in Asset Inventory and its user is in User Inventory. Choose “All devices” to see them all.'
         : view === 'fresh' ? 'No new devices since the first import.'
         : 'No devices. An IT admin can import the Intune / Entra exports.'}</p></div></td></tr>`;
     } else {
       tbody.innerHTML = r.data.map(d => `
         <tr>
           <td><input type="checkbox" class="dev-sel" data-id="${d.id}"${selected.has(d.id) ? ' checked' : ''}></td>
-          <td><strong>${dEsc(d.name || '—')}</strong>${devBaseline && d.first_seen_at && d.first_seen_at > devBaseline ? ' <span class="badge badge-active" style="font-size:10px" title="First seen in an import after the first big import">New</span>' : ''}${d.account_enabled === 0 ? ' <span class="badge badge-broken" title="Disabled in Entra">disabled</span>' : ''}
+          <td><strong>${dEsc(d.name || '—')}</strong>${d.account_enabled === 0 ? ' <span class="badge badge-broken" title="Disabled in Entra">disabled</span>' : ''}
             <br><span class="text-muted text-sm">${dEsc([d.manufacturer, d.model].filter(Boolean).join(' · ') || '—')}</span></td>
           <td class="text-sm">${dEsc(d.country || 'Unknown')}</td>
           <td class="text-sm">${d.user_upn
@@ -65,12 +95,13 @@ async function loadDevices(page = devPage) {
           <td class="text-sm">${dEsc(d.os || '—')}<br><span class="text-muted">${dEsc(d.os_version || '')}</span></td>
           <td class="text-sm">${dEsc(d.serial_no || '—')}</td>
           <td class="text-sm">${d.in_intune ? dEsc(d.managed_by || 'Intune') : '<span class="text-muted">Entra only</span>'}
-            ${d.ownership ? `<br><span class="text-muted">${dEsc(d.ownership)}</span>` : ''}</td>
-          <td>${compliantCell(d.is_compliant)}</td>
-          <td>${signInCell(d.last_sign_in)}</td>
-          <td class="text-sm">${d.asset_id
+            ${d.ownership ? `<br><span class="${/personal/i.test(d.ownership) ? 'badge badge-retired' : 'text-muted'}">${dEsc(d.ownership)}</span>` : ''}</td>
+          <td>${complianceCell(d)}</td>
+          <td style="white-space:nowrap">${daysChip('Check-in', d.last_checkin)}${daysChip('Sign-in', d.last_sign_in)}</td>
+          <td class="text-sm" style="min-width:220px">${d.asset_id
             ? `<a href="/inventory.html?edit=${d.asset_id}" title="Open the asset">${dEsc(d.asset_s4 || d.asset_code || d.asset_computer_no || '#' + d.asset_id)}</a>`
-            : (canEdit() ? `<button class="btn btn-ghost btn-sm add-asset" data-id="${d.id}" title="Add this device to Asset Inventory">➕ Add</button>` : '<span class="text-muted">—</span>')}</td>
+            : (canEdit() ? `<button class="btn btn-ghost btn-sm add-asset" data-id="${d.id}" title="Add this device to Asset Inventory">➕ Add</button>` : '<span class="text-muted">—</span>')}
+            ${issuesHtml(d)}</td>
         </tr>`).join('');
       tbody.querySelectorAll('.dev-sel').forEach(cb => cb.addEventListener('change', () => {
         const id = Number(cb.dataset.id);
@@ -78,6 +109,7 @@ async function loadDevices(page = devPage) {
         renderBulkBar();
       }));
       tbody.querySelectorAll('.add-asset').forEach(b => b.addEventListener('click', () => openAddAssets([Number(b.dataset.id)])));
+      tbody.querySelectorAll('.dc-use, .dc-ack').forEach(b => b.addEventListener('click', () => resolveIssue(b)));
       tbody.querySelectorAll('.add-person').forEach(b => b.addEventListener('click', () => openAddPeople([Number(b.dataset.id)])));
     }
     document.getElementById('sel-page').checked = r.data.length > 0 && r.data.every(d => selected.has(d.id));
@@ -115,7 +147,7 @@ async function loadDevStats() {
       { label: 'Not compliant', color: '#dc2626', value: s.notCompliant, sub: pct(s.notCompliant), act: () => setSel('f-compliant', '0') },
       { label: `No sign-in ${s.staleDays}+ days`, color: '#d97706', value: s.stale, sub: 'possibly unused / lost', act: () => setExtra('stale') },
       { label: 'Company devices not in Asset Inventory', color: '#7c3aed', value: s.corpNotInAssets, sub: `${dFmt(s.linkedAsset)} devices already linked to an asset`, act: () => setExtra('corp_unlinked') },
-      { label: 'Users not in User Inventory', color: '#6b7280', value: s.ownersNotInPeople, sub: `${dFmt(s.noUser)} devices have no user`, act: () => setExtra('user_notin') },
+      { label: 'Needs check', color: '#dc2626', value: s.needsCheck, sub: 'differs from Asset Inventory', act: () => setSel('f-view', 'check') },
     ];
     const grid = document.getElementById('dev-tiles');
     grid.innerHTML = tiles.map((t, i) => `<div class="kpi" style="--kpi-color:${t.color}">
@@ -144,8 +176,10 @@ async function loadDevStats() {
       document.getElementById('f-country').dataset.filled = '1';
       if (mySingleCountry()) document.getElementById('f-country').style.display = 'none';
     }
-    document.getElementById('last-import').textContent = s.lastImport
-      ? `Last import: ${s.lastImport} UTC` : 'No import yet — an IT admin can upload the Intune / Entra exports.';
+    document.getElementById('last-import').textContent = s.deviceCheckLast
+      ? `Last Intune + Entra upload: ${s.deviceCheckLast} UTC — devices of people in the AD list only.`
+      : 'No Intune + Entra upload yet — an IT admin can upload the two device exports (⬆ Upload Intune + Entra).';
+    document.getElementById('btn-check-upload').style.display = s.canCheck ? '' : 'none';
     document.getElementById('btn-import').style.display = s.canImport ? '' : 'none';
     document.getElementById('btn-fill').style.display = s.canImport ? '' : 'none';
     document.getElementById('btn-undo').style.display = s.canUndo ? '' : 'none';
@@ -534,6 +568,89 @@ function setupUndo() {
   document.getElementById('undo-cancel').addEventListener('click', close);
 }
 
+// "Use Intune value" / "Mark as checked" on one difference.
+async function resolveIssue(b) {
+  const use = b.classList.contains('dc-use');
+  if (use && !confirm('Copy the Intune value to the asset? It is written to the asset\'s History Usage.')) return;
+  b.disabled = true;
+  try {
+    await apiPost(`/api/devices/${b.dataset.id}/${use ? 'use-intune' : 'ack'}`, { code: b.dataset.code });
+    showToast(use ? 'Asset updated from Intune' : 'Marked as checked');
+    refresh();
+  } catch (err) {
+    let m = 'Could not save'; try { m = JSON.parse(err.message).error || m; } catch {}
+    showToast(m, 'error'); b.disabled = false;
+  }
+}
+
+// ⬆ Upload Intune + Entra → preview → apply (replaces only the Devices list).
+function setupCheckUpload() {
+  const ov = document.getElementById('dcheck-overlay'), body = document.getElementById('dcheck-body');
+  const apply = document.getElementById('dcheck-apply'), foot = document.getElementById('dcheck-foot');
+  let texts = null;
+  const close = () => { ov.classList.remove('open'); texts = null; };
+  const picker = `<p style="margin-top:0">Choose <b>both</b> exports (.csv): <b>Intune</b> → Devices → All devices → Export, and
+      <b>Entra ID</b> → Devices → All devices → Download devices.</p>
+    <input type="file" id="dcheck-files" accept=".csv" multiple class="form-control">
+    <p class="text-muted text-sm">Only devices of people in the AD list are kept. Nothing in Asset Inventory or User Inventory is changed —
+      differences are shown for IT to check. You'll see a preview first.</p>`;
+  const wire = () => document.getElementById('dcheck-files').addEventListener('change', async (e) => {
+    const fs = [...e.target.files];
+    if (!fs.length) return;
+    body.innerHTML = `⏳ Reading ${fs.map(f => dEsc(f.name)).join(', ')} and comparing with Asset Inventory…`;
+    try {
+      texts = await Promise.all(fs.map(f => f.text()));
+      show(await apiPost('/api/devices/check-upload', { files: texts }));
+    } catch (err) {
+      let m = err && err.message ? err.message : String(err); try { m = JSON.parse(m).error || m; } catch {}
+      body.innerHTML = picker + `<p style="color:#dc2626;font-weight:600">${dEsc(String(m).slice(0, 300))}</p>`; wire();
+    }
+  });
+  const LBL = { not_in_assets: 'Not in Asset Inventory', serial: 'Serial differs / missing', pc_no: 'Computer No differs',
+    user: 'User differs / missing', brand: 'Brand differs', conflict: 'PC No & serial → different assets' };
+  function show(r) {
+    const st = r.stats;
+    const chips = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="badge" style="margin:2px">${dEsc(k)} <b>${dFmt(v)}</b></span>`).join(' ');
+    body.innerHTML = `
+      <div class="kpi-grid" style="grid-template-columns:repeat(5,minmax(0,1fr));margin-bottom:8px">
+        ${[['Devices in files', st.inFiles, '#6b7280'], ['Of AD users', st.kept, '#1a56db'], ['Linked to an asset', st.matched, '#16a34a'],
+           ['Need check', st.withIssues, '#dc2626'], ['Not in Asset Inventory', st.notInAssets, '#d97706']]
+          .map(([l, v, c]) => `<div class="kpi" style="--kpi-color:${c}"><div class="kpi-main"><div class="kpi-label"><span class="kpi-dot"></span>${l}</div><div class="kpi-value">${dFmt(v)}</div></div></div>`).join('')}
+      </div>
+      <p class="text-sm" style="margin:4px 0">Files: <b>${r.files.join(' + ')}</b> · ${dFmt(st.users)} AD users have devices ·
+        ignored: ${dFmt(st.ignoredNotAd)} of people not in the AD list, ${dFmt(st.ignoredNoUser)} without a user${r.acks ? ` · ${r.acks} differences already marked as checked stay hidden` : ''}.</p>
+      <p class="text-sm" style="margin:4px 0">Differences: ${chips(Object.fromEntries(Object.entries(st.issues).map(([k, v]) => [LBL[k] || k, v]))) || 'none'}</p>
+      <p class="text-sm" style="margin:4px 0">Compliance: ${chips(st.compliance)}<br>Ownership: ${chips(st.ownership)}<br>Managed by: ${chips(st.managedBy)}</p>
+      <details open style="margin-top:8px"><summary style="cursor:pointer;font-weight:600">Devices to check (${dFmt(st.withIssues)})</summary>
+        <div class="table-wrap" style="max-height:340px;overflow-y:auto"><table><thead><tr><th>Device</th><th>User</th><th>Serial / model</th><th>Differences</th></tr></thead><tbody>
+        ${r.sample.map(x => `<tr><td><b>${dEsc(x.name)}</b><div class="text-muted text-sm">${dEsc(x.country)}</div></td><td class="text-sm">${dEsc(x.user)}<div class="text-muted">${dEsc(x.upn)}</div></td>
+          <td class="text-sm">${dEsc(x.serial)}<div class="text-muted">${dEsc(x.model)}</div></td>
+          <td class="text-sm">${x.issues.map(i => `⚠ ${dEsc(i.text)}${i.code === 'not_in_assets' ? '' : ` <span class="text-muted">(asset ${dEsc(i.asset || '∅')} · Intune ${dEsc(i.intune || '∅')})</span>`}`).join('<br>')}</td></tr>`).join('')}
+        </tbody></table></div></details>
+      ${r.applied ? '<p style="color:#16a34a;font-weight:600">✅ Applied — the Devices list now shows these devices.</p>' : ''}`;
+    foot.textContent = r.applied ? '' : 'Apply replaces only the Devices list — Asset Inventory and User Inventory stay as they are.';
+    apply.disabled = !!r.applied;
+  }
+  document.getElementById('btn-check-upload').addEventListener('click', () => {
+    texts = null; apply.disabled = true; foot.textContent = '';
+    body.innerHTML = picker; wire(); ov.classList.add('open');
+  });
+  apply.addEventListener('click', async () => {
+    if (!texts) return;
+    apply.disabled = true; apply.textContent = 'Applying…';
+    try {
+      show(await apiPost('/api/devices/check-upload', { files: texts, apply: true }));
+      showToast('Devices updated'); document.getElementById('f-view').value = 'check'; refresh();
+    } catch (err) {
+      let m = 'Could not apply'; try { m = JSON.parse(err.message).error || m; } catch {}
+      showToast(m, 'error'); apply.disabled = false;
+    }
+    apply.textContent = 'Apply — replace the Devices list';
+  });
+  document.getElementById('dcheck-close').addEventListener('click', close);
+  document.getElementById('dcheck-cancel').addEventListener('click', close);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const p = new URLSearchParams(window.location.search);
   if (p.get('search')) {
@@ -545,17 +662,18 @@ document.addEventListener('DOMContentLoaded', () => {
   setupImport();
   setupFill();
   setupUndo();
+  setupCheckUpload();
   setupAdd();
   setupAddAll();
   if (typeof loadAlertButton === 'function') loadAlertButton('alert-btn-slot', '');
   let t;
   document.getElementById('search-input').addEventListener('input', () => { clearTimeout(t); t = setTimeout(refresh, 320); });
-  ['f-view', 'f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id =>
+  ['f-view', 'f-issue', 'f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id =>
     document.getElementById(id).addEventListener('change', refresh));
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
-    ['f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id => { document.getElementById(id).value = ''; });
-    document.getElementById('f-view').value = 'pending';
+    ['f-issue', 'f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('f-view').value = 'check';
     refresh();
   });
 });

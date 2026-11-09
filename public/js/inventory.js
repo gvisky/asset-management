@@ -144,7 +144,9 @@ async function loadAssets(page = 1) {
   const costCenter = (document.getElementById('filter-cost-center') || {}).value || '';
   const assetType  = (document.getElementById('filter-asset-type') || {}).value || '';
 
-  const params = new URLSearchParams({ page, limit: PAGE_SIZE, sort: (document.getElementById('sort-by') || {}).value || 'updated' });
+  const byUser = viewMode() === 'user';
+  const params = new URLSearchParams({ page, limit: byUser ? GROUP_PAGE : PAGE_SIZE, sort: (document.getElementById('sort-by') || {}).value || 'updated' });
+  if (byUser) params.set('group', 'user');
   if (search)        params.set('search',     search);
   if (country)       params.set('country',    country);
   if (location)      params.set('location',   location);
@@ -157,6 +159,13 @@ async function loadAssets(page = 1) {
   try {
     const result = await apiGet(`${API}?${params}`);
     assetBaseline = result.baseline || null;
+    if (result.grouped) {
+      renderGrouped(result);
+      renderPagination(result.total, result.page, result.limit);
+      const lbl = document.getElementById('total-label');
+      if (lbl) lbl.textContent = `${result.totalAssets} asset${result.totalAssets !== 1 ? 's' : ''} · ${result.total} user${result.total !== 1 ? 's' : ''}`;
+      return;
+    }
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
     const lbl = document.getElementById('total-label');
@@ -179,15 +188,20 @@ function renderTable(rows) {
     return;
   }
 
-  tbody.innerHTML = rows.map((a, i) => `
-    <tr class="${a.ad_issue_reason ? 'row-adissue' : ((a.fields_locked || a.user_locked) ? 'row-locked' : '')}">
+  tbody.innerHTML = rows.map(a => assetRowHtml(a)).join('');
+}
+
+// One asset row. `devHtml`: Intune / Entra status of the linked device (view by user).
+function assetRowHtml(a, devHtml = '', extraClass = '') {
+  return `
+    <tr class="${a.ad_issue_reason ? 'row-adissue' : ((a.fields_locked || a.user_locked) ? 'row-locked' : '')} ${extraClass}">
       <td class="text-muted text-sm">${a.id}</td>
       <td class="when-cell">${whenCell(a.created_at, a.updated_at, assetBaseline)}</td>
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${a.asset_s4}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${a.asset_code || '—'}</span>`
           : `<code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code>`}</td>
       <td>${a.asset_type ? `<span class="badge badge-office" style="font-size:10px">${esc(a.asset_type)}</span><br>` : ''}${a.brand_model || '—'}</td>
-      <td class="text-muted text-sm">${a.computer_no || '—'}</td>
+      <td class="text-muted text-sm">${a.computer_no || '—'}${devHtml}</td>
       <td><span class="badge badge-factory">${a.country || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
       <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${a.department || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
@@ -210,7 +224,78 @@ function renderTable(rows) {
         </div>
       </td>
     </tr>
-  `).join('');
+  `;
+}
+
+// ── View by user ──────────────────────────────────────────────────────────────
+const GROUP_PAGE = 25;   // users per page
+const viewMode = () => (document.getElementById('view-mode') || {}).value || 'user';
+const hEsc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function daysAgo(t) {
+  if (!t) return null;
+  const d = new Date(String(t).replace(' ', 'T') + (/[zZ]$/.test(t) ? '' : 'Z'));
+  return isNaN(d) ? null : Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+}
+const daysTxt = (n) => (n == null ? '—' : n === 0 ? 'today' : `${n} d`);
+const daysColor = (n) => (n == null ? 'var(--muted)' : n > 90 ? '#dc2626' : n > 30 ? '#d97706' : 'var(--muted)');
+const issuesOf = (d) => { try { return d.issues ? JSON.parse(d.issues) : []; } catch { return []; } };
+const isComputerOs = (os) => /^(windows|mac)/i.test(os || '');
+function complianceBadge(d) {
+  const c = d.compliance || (d.is_compliant === 1 ? 'Compliant' : d.is_compliant === 0 ? 'Noncompliant' : '');
+  if (!c) return '';
+  const cls = /^compliant$/i.test(c) ? 'badge-active' : /noncompliant/i.test(c) ? 'badge-broken' : 'badge-retired';
+  return `<span class="badge ${cls}" style="font-size:10px">${hEsc(c)}</span>`;
+}
+const SHORT_DIFF = { pc_no: 'Intune PC', serial: 'Intune serial', user: 'Intune user', brand: 'Intune brand', conflict: 'PC / serial on 2 assets' };
+// Device status shown under the asset's Computer No: compliance · last check-in · differences.
+function deviceLine(d) {
+  const n = daysAgo(d.last_checkin || d.last_sign_in);
+  const iss = issuesOf(d).filter(i => i.code !== 'not_in_assets');
+  return `<div class="inv-dev">${complianceBadge(d)} <span style="color:${daysColor(n)}" title="Days since the last Intune check-in (or Entra sign-in)">⟳ ${daysTxt(n)}</span>
+    ${d.ownership && /personal/i.test(d.ownership) ? '<span class="badge badge-retired" style="font-size:10px">Personal</span>' : ''}
+    ${iss.map(i => `<div class="inv-diff" title="${hEsc(i.text)} — Asset: ${hEsc(i.asset || '∅')} · Intune: ${hEsc(i.intune || '∅')}">⚠ ${SHORT_DIFF[i.code] || 'Differs'}: <b>${hEsc(i.intune || '∅')}</b></div>`).join('')}</div>`;
+}
+// A device of this user that is not linked to any of their assets.
+function looseDeviceRow(d) {
+  const computer = isComputerOs(d.os);
+  const n = daysAgo(d.last_checkin || d.last_sign_in);
+  const missing = issuesOf(d).some(i => i.code === 'not_in_assets');
+  return `<tr class="inv-loose ${missing ? 'inv-missing' : ''}"><td></td><td colspan="13" class="text-sm">
+    ${computer ? '💻' : '📱'} <b>${hEsc(d.name || '—')}</b> · ${hEsc([d.manufacturer, d.model].filter(Boolean).join(' ') || d.os || '')}
+    ${d.serial_no ? ` · SN ${hEsc(d.serial_no)}` : ''} · ${hEsc(d.ownership || 'Entra only')}${d.managed_by ? ' · ' + hEsc(d.managed_by) : ''}
+    ${complianceBadge(d)} <span style="color:${daysColor(n)}">⟳ ${daysTxt(n)}</span>
+    ${missing ? ' <span class="badge badge-broken" style="font-size:10px">⚠ Not in Asset Inventory</span>' : ''}
+    <a class="text-sm" style="margin-left:6px" href="/devices.html?search=${encodeURIComponent(d.name || d.serial_no || '')}">Open in Devices →</a></td></tr>`;
+}
+function renderGrouped(r) {
+  const tbody = document.getElementById('assets-tbody');
+  if (!r.groups.length) { tbody.innerHTML = '<tr><td colspan="14"><div class="empty-state"><p>No assets found.</p></div></td></tr>'; return; }
+  tbody.innerHTML = r.groups.map(g => {
+    const p = g.person;
+    const linked = new Map();
+    g.devices.forEach(d => { if (d.asset_id) { if (!linked.has(d.asset_id)) linked.set(d.asset_id, []); linked.get(d.asset_id).push(d); } });
+    const loose = g.devices.filter(d => !d.asset_id || !g.assets.some(a => a.id === d.asset_id));
+    // Seen once per device: phones of the same name can appear twice (Intune + Entra) — keep one.
+    const seen = new Set();
+    const looseUnique = loose.filter(d => { const k = (d.name || '') + '|' + (d.serial_no || ''); if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((a, b) => (isComputerOs(b.os) - isComputerOs(a.os)));
+    const toCheck = g.devices.filter(d => issuesOf(d).length).length;
+    const pcs = g.devices.filter(d => isComputerOs(d.os)).length, mobiles = g.devices.length - pcs;
+    const email = p && p.email ? (() => { const at = p.email.indexOf('@'); return at > 0 ? `<b>${hEsc(p.email.slice(0, at))}</b>${hEsc(p.email.slice(at))}` : hEsc(p.email); })() : '';
+    const logon = p && p.ad_seen_at ? (p.ad_never_logon ? 'never' : daysTxt(daysAgo(p.ad_last_logon))) : '';
+    const head = g.key === 'none' ? '<b>No user assigned</b>'
+      : `<b>${hEsc(g.label || g.key.replace(/^\w+:/, ''))}</b>${email ? ` <span class="text-muted">· ${email}</span>` : ` <span class="text-muted">· ${hEsc(g.key.replace(/^\w+:/, ''))}</span>`}
+         ${p ? '' : ' <span class="badge badge-retired" style="font-size:10px" title="No person with this AD Name in User Inventory">not in User Inventory</span>'}
+         ${p && p.status && p.status !== 'Active' ? ` <span class="badge badge-broken" style="font-size:10px">${hEsc(p.status === 'pending delete' ? 'Confirmed Delete' : p.status)}</span>` : ''}`;
+    const meta = [`${g.assets.length} asset${g.assets.length !== 1 ? 's' : ''}`,
+      g.devices.length ? `💻 ${pcs} · 📱 ${mobiles} in Intune / Entra` : (r.deviceCheckLast ? 'no Intune / Entra devices' : ''),
+      logon ? `AD logon <b style="color:${daysColor(logon === 'never' ? 999 : daysAgo(p.ad_last_logon))}">${logon}</b>` : '',
+      p && p.ad_manager ? `↑ ${hEsc(p.ad_manager)}` : '',
+      toCheck ? `<span class="badge badge-broken" style="font-size:10px">⚠ ${toCheck} to check</span>` : ''].filter(Boolean).join(' · ');
+    return `<tr class="inv-group"><td colspan="14">${head}<span class="inv-group-meta">${meta}</span></td></tr>`
+      + g.assets.map(a => assetRowHtml(a, (linked.get(a.id) || []).map(deviceLine).join(''), 'inv-in-group')).join('')
+      + looseUnique.map(looseDeviceRow).join('');
+  }).join('');
 }
 
 // Years in use = Purchase Date (YYYY-MM-DD) → today, e.g. "4.3 yrs". '' when no valid date.
@@ -706,6 +791,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('filter-country').addEventListener('change',    () => { syncLocationFilter(); loadAssets(1); });
   document.getElementById('filter-location').addEventListener('change',   () => loadAssets(1));
   document.getElementById('sort-by').addEventListener('change',           () => loadAssets(1));
+  const vm = document.getElementById('view-mode');
+  if (vm) {
+    try { vm.value = localStorage.getItem('assetViewMode') || 'user'; } catch { /* ignore */ }
+    vm.addEventListener('change', () => { try { localStorage.setItem('assetViewMode', vm.value); } catch { /* ignore */ } loadAssets(1); });
+  }
   document.getElementById('filter-status').addEventListener('change',     () => loadAssets(1));
   document.getElementById('filter-brand').addEventListener('change',      () => loadAssets(1));
   document.getElementById('filter-department').addEventListener('change', () => loadAssets(1));

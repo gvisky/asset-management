@@ -985,6 +985,17 @@ async function migrate() {
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_personnel', datetime('now'))");
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_devices', datetime('now'))");
 
+  // Device Check (docs/DEVICE-CHECK.md): live Intune / Entra state compared with Asset Inventory.
+  const dcols2 = (await backend.all('PRAGMA table_info(devices)')).map(c => c.name);
+  for (const [col, type] of [['device_key', "TEXT DEFAULT ''"], ['compliance', "TEXT DEFAULT ''"], ['last_checkin', "TEXT DEFAULT ''"],
+                             ['issues', "TEXT DEFAULT ''"], ['asset_values', "TEXT DEFAULT ''"]]) {
+    if (!dcols2.includes(col)) await backend.run(`ALTER TABLE devices ADD COLUMN ${col} ${type}`);
+  }
+  // Differences IT accepted ("Mark as checked") — kept across uploads while the Intune value stays the same.
+  await backend.script(`CREATE TABLE IF NOT EXISTS device_ack (
+      device_key TEXT NOT NULL, code TEXT NOT NULL, value TEXT NOT NULL DEFAULT '',
+      by_user TEXT DEFAULT '', at TEXT DEFAULT (datetime('now')), PRIMARY KEY (device_key, code));`);
+
   // System Health ← on-site collectors (router / switch / server / web-app checks pushed every minute).
   await backend.script(`
     CREATE TABLE IF NOT EXISTS health_collectors (

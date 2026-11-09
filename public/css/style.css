@@ -765,3 +765,18 @@ select.filter-select {
 .hl-rate { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .hl-foot { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); margin-top: auto; padding-top: 4px; }
 .hl-foot span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Device Check: a difference with Asset Inventory */
+.dc-issue { margin-top: 6px; padding: 5px 8px; border-left: 3px solid #d97706; background: #fffbeb; border-radius: 4px; font-size: 12px; line-height: 1.45; }
+.dc-issue .btn-sm { padding: 2px 7px; font-size: 11px; }
+
+/* Asset Inventory — view by user */
+tbody tr.inv-group > td { background: #f1f5fb; border-top: 2px solid #c7d2e8; padding: 9px 14px; font-size: 13.5px; }
+tbody tr.inv-group:hover > td { background: #e8eef9; }
+.inv-group-meta { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+tbody tr.inv-in-group > td:first-child { box-shadow: inset 3px 0 0 #c7d2e8; }
+tbody tr.inv-loose > td { background: #fafafa; padding-top: 6px; padding-bottom: 6px; color: var(--muted); }
+tbody tr.inv-loose.inv-missing > td { background: #fff7ed; color: var(--text, #111827); }
+tbody tr.inv-loose > td:first-child { box-shadow: inset 3px 0 0 #c7d2e8; }
+.inv-dev { margin-top: 3px; font-size: 11px; line-height: 1.5; color: var(--muted); min-width: 160px; }
+.inv-diff { color: #b45309; background: #fffbeb; border-left: 3px solid #d97706; padding: 1px 5px; margin-top: 2px; border-radius: 3px; white-space: normal; }

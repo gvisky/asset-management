@@ -129,6 +129,43 @@ router.get('/', wrap(async (req, res) => {
       WHEN (ad_name IS NULL OR ad_name = '') AND ${NEEDS_PC_AD_SQL} THEN 'missing'
       ELSE '' END AS ad_issue_reason` : '';
 
+  // ── View "by user": one block per holder (AD Name, else User Name), with their Intune / Entra devices ──
+  if (req.query.group === 'user') {
+    const gkey = `CASE WHEN TRIM(COALESCE(ad_name, '')) <> '' THEN 'ad:' || LOWER(TRIM(ad_name))
+                       WHEN TRIM(COALESCE(user_name, '')) <> '' THEN 'name:' || LOWER(TRIM(user_name)) ELSE 'none' END`;
+    const glimit = Math.min(100, Math.max(1, Number(limit) || 25));
+    const goffset = (Math.max(1, Number(page)) - 1) * glimit;
+    const totalGroups = Number((await get(`SELECT COUNT(*) AS c FROM (SELECT ${gkey} AS k FROM assets ${where} GROUP BY k)`, params)).c);
+    const totalAssets = Number((await get(`SELECT COUNT(*) AS c FROM assets ${where}`, params)).c);
+    const gOrder = sort === 'name' ? 'gkey' : 'last DESC';
+    const groups = await all(`SELECT ${gkey} AS gkey, COUNT(*) AS n, MAX(COALESCE(updated_at, created_at)) AS last
+        FROM assets ${where} GROUP BY gkey ORDER BY CASE WHEN gkey = 'none' THEN 1 ELSE 0 END, ${gOrder} LIMIT ? OFFSET ?`,
+      [...params, glimit, goffset]);
+    const keys = groups.map(g => g.gkey);
+    const assetRows = keys.length ? await all(`SELECT *${adReasonSel}, ${gkey} AS gkey FROM assets ${where} AND ${gkey} IN (${keys.map(() => '?').join(', ')})
+        ORDER BY COALESCE(updated_at, created_at) DESC`, [...params, ...keys]) : [];
+    // People (by AD account or email before @) and their devices from the last Intune + Entra upload.
+    const people = await all('SELECT id, display_name, email, country, ad_sam, ad_manager, ad_last_logon, ad_never_logon, ad_seen_at, status FROM personnel');
+    const personByKey = new Map();
+    for (const p of people) {
+      const l = String(p.email || '').split('@')[0].toLowerCase();
+      if (p.ad_sam) personByKey.set('ad:' + p.ad_sam.toLowerCase(), p);
+      if (l && !personByKey.has('ad:' + l)) personByKey.set('ad:' + l, p);
+    }
+    const devCols = `id, name, os, model, manufacturer, serial_no, ownership, managed_by, compliance, is_compliant,
+      last_checkin, last_sign_in, person_id, asset_id, issues, user_upn`;
+    const devices = await all(`SELECT ${devCols} FROM devices`);
+    const out = groups.map(g => {
+      const person = personByKey.get(g.gkey) || null;
+      const assets = assetRows.filter(a => a.gkey === g.gkey);
+      const ids = new Set(assets.map(a => a.id));
+      const devs = devices.filter(d => (person && d.person_id === person.id) || (d.asset_id && ids.has(d.asset_id)));
+      return { key: g.gkey, label: person ? person.display_name : (assets[0] ? (assets[0].user_name || assets[0].ad_name) : ''), person, assets, devices: devs };
+    });
+    return res.json({ grouped: true, total: totalGroups, totalAssets, page: Number(page), limit: glimit, groups: out,
+                      baseline: await getMeta('baseline_assets'), deviceCheckLast: await getMeta('device_check_last') });
+  }
+
   const totalRow = await get(`SELECT COUNT(*) as cnt FROM assets ${where}`, params);
   const rows = await all(
     `SELECT *${adReasonSel} FROM assets ${where} ORDER BY ${ASSET_ORDER[sort] || ASSET_ORDER.updated} LIMIT ? OFFSET ?`,
