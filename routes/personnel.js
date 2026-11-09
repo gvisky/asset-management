@@ -37,6 +37,9 @@ router.get('/', wrap(async (req, res) => {
     updated: 'COALESCE(p.updated_at, p.created_at) DESC, p.display_name COLLATE NOCASE',
     created: 'p.id DESC',
     name: 'p.display_name COLLATE NOCASE',
+    // Longest since the last AD logon first: never logged on → oldest logon → no AD data.
+    logon: `CASE WHEN p.ad_seen_at IS NOT NULL AND p.ad_never_logon = 1 THEN 0 WHEN p.ad_last_logon IS NULL THEN 2 ELSE 1 END,
+            p.ad_last_logon ASC, p.display_name COLLATE NOCASE`,
   };
   const conditions = [];
   const params = [];
