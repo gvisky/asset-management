@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Search shows Intune devices + SAP description mismatches",
+    "items": [
+      "Asset Inventory search also lists matching Intune / Entra devices and who uses them.",
+      "Rows found only through the SAP asset description say so.",
+      "Device Check flags SAP descriptions naming another laptop's serial."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Merge puts the system first",
     "items": [
       "Merging duplicates now takes PC No + Serial from Intune, User Name / AD Name from AD, and Brand / Model, Type, Location, Status from the record created from Intune.",

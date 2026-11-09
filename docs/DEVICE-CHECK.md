@@ -44,6 +44,7 @@ often the IMEI, and many phones are personal).
 | `user` | The asset's AD Name is empty or another person than the device's primary user |
 | `brand` | The asset's brand (first word of Brand / Model) is another maker than Intune's manufacturer |
 | `duplicate` | Another asset has the same serial (typos O↔0, I↔1, spaces / dashes ignored) and at most one of the two has an SAP asset code → the same machine recorded twice → **Merge** |
+| `sap_desc` | The SAP asset description of another asset names this machine's serial ("Laptop Lenovo X1 Yoga- PF25Y0MX") while that asset holds another / no serial → check which is right (Open asset / Mark as checked) |
 | `conflict` | Same serial on two assets that both have (different) SAP asset codes → two real assets, one serial is probably mistyped → check by hand (never merged) |
 
 Model is shown side by side for information only (Intune gives machine types like
@@ -129,3 +130,11 @@ The differences used to be worked out only at upload time, so an asset added aft
 Now `lib/device-recheck.js` re-runs the comparison on the stored device list whenever assets or
 accepted checks changed since the last time (cheap signature check), before the Devices page and
 Asset Inventory → View: by user are loaded.
+
+## Search + SAP description (10 Nov 2026)
+Searching PF25Y0MX showed asset #112 (serial PF25Y51Q): its SAP description says "Laptop Lenovo X1 Yoga-
+PF25Y0MX", while Intune has PF25Y0MX as VNHCMC0198 of Haluk Ozgur Acar. Now:
+- Asset Inventory (view by user) says when a row was **found in the SAP description**, and lists the
+  **Intune / Entra devices** matching the search (name, serial, user) with who uses them and their asset.
+- Device Check flags `sap_desc` (12 on the local copy). `lib/device-recheck.js` has a rules version so stored
+  differences are worked out again after a rules change.

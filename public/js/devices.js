@@ -57,6 +57,7 @@ function issuesHtml(d) {
   if (!list.length) return '';
   return list.map(i => `<div class="dc-issue">⚠ <b>${dEsc(i.text)}</b>${i.code === 'not_in_assets' ? '' : `<br><span class="text-muted">Asset: ${dEsc(i.asset || '∅')} · Intune: ${dEsc(i.intune || '∅')}</span>`}
       ${isITAdmin() ? `<div style="margin-top:3px">${FIXABLE.includes(i.code) ? `<button class="btn btn-ghost btn-sm dc-use" data-id="${d.id}" data-code="${i.code}" title="Copy the Intune value to the asset (History Usage + audit log)">Use Intune value</button>` : ''}
+        ${i.code === 'sap_desc' ? `<a class="btn btn-ghost btn-sm" href="/inventory.html?edit=${i.other}">Open asset #${i.other}</a>` : ''}
         ${i.code === 'duplicate' ? `<button class="btn btn-primary btn-sm dc-merge" data-id="${d.id}" data-other="${i.other}" title="Merge the two assets into one with the Intune Computer No and Serial">Merge</button>` : ''}
         <button class="btn btn-ghost btn-sm dc-ack" data-id="${d.id}" data-code="${i.code}"${i.other ? ` data-other="${i.other}"` : ''} title="It's correct as it is — don't flag it again">Mark as checked</button></div>` : ''}</div>`).join('');
 }
@@ -608,7 +609,7 @@ function setupCheckUpload() {
       body.innerHTML = picker + `<p style="color:#dc2626;font-weight:600">${dEsc(String(m).slice(0, 300))}</p>`; wire();
     }
   });
-  const LBL = { duplicate: 'Duplicate asset (same serial)', not_in_assets: 'Not in Asset Inventory', serial: 'Serial differs / missing', pc_no: 'Computer No differs',
+  const LBL = { sap_desc: 'SAP description names this serial', duplicate: 'Duplicate asset (same serial)', not_in_assets: 'Not in Asset Inventory', serial: 'Serial differs / missing', pc_no: 'Computer No differs',
     user: 'User differs / missing', brand: 'Brand differs', conflict: 'PC No & serial → different assets' };
   function show(r) {
     const st = r.stats;

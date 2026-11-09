@@ -156,6 +156,28 @@ router.get('/', wrap(async (req, res) => {
     const devCols = `id, name, os, model, manufacturer, serial_no, ownership, managed_by, compliance, is_compliant,
       last_checkin, last_sign_in, person_id, asset_id, issues, user_upn`;
     const devices = await all(`SELECT ${devCols} FROM devices`);
+    // Differences from Device Check that point at an asset of this page (e.g. "SAP description names
+    // another laptop's serial") — shown on that asset's row.
+    const refsByAsset = new Map();
+    for (const d of devices) {
+      let iss = [];
+      try { iss = d.issues ? JSON.parse(d.issues) : []; } catch { iss = []; }
+      for (const i of iss) {
+        if (i.code !== 'sap_desc' || !i.other) continue;
+        if (!refsByAsset.has(i.other)) refsByAsset.set(i.other, []);
+        refsByAsset.get(i.other).push({ device: d.name, serial: d.serial_no, upn: d.user_upn, text: i.text });
+      }
+    }
+    assetRows.forEach(a => { if (refsByAsset.has(a.id)) a.device_refs = refsByAsset.get(a.id); });
+    // Search also looks in the Intune / Entra devices (name, serial, user).
+    let deviceHits = [];
+    if (search) {
+      const q = String(search).toLowerCase();
+      const byId = new Map(people.map(p => [p.id, p]));
+      deviceHits = devices.filter(d => [d.name, d.serial_no, d.user_upn].some(v => String(v || '').toLowerCase().includes(q))).slice(0, 10)
+        .map(d => ({ id: d.id, name: d.name, serial: d.serial_no, model: [d.manufacturer, d.model].filter(Boolean).join(' '), os: d.os,
+          user: (byId.get(d.person_id) || {}).display_name || d.user_upn, upn: d.user_upn, asset_id: d.asset_id }));
+    }
     const out = groups.map(g => {
       const person = personByKey.get(g.gkey) || null;
       const assets = assetRows.filter(a => a.gkey === g.gkey);
@@ -163,7 +185,7 @@ router.get('/', wrap(async (req, res) => {
       const devs = devices.filter(d => (person && d.person_id === person.id) || (d.asset_id && ids.has(d.asset_id)));
       return { key: g.gkey, label: person ? person.display_name : (assets[0] ? (assets[0].user_name || assets[0].ad_name) : ''), person, assets, devices: devs };
     });
-    return res.json({ grouped: true, total: totalGroups, totalAssets, page: Number(page), limit: glimit, groups: out,
+    return res.json({ grouped: true, total: totalGroups, totalAssets, page: Number(page), limit: glimit, groups: out, deviceHits,
                       baseline: await getMeta('baseline_assets'), deviceCheckLast: await getMeta('device_check_last') });
   }
 
