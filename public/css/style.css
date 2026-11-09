@@ -782,3 +782,4 @@ tbody tr.inv-loose > td:first-child { box-shadow: inset 3px 0 0 #c7d2e8; }
 .inv-diff { color: #b45309; background: #fffbeb; border-left: 3px solid #d97706; padding: 1px 5px; margin-top: 2px; border-radius: 3px; white-space: normal; }
 tbody tr.inv-hits > td { background: #eff6ff; border-bottom: 2px solid #bfdbfe; font-size: 12.5px; line-height: 1.7; }
 .inv-hit { display: block; }
+.inv-pos { color: #1e40af; font-weight: 500; }

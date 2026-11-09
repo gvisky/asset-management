@@ -146,7 +146,7 @@ router.get('/', wrap(async (req, res) => {
     const assetRows = keys.length ? await all(`SELECT *${adReasonSel}, ${gkey} AS gkey FROM assets ${where} AND ${gkey} IN (${keys.map(() => '?').join(', ')})
         ORDER BY COALESCE(updated_at, created_at) DESC`, [...params, ...keys]) : [];
     // People (by AD account or email before @) and their devices from the last Intune + Entra upload.
-    const people = await all('SELECT id, display_name, email, country, ad_sam, ad_manager, ad_last_logon, ad_never_logon, ad_seen_at, status FROM personnel');
+    const people = await all('SELECT id, display_name, email, country, ad_sam, ad_manager, ad_last_logon, ad_never_logon, ad_seen_at, status, position, department FROM personnel');
     const personByKey = new Map();
     for (const p of people) {
       const l = String(p.email || '').split('@')[0].toLowerCase();
@@ -174,7 +174,10 @@ router.get('/', wrap(async (req, res) => {
     if (search) {
       const q = String(search).toLowerCase();
       const byId = new Map(people.map(p => [p.id, p]));
-      deviceHits = devices.filter(d => [d.name, d.serial_no, d.user_upn].some(v => String(v || '').toLowerCase().includes(q))).slice(0, 10)
+      const seenHit = new Set();
+      deviceHits = devices.filter(d => [d.name, d.serial_no, d.user_upn].some(v => String(v || '').toLowerCase().includes(q)))
+        .filter(d => { const k = `${String(d.name || '').toLowerCase()}|${String(d.serial_no || '').toLowerCase()}`; if (seenHit.has(k)) return false; seenHit.add(k); return true; })
+        .slice(0, 10)
         .map(d => ({ id: d.id, name: d.name, serial: d.serial_no, model: [d.manufacturer, d.model].filter(Boolean).join(' '), os: d.os,
           user: (byId.get(d.person_id) || {}).display_name || d.user_upn, upn: d.user_upn, asset_id: d.asset_id }));
     }
