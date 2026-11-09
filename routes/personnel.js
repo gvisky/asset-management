@@ -61,6 +61,8 @@ router.get('/', wrap(async (req, res) => {
       AND (ad_seen_at IS NULL OR ad_seen_at < (SELECT value FROM app_meta WHERE key = 'ad_last_import'))`);
   } else if (req.query.ad === 'stale') {
     conditions.push("ad_last_logon IS NOT NULL AND ad_last_logon < datetime('now', '-90 days')");
+  } else if (req.query.ad === 'resource') {
+    conditions.push('ad_resource = 1');
   } else if (req.query.ad === 'never') {
     conditions.push('ad_seen_at IS NOT NULL AND ad_never_logon = 1');
   }
@@ -261,7 +263,8 @@ router.post('/import', wrap(async (req, res) => {
 //         skipAdd: [sam] people not to add, addShared: [sam] shared accounts to add anyway,
 //         skipMerge: [person id] doubles not to merge }
 // Matches AD accounts to people (remembered account → email before @ → same name), refreshes
-// AD account / manager / OU / last logon, adds new people, merges doubles. Resources are skipped.
+// AD account / manager / OU / last logon, adds new people, merges doubles. Resource accounts
+// (shared mailboxes / email groups, OU …/Resources) are added too, marked ad_resource = 1.
 router.post('/ad-import', wrap(async (req, res) => {
   if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can upload the AD list' });
   const b = req.body || {};
@@ -269,7 +272,7 @@ router.post('/ad-import', wrap(async (req, res) => {
   let adRows;
   try { adRows = parseAdFile(Buffer.from(b.file, 'base64')); }
   catch (e) { return res.status(400).json({ error: /SAM Account Name/.test(e.message) ? e.message : 'Could not read the file — upload the AD export (.xlsx or .csv)' }); }
-  if (!adRows.some(r => !r.resource)) {
+  if (!adRows.length) {
     return res.status(400).json({ error: 'No user accounts found. Expected columns: SAM Account Name, Display Name, Manager, OU Name, Last Logon Time.' });
   }
   const people = await all('SELECT * FROM personnel');
@@ -283,15 +286,15 @@ router.post('/ad-import', wrap(async (req, res) => {
   const adBrief = (r) => ({ sam: r.sam, name: r.name, country: r.country, manager: r.manager, ou: r.ou, lastLogon: r.lastLogon, never: r.never });
   const daysAgo = (d) => (d ? Math.floor((Date.now() - new Date(d.replace(' ', 'T') + 'Z').getTime()) / 86400000) : null);
   const summary = {
-    accounts: adRows.length, users: plan.users.length, resources: plan.resources.map(adBrief),
+    accounts: adRows.length, users: plan.users.filter(r => !r.resource).length, resources: plan.resources.length,
     matched: plan.matched.length,
     matchedByName: plan.byNameMatch.map(m => ({ ad: adBrief(m.r), person: brief(m.p) })),
-    fresh: plan.fresh.map(f => ({ ...adBrief(f), shared: f.shared })),
+    fresh: plan.fresh.map(f => ({ ...adBrief(f), shared: f.shared, resource: !!f.resource })),
     merges: plan.merges.map(m => ({ keep: brief(m.keep), drop: brief(m.drop), sam: m.sam })),
     countryDiffs: plan.countryDiffs,
     notInAd: plan.notInAd.map(brief),
-    staleUsers: plan.users.filter(r => r.lastLogon && daysAgo(r.lastLogon) > 90).length,
-    neverUsers: plan.users.filter(r => r.never).length,
+    staleUsers: plan.users.filter(r => !r.resource && r.lastLogon && daysAgo(r.lastLogon) > 90).length,
+    neverUsers: plan.users.filter(r => !r.resource && r.never).length,
     countries: plan.covered,
   };
   if (!b.apply) return res.json({ preview: true, ...summary });
@@ -300,10 +303,10 @@ router.post('/ad-import', wrap(async (req, res) => {
   const now = (await get("SELECT datetime('now') AS n")).n;
   const domainVotes = people.reduce((m, p) => { const d = String(p.email || '').split('@')[1]; if (d) m[d.toLowerCase()] = (m[d.toLowerCase()] || 0) + 1; return m; }, {});
   const domain = Object.entries(domainVotes).sort((x, y) => y[1] - x[1])[0]?.[0] || 'hayat.com.tr';
-  const adSet = (r) => [r.sam, r.manager, r.ou, r.lastLogon, r.never ? 1 : 0, now];
+  const adSet = (r) => [r.sam, r.manager, r.ou, r.lastLogon, r.never ? 1 : 0, now, r.resource ? 1 : 0];
   const stmts = [];
   for (const m of plan.matched) {
-    stmts.push({ sql: `UPDATE personnel SET ad_sam = ?, ad_manager = ?, ad_ou = ?, ad_last_logon = ?, ad_never_logon = ?, ad_seen_at = ?,
+    stmts.push({ sql: `UPDATE personnel SET ad_sam = ?, ad_manager = ?, ad_ou = ?, ad_last_logon = ?, ad_never_logon = ?, ad_seen_at = ?, ad_resource = ?,
                          display_name = CASE WHEN COALESCE(display_name, '') = '' THEN ? ELSE display_name END WHERE id = ?`,
                  args: [...adSet(m.r), m.r.name, m.p.id] });
   }
@@ -325,8 +328,8 @@ router.post('/ad-import', wrap(async (req, res) => {
   for (const f of toAdd) {
     const email = `${f.sam}@${domain}`;
     stmts.push({ sql: `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date,
-                         ad_sam, ad_manager, ad_ou, ad_last_logon, ad_never_logon, ad_seen_at)
-                       SELECT ?, ?, ?, '', 'Active', '', '', '', ?, ?, ?, ?, ?, ?
+                         ad_sam, ad_manager, ad_ou, ad_last_logon, ad_never_logon, ad_seen_at, ad_resource)
+                       SELECT ?, ?, ?, '', 'Active', '', '', '', ?, ?, ?, ?, ?, ?, ?
                         WHERE NOT EXISTS (SELECT 1 FROM personnel WHERE LOWER(email) = LOWER(?))`,
                  args: [f.country || 'Unknown', f.name, email, ...adSet(f), email] });
   }
@@ -336,7 +339,7 @@ router.post('/ad-import', wrap(async (req, res) => {
   await setMeta('ad_import_countries', JSON.stringify(plan.covered));
   resetCountryCache();
   const msg = `${req.user.full_name} uploaded the AD user list: ${plan.matched.length} matched, ${toAdd.length} added, `
-    + `${toMerge.length} doubles merged, ${plan.resources.length} resource accounts skipped, ${plan.notInAd.length} people not in AD.`;
+    + `${toMerge.length} doubles merged (${plan.resources.length} resource accounts in the file), ${plan.notInAd.length} people not in AD.`;
   await audit(req.user, 'PERSONNEL', null, msg);
   await notify({ audience: 'all', scope: 'personnel', message: msg });
   res.json({ applied: true, ...summary, added: toAdd.length, merged: toMerge.length });

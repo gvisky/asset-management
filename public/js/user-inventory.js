@@ -175,6 +175,7 @@ async function loadPeople(page = 1) {
   else if (status === '__ad_missing') params.set('ad', 'missing');
   else if (status === '__ad_stale') params.set('ad', 'stale');
   else if (status === '__ad_never') params.set('ad', 'never');
+  else if (status === '__ad_resource') params.set('ad', 'resource');
   else if (status) params.set('status', status);
   if (user_type) params.set('user_type', user_type);
 
@@ -252,13 +253,14 @@ function renderTable(rows) {
     // In a country the AD list covers, but not in the latest AD upload.
     const notInAd = lastAdImport && adCountries.includes(p.country) && (!p.ad_seen_at || p.ad_seen_at < lastAdImport) && p.status !== 'deleted'
       ? ' <span class="badge badge-retired" title="Not in the latest AD user list (left, disabled or renamed?)">not in AD</span>' : '';
+    const resBadge = p.ad_resource ? ' <span class="badge badge-office" title="AD resource account: shared mailbox / email group">Resource</span>' : '';
     const dept = p.department || '';
     const cc   = p.cost_center || '';
     const editBtn = canEditUsers ? `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
         onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(p.country)}', '${esc(dept)}', '${esc(cc)}')">✏️</button> ` : '';
     return `
       <tr>
-        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}${notInAd}
+        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${resBadge}${notInAzure}${notInAd}
           <div class="text-muted text-sm">${emailHtml(p)}</div>${managerLine(p)}</td>
         <td class="when-cell">${logonCell(p)}</td>
         <td>${assetsCell}</td>
@@ -555,7 +557,8 @@ function setupAdUpload() {
   const tbl = (head, rows) => `<div class="table-wrap" style="max-height:300px;overflow-y:auto"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 
   function showPreview(r) {
-    const people = r.fresh.filter(x => !x.shared), shared = r.fresh.filter(x => x.shared);
+    const people = r.fresh.filter(x => !x.shared && !x.resource), shared = r.fresh.filter(x => x.shared && !x.resource);
+    const resNew = r.fresh.filter(x => x.resource);
     const freshRow = (x, checked, cls) => `<tr><td><input type="checkbox" class="${cls}" data-sam="${adH(x.sam)}" ${checked ? 'checked' : ''}></td>
       <td><b>${adH(x.sam)}</b></td><td>${adH(x.name)}</td><td>${adH(x.country || '—')}</td><td class="text-sm">${adH(x.manager || '—')}</td><td class="text-sm">${adLogonText(x)}</td></tr>`;
     body.innerHTML = `
@@ -565,7 +568,7 @@ function setupAdUpload() {
           .map(([l, v, c]) => `<div class="kpi" style="--kpi-color:${c}"><div class="kpi-main"><div class="kpi-label"><span class="kpi-dot"></span>${l}</div><div class="kpi-value">${v}</div></div></div>`).join('')}
       </div>
       <p class="text-sm text-muted" style="margin:4px 0 8px">Countries in this file: <b>${adH(r.countries.join(', '))}</b> ·
-        ${r.users} user accounts · ${r.resources.length} resource accounts (shared mailboxes / groups) are skipped ·
+        ${r.users} user accounts · ${r.resources} resource accounts (shared mailboxes / groups, marked <b>Resource</b>) ·
         ${r.staleUsers} with no logon for 90+ days · ${r.neverUsers} never logged on.
         Matched people get their AD account, manager and last logon; nothing else of theirs is changed.</p>
       ${section(`➕ New people to add (${people.length}) — untick anyone you don't want`, true, people.length
@@ -584,8 +587,8 @@ function setupAdUpload() {
         tbl(['Person', 'User Inventory', 'AD OU'], r.countryDiffs.map(d => `<tr><td>${adH(d.name)} <span class="text-muted text-sm">(${adH(d.sam)})</span></td><td>${adH(d.inventory)}</td><td>${adH(d.ad)}</td></tr>`))) : ''}
       ${section(`⚠ In User Inventory but not in AD (${r.notInAd.length}) — left, disabled or renamed? Not changed; marked "not in AD"`, false, r.notInAd.length
         ? tbl(['Name', 'Email', 'Country', 'Status'], r.notInAd.map(p => `<tr><td>${adH(p.name)}</td><td class="text-sm">${adH(p.email)}</td><td>${adH(p.country)}</td><td class="text-sm">${adH(p.status)}</td></tr>`)) : '<span class="text-muted">None.</span>')}
-      ${section(`📭 Resource accounts skipped (${r.resources.length})`, false,
-        r.resources.map(x => `<span class="badge" style="margin:2px">${adH(x.name)}</span>`).join(' ') || '<span class="text-muted">None.</span>')}`;
+      ${section(`📭 New resource accounts to add (${resNew.length}) — shared mailboxes / email groups, marked Resource`, false, resNew.length
+        ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], resNew.map(x => freshRow(x, true, 'dirsync-add'))) : '<span class="text-muted">None — all resource accounts are already in User Inventory.</span>')}`;
     const count = () => {
       const add = body.querySelectorAll('.dirsync-add:checked, .dirsync-shared:checked').length;
       const mer = body.querySelectorAll('.dirsync-merge:checked').length;
