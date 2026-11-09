@@ -18,7 +18,7 @@ function statusPill(s) {
   return `<span class="badge ${map[s] || ''}">${statusLabel(s)}</span>`;
 }
 
-function esc(v) { return String(v == null ? '' : v).replace(/"/g, '&quot;'); }
+function esc(v) { return htmlEsc(v); }
 
 // Show script errors on screen (so a screenshot tells IT what went wrong).
 window.addEventListener('error', (e) => {
@@ -155,7 +155,7 @@ async function loadCountries() {
     const { countries } = await apiGet('/api/personnel/filters');
     const sel = document.getElementById('filter-country');
     sel.innerHTML = '<option value="">All Countries</option>' +
-      (countries || []).map(c => `<option value="${c}">${c}</option>`).join('');
+      (countries || []).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
     // Scoped users (one country) don't need the country filter.
     if (mySingleCountry()) sel.style.display = 'none';
   } catch (e) { console.error(e); }
@@ -186,7 +186,7 @@ async function loadPeople(page = 1) {
     lastAzureImport = result.last_import || null;
     lastAdImport = result.ad_last_import || null;
     adCountries = result.ad_countries || [];
-    document.getElementById('btn-dirsync-upload').style.display = canEditUsers ? '' : 'none';
+    document.getElementById('btn-dirsync-upload').style.display = result.can && result.can.adUpload ? '' : 'none';
     peopleBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
@@ -244,7 +244,7 @@ function renderTable(rows) {
     let assetsCell = '<span class="text-muted">—</span>';
     if (cnt > 0) {
       assetsCell = canSeeAssets
-        ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets('${adName.replace(/'/g, "\\'")}','${esc(p.display_name)}')">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
+        ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets(${jsArg(adName)}, ${jsArg(p.display_name)})">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
         : `<span class="badge badge-active">${cnt}</span>`;
     }
     // In User Inventory but missing from the latest Azure user export → left / disabled / renamed?
@@ -257,7 +257,7 @@ function renderTable(rows) {
     const dept = p.department || '';
     const cc   = p.cost_center || '';
     const editBtn = canEditUsers ? `<button class="btn btn-ghost btn-sm" title="Edit Department / Cost Center"
-        onclick="openEditUser(${p.id}, '${esc(p.display_name)}', '${esc(p.country)}', '${esc(dept)}', '${esc(cc)}')">✏️</button> ` : '';
+        onclick="openEditUser(${p.id}, ${jsArg(p.display_name)}, ${jsArg(p.country)}, ${jsArg(dept)}, ${jsArg(cc)})">✏️</button> ` : '';
     return `
       <tr>
         <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${resBadge}${notInAzure}${notInAd}
@@ -266,7 +266,7 @@ function renderTable(rows) {
         <td>${assetsCell}</td>
         <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
-        <td><span class="badge badge-factory">${p.country}</span></td>
+        <td><span class="badge badge-factory">${esc(p.country)}</span></td>
         <td>
           ${canEditUsers
             ? `<select class="form-control" style="width:132px;padding:5px 6px" onchange="savePerson(${p.id}, 'user_type', this.value)">${optionList(USER_TYPES, p.user_type)}</select>`
@@ -577,7 +577,7 @@ function setupAdUpload() {
       ${section(`🗂 Looks like shared / function accounts (${shared.length}) — not added unless ticked`, false, shared.length
         ? tbl(['Add', 'AD account', 'Name', 'Country', 'Manager', 'Last logon'], shared.map(x => freshRow(x, false, 'dirsync-shared'))) : '<span class="text-muted">None.</span>')}
       ${section(`🔀 Doubles to merge (${r.merges.length}) — the second row is merged into the first, then removed`, true, r.merges.length
-        ? tbl(['Merge', 'Keep (in AD)', 'Double (removed)'], r.merges.map(m => `<tr><td><input type="checkbox" class="dirsync-merge" data-id="${m.drop.id}" checked></td>
+        ? tbl(['Merge', 'Keep (in AD)', 'Double (removed)'], r.merges.map(m => `<tr><td><input type="checkbox" class="dirsync-merge" data-id="${m.drop.id}" ${m.careful ? '' : 'checked'}>${m.careful ? '<div class="text-sm" style="color:#d97706">check first</div>' : ''}</td>
             <td><b>${adH(m.keep.name)}</b><div class="text-muted text-sm">${adH(m.keep.email)} · AD ${adH(m.sam)}</div></td>
             <td>${adH(m.drop.name)}<div class="text-muted text-sm">${adH(m.drop.email)} · ${adH(m.drop.status)}${m.drop.user_type ? ' · ' + adH(m.drop.user_type) : ''}</div></td></tr>`))
           + '<p class="text-muted text-sm">User Type, Leaving Date, Department, Cost Center, Company and Position from the double fill blanks on the kept row.</p>' : '<span class="text-muted">None found.</span>')}

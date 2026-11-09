@@ -15,22 +15,23 @@ const actionBadge = (action) => {
 async function loadUsers() {
   try {
     const users = await apiGet('/api/users');
+    window._usersById = new Map(users.map(u => [u.id, u]));
     const me = window.CURRENT_USER;
     const tbody = document.getElementById('users-tbody');
     tbody.innerHTML = users.map(u => `
       <tr>
         <td class="text-muted text-sm">${u.id}</td>
-        <td><strong>${u.username}</strong>${u.id === (me && me.id) ? ' <span class="text-muted text-sm">(you)</span>' : ''}</td>
-        <td>${u.full_name || '—'}</td>
+        <td><strong>${htmlEsc(u.username)}</strong>${u.id === (me && me.id) ? ' <span class="text-muted text-sm">(you)</span>' : ''}</td>
+        <td>${htmlEsc(u.full_name) || '—'}</td>
         <td>${roleBadge(u.role)}</td>
-        <td>${u.team ? `<span class="badge badge-office">${u.team}</span>` : '<span class="text-muted text-sm">—</span>'}</td>
-        <td>${u.country ? String(u.country).split(',').map(c => `<span class="badge badge-factory" style="margin:1px">${c}</span>`).join('') : '<span class="text-muted text-sm">Global</span>'}</td>
+        <td>${u.team ? `<span class="badge badge-office">${htmlEsc(u.team)}</span>` : '<span class="text-muted text-sm">—</span>'}</td>
+        <td>${u.country ? String(u.country).split(',').map(c => `<span class="badge badge-factory" style="margin:1px">${htmlEsc(c)}</span>`).join('') : '<span class="text-muted text-sm">Global</span>'}</td>
         <td class="text-sm">${Number(u.asset_access) === 0 ? '<span class="text-muted">User Inv. only</span>' : 'Yes'}</td>
         <td class="text-muted text-sm">${(u.created_at || '').split(' ')[0]}</td>
         <td>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick='editUser(${JSON.stringify(u)})'>Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.username}')">Delete</button>
+            <button class="btn btn-ghost btn-sm" onclick="editUser(window._usersById.get(${u.id}))">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, ${jsArg(u.username)})">Delete</button>
           </div>
         </td>
       </tr>
@@ -47,10 +48,10 @@ async function loadAudit() {
     if (!log.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No activity yet.</td></tr>'; return; }
     tbody.innerHTML = log.map(e => `
       <tr>
-        <td class="text-muted text-sm" style="white-space:nowrap">${e.created_at}</td>
-        <td>${e.username || '—'}</td>
+        <td class="text-muted text-sm" style="white-space:nowrap">${htmlEsc(e.created_at)}</td>
+        <td>${htmlEsc(e.username) || '—'}</td>
         <td>${actionBadge(e.action)}</td>
-        <td>${e.details || '—'}</td>
+        <td>${htmlEsc(e.details) || '—'}</td>
       </tr>
     `).join('');
   } catch (err) {
@@ -75,7 +76,7 @@ async function renderCountryPicker() {
   const box = document.getElementById('u-country-list');
   const { all } = await getCountries();
   box.innerHTML = (all || []).map(c =>
-    `<label><input type="checkbox" value="${String(c).replace(/"/g, '&quot;')}"> ${c}</label>`).join('');
+    `<label><input type="checkbox" value="${htmlEsc(c)}"> ${htmlEsc(c)}</label>`).join('');
 }
 function setUserCountries(value) {
   const list = String(value || '').split(',').map(s => s.trim()).filter(Boolean);

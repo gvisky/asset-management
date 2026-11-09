@@ -132,13 +132,21 @@ router.get('/', wrap(async (req, res) => {
   // ── View "by user": one block per holder (AD Name, else User Name), with their Intune / Entra devices ──
   if (req.query.group === 'user') {
     await require('../lib/device-recheck').recheckDevices();   // device differences follow asset changes
-    const gkey = `CASE WHEN TRIM(COALESCE(ad_name, '')) <> '' THEN 'ad:' || LOWER(TRIM(ad_name))
-                       WHEN TRIM(COALESCE(user_name, '')) <> '' THEN 'name:' || LOWER(TRIM(user_name)) ELSE 'none' END`;
+    // Holder key: the AD Name; an asset with only a User Name joins that person's AD group when another
+    // asset (same User Name) or a User Inventory person (same display name) tells the AD Name.
+    const gkey = `CASE WHEN TRIM(COALESCE(assets.ad_name, '')) <> '' THEN 'ad:' || LOWER(TRIM(assets.ad_name))
+                       WHEN TRIM(COALESCE(assets.user_name, '')) <> '' THEN COALESCE(
+                         (SELECT 'ad:' || LOWER(TRIM(a2.ad_name)) FROM assets a2 WHERE a2.deleted_at IS NULL AND TRIM(COALESCE(a2.ad_name, '')) <> ''
+                             AND LOWER(TRIM(a2.user_name)) = LOWER(TRIM(assets.user_name)) ORDER BY a2.id LIMIT 1),
+                         (SELECT 'ad:' || LOWER(substr(p.email, 1, instr(p.email, '@') - 1)) FROM personnel p WHERE instr(p.email, '@') > 0
+                             AND LOWER(TRIM(p.display_name)) = LOWER(TRIM(assets.user_name)) ORDER BY p.id LIMIT 1),
+                         'name:' || LOWER(TRIM(assets.user_name)))
+                       ELSE 'none' END`;
     const glimit = Math.min(100, Math.max(1, Number(limit) || 25));
     const goffset = (Math.max(1, Number(page)) - 1) * glimit;
     const totalGroups = Number((await get(`SELECT COUNT(*) AS c FROM (SELECT ${gkey} AS k FROM assets ${where} GROUP BY k)`, params)).c);
     const totalAssets = Number((await get(`SELECT COUNT(*) AS c FROM assets ${where}`, params)).c);
-    const gOrder = sort === 'name' ? 'gkey' : 'last DESC';
+    const gOrder = { created: 'MAX(id) DESC', id: 'MIN(id) ASC', name: "MIN(LOWER(COALESCE(NULLIF(TRIM(user_name), ''), ad_name)))" }[sort] || 'last DESC';
     const groups = await all(`SELECT ${gkey} AS gkey, COUNT(*) AS n, MAX(COALESCE(updated_at, created_at)) AS last
         FROM assets ${where} GROUP BY gkey ORDER BY CASE WHEN gkey = 'none' THEN 1 ELSE 0 END, ${gOrder} LIMIT ? OFFSET ?`,
       [...params, glimit, goffset]);
@@ -155,7 +163,9 @@ router.get('/', wrap(async (req, res) => {
     }
     const devCols = `id, name, os, model, manufacturer, serial_no, ownership, managed_by, compliance, is_compliant,
       last_checkin, last_sign_in, person_id, asset_id, issues, user_upn`;
-    const devices = await all(`SELECT ${devCols} FROM devices`);
+    // Country-scoped users only see devices of their countries (search hits included).
+    const devices = (await all(`SELECT ${devCols}, country FROM devices`))
+      .filter(d => !scopeList(req) || (d.country && inScope(req, d.country)));
     // Differences from Device Check that point at an asset of this page (e.g. "SAP description names
     // another laptop's serial") — shown on that asset's row.
     const refsByAsset = new Map();
@@ -242,13 +252,18 @@ router.get('/stats', wrap(async (req, res) => {
   if (cf.clause) { delCond.push(cf.clause); dp.push(...cf.params); }
   const deletedCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${delCond.join(' AND ')}`, dp)).cnt);
 
+  // Same rule as the Needs Attention list (GET /incomplete, list ?incomplete=1): missing key field,
+  // Active without PC No / AD Name, or a serial used twice (within the same country scope).
+  const dupScope = cf.clause ? ` AND ${cf.clause}` : '';
   const incCond = [...liveCond, `(
       serial_no   IS NULL OR serial_no   = '' OR
       asset_code  IS NULL OR asset_code  = '' OR
-      ${MISSING_PC_AD_SQL}
+      ${MISSING_PC_AD_SQL} OR
+      serial_no IN (SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${dupScope} GROUP BY serial_no HAVING COUNT(*) > 1)
     )`, NOT_FLAGGED_SQL];
-  const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, [...lp, ...NO_FLAG_TYPES])).cnt);
-  const incompleteByCountry = (await all(`SELECT country, COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')} GROUP BY country`, [...lp, ...NO_FLAG_TYPES]))
+  const incParams = [...lp, ...(cf.clause ? cf.params : []), ...NO_FLAG_TYPES];
+  const incompleteCount = Number((await get(`SELECT COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')}`, incParams)).cnt);
+  const incompleteByCountry = (await all(`SELECT country, COUNT(*) as cnt FROM assets WHERE ${incCond.join(' AND ')} GROUP BY country`, incParams))
     .reduce((acc, r) => { acc[r.country || ''] = Number(r.cnt); return acc; }, {});
 
   // Warranty expiring/expired within 90 days (live assets that have a date set).

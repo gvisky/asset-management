@@ -48,6 +48,11 @@ Roles: **admin / editor / viewer** (+ country scope: global, or one or more coun
 13. **System Health** _(team IT)_ — live status of routers / switches / servers / internal web apps. The website can't reach the office networks, so a **collector** (`collector/`, Node + SNMP) on an always-on office PC checks them every minute (SNMP / ping / HTTP / TCP port) and pushes the results to `/api/health/ingest` with its own key (IT admin creates keys on the page; shown once, stored hashed). Only the latest status + status changes are stored. IT gets 🔔 alerts when a system goes down / amber / back up, or a collector stops reporting (office internet down?). First target: DrayTek Vigor2133 at 192.168.3.1 (SNMP read-only). Setup: `collector/README.md`.
 14. **Backup / restore** — `npm run backup` (all tables → timestamped JSON), `npm run restore` (see `DISASTER-RECOVERY.md`).
 
+## Safety rules in the code (bug review 10 Nov 2026)
+- All data shown in pages goes through `htmlEsc()` (app.js); names passed to buttons use `jsArg()` — never raw `${value}` in innerHTML / onclick.
+- Endpoints that change data of a country check the user's country scope (`lib/scope.js`); uploads that replace data of every country (AD list, Intune + Entra, undo) are global IT admin only.
+- Request bodies are limited to 1 MB unless the user is logged in (uploads up to 75 MB).
+
 ## Working rule (avoid conflicts)
 The project is **one repo + one live site + one database**. Every push to `main` goes live immediately and works on real data.
 

@@ -10,7 +10,7 @@ async function loadHrChanges() {
     box.innerHTML = hr.map(n => `
       <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
         <span style="color:#dc2626;font-size:10px;line-height:18px">${n.read ? '○' : '●'}</span>
-        <div style="flex:1"><div style="font-size:13px">${n.message}</div>
+        <div style="flex:1"><div style="font-size:13px">${htmlEsc(n.message)}</div>
           <div class="text-muted text-sm">${n.created_at}</div></div>
       </div>`).join('');
   } catch (e) {

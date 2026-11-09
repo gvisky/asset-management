@@ -17,22 +17,22 @@ async function loadDeleted() {
 
     const isGlobalAdmin = window.CURRENT_USER && window.CURRENT_USER.role === 'admin' && !window.CURRENT_USER.country;
     tbody.innerHTML = rows.map(a => {
-      const label = (a.asset_code || a.brand_model || '').replace(/'/g, "\\'");
+      const label = jsArg(a.asset_code || a.brand_model || '');
       const purgeBtn = isGlobalAdmin
-        ? `<button class="btn btn-danger btn-sm" onclick="purgeAsset(${a.id}, '${label}')" title="Delete permanently">🗑 Delete</button>`
+        ? `<button class="btn btn-danger btn-sm" onclick="purgeAsset(${a.id}, ${label})" title="Delete permanently">🗑 Delete</button>`
         : '';
       return `
       <tr>
-        <td><code style="font-size:12px;color:var(--brand)">${a.asset_code || '—'}</code></td>
-        <td>${a.brand_model || '—'}</td>
+        <td><code style="font-size:12px;color:var(--brand)">${htmlEsc(a.asset_code) || '—'}</code></td>
+        <td>${htmlEsc(a.brand_model) || '—'}</td>
         <td>${locationBadge(a.location)}</td>
-        <td class="truncate" title="${(a.department || '').replace(/"/g,'&quot;')}">${a.department || '—'}</td>
-        <td>${a.user_name || '—'}</td>
-        <td><span class="badge badge-broken">${a.deleted_by || 'unknown'}</span></td>
-        <td class="text-muted text-sm" style="white-space:nowrap">${a.deleted_at || '—'}</td>
+        <td class="truncate" title="${htmlEsc(a.department)}">${htmlEsc(a.department) || '—'}</td>
+        <td>${htmlEsc(a.user_name) || '—'}</td>
+        <td><span class="badge badge-broken">${htmlEsc(a.deleted_by || 'unknown')}</span></td>
+        <td class="text-muted text-sm" style="white-space:nowrap">${htmlEsc(a.deleted_at) || '—'}</td>
         <td>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-primary btn-sm" onclick="restoreAsset(${a.id}, '${label}')">↩ Restore</button>
+            <button class="btn btn-primary btn-sm" onclick="restoreAsset(${a.id}, ${label})">↩ Restore</button>
             ${purgeBtn}
           </div>
         </td>

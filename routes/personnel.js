@@ -58,13 +58,13 @@ router.get('/', wrap(async (req, res) => {
   if (req.query.ad === 'missing') {
     conditions.push(`(SELECT value FROM app_meta WHERE key = 'ad_last_import') IS NOT NULL
       AND instr(COALESCE((SELECT value FROM app_meta WHERE key = 'ad_import_countries'), ''), '"' || country || '"') > 0
-      AND (ad_seen_at IS NULL OR ad_seen_at < (SELECT value FROM app_meta WHERE key = 'ad_last_import'))`);
+      AND (ad_seen_at IS NULL OR ad_seen_at < (SELECT value FROM app_meta WHERE key = 'ad_last_import')) AND status <> 'deleted'`);
   } else if (req.query.ad === 'stale') {
-    conditions.push("ad_last_logon IS NOT NULL AND ad_last_logon < datetime('now', '-90 days')");
+    conditions.push("ad_last_logon IS NOT NULL AND ad_last_logon < datetime('now', '-90 days') AND COALESCE(ad_resource, 0) = 0");
   } else if (req.query.ad === 'resource') {
     conditions.push('ad_resource = 1');
   } else if (req.query.ad === 'never') {
-    conditions.push('ad_seen_at IS NOT NULL AND ad_never_logon = 1');
+    conditions.push('ad_seen_at IS NOT NULL AND ad_never_logon = 1 AND COALESCE(ad_resource, 0) = 0');
   }
   // Not found in the latest Azure user export (left / disabled / renamed?).
   if (req.query.azure === 'missing') {
@@ -92,7 +92,7 @@ router.get('/', wrap(async (req, res) => {
   try { adCountries = JSON.parse(await getMeta('ad_import_countries') || '[]'); } catch { adCountries = []; }
   res.json({ total, page: Number(page), limit: Number(limit), data, last_import: lastImport, baseline: await getMeta('baseline_personnel'),
              ad_last_import: await getMeta('ad_last_import'), ad_countries: adCountries,
-             can: { edit: isITAdmin(req.user) } });
+             can: { edit: isITAdmin(req.user), adUpload: isITAdmin(req.user) && !scopeList(req) } });
 }));
 
 // ── GET /api/personnel/filters — country list for the filter dropdown ─────────
@@ -266,7 +266,7 @@ router.post('/import', wrap(async (req, res) => {
 // AD account / manager / OU / last logon, adds new people, merges doubles. Resource accounts
 // (shared mailboxes / email groups, OU …/Resources) are added too, marked ad_resource = 1.
 router.post('/ad-import', wrap(async (req, res) => {
-  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can upload the AD list' });
+  if (!isITAdmin(req.user) || scopeList(req)) return res.status(403).json({ error: 'Only a global IT admin can upload the AD list (it covers every country)' });
   const b = req.body || {};
   if (!b.file || typeof b.file !== 'string') return res.status(400).json({ error: 'No file received' });
   let adRows;
@@ -277,9 +277,10 @@ router.post('/ad-import', wrap(async (req, res) => {
   }
   const people = await all('SELECT * FROM personnel');
   const plan = planAdImport(adRows, people);
-  const skipAdd = new Set((b.skipAdd || []).map(s => String(s).toLowerCase()));
-  const addShared = new Set((b.addShared || []).map(s => String(s).toLowerCase()));
-  const skipMerge = new Set((b.skipMerge || []).map(Number));
+  const arr = (v) => (Array.isArray(v) ? v : []);
+  const skipAdd = new Set(arr(b.skipAdd).map(s => String(s).toLowerCase()));
+  const addShared = new Set(arr(b.addShared).map(s => String(s).toLowerCase()));
+  const skipMerge = new Set(arr(b.skipMerge).map(Number));
   const toAdd = plan.fresh.filter(f => (f.shared ? addShared.has(f.sam.toLowerCase()) : !skipAdd.has(f.sam.toLowerCase())));
   const toMerge = plan.merges.filter(m => !skipMerge.has(Number(m.drop.id)));
   const brief = (p) => ({ id: p.id, name: p.display_name, email: p.email, country: p.country, status: p.status, user_type: p.user_type });
@@ -290,7 +291,8 @@ router.post('/ad-import', wrap(async (req, res) => {
     matched: plan.matched.length,
     matchedByName: plan.byNameMatch.map(m => ({ ad: adBrief(m.r), person: brief(m.p) })),
     fresh: plan.fresh.map(f => ({ ...adBrief(f), shared: f.shared, resource: !!f.resource })),
-    merges: plan.merges.map(m => ({ keep: brief(m.keep), drop: brief(m.drop), sam: m.sam })),
+    // A double HR / IT already worked on (User Type set, or not Active) is not ticked by default.
+    merges: plan.merges.map(m => ({ keep: brief(m.keep), drop: brief(m.drop), sam: m.sam, careful: !!(m.drop.user_type || (m.drop.status && m.drop.status !== 'Active')) })),
     countryDiffs: plan.countryDiffs,
     notInAd: plan.notInAd.map(brief),
     staleUsers: plan.users.filter(r => !r.resource && r.lastLogon && daysAgo(r.lastLogon) > 90).length,
@@ -323,6 +325,12 @@ router.post('/ad-import', wrap(async (req, res) => {
           touched = CASE WHEN touched = 1 OR ? = 1 THEN 1 ELSE 0 END, updated_at = datetime('now')
         WHERE id = ?`,
       args: [d.user_type || '', d.leaving_date || '', d.department || '', d.cost_center || '', d.company_name || '', d.position || '', d.touched ? 1 : 0, m.keep.id] });
+    // The double's links follow the kept row: assets using its AD Name, devices pointing at it.
+    const dropLocal = String(d.email || '').split('@')[0], keepLocal = String(m.keep.email || '').split('@')[0];
+    if (dropLocal && keepLocal && dropLocal.toLowerCase() !== keepLocal.toLowerCase()) {
+      stmts.push({ sql: 'UPDATE assets SET ad_name = ? WHERE deleted_at IS NULL AND LOWER(ad_name) = LOWER(?)', args: [keepLocal, dropLocal] });
+    }
+    stmts.push({ sql: 'UPDATE devices SET person_id = ? WHERE person_id = ?', args: [m.keep.id, d.id] });
     stmts.push({ sql: 'DELETE FROM personnel WHERE id = ?', args: [d.id] });
   }
   for (const f of toAdd) {
