@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-09",
+    "title": "User Inventory: Last logon column",
+    "items": [
+      "\"Last updated\" replaced by Last logon: date + days since (amber after 30 days, red after 90, \"never\" if the account never logged on).",
+      "New sort: longest since last logon first.",
+      "The AD account is shown in bold in the email (e.g. abilgili@hayat.com.tr), with the manager underneath."
+    ]
+  },
+  {
+    "date": "2026-11-09",
     "title": "User Inventory: upload the AD user list (IT admin)",
     "items": [
       "⬆ Upload AD list: preview first, then apply — matches people by AD account / email / name, adds new people, merges doubles, skips resource accounts (shared mailboxes, groups).",

@@ -206,19 +206,25 @@ function renderHint() {
 let lastAzureImport = null;
 let lastAdImport = null, adCountries = [];
 
-// AD line under the email: account · last logon (red after 90 days) · manager.
-function adLine(p) {
-  if (!p.ad_seen_at) return '';
-  let logon;
-  if (p.ad_never_logon) logon = '<span class="text-muted">never logged on</span>';
-  else if (p.ad_last_logon) {
-    const d = new Date(p.ad_last_logon.replace(' ', 'T'));
-    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-    const txt = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
-    logon = days > 90 ? `<span style="color:#dc2626;font-weight:600" title="No AD logon for ${days} days">logon ${txt}</span>` : `logon ${txt}`;
-  } else logon = '';
-  return `<div class="text-muted" style="font-size:11.5px;line-height:1.4">AD <b>${esc(p.ad_sam)}</b>${logon ? ' · ' + logon : ''}`
-    + `${p.ad_manager ? `<br>↑ ${esc(p.ad_manager)}` : ''}</div>`;
+// Email with the AD account (the part before @) highlighted, when the person is in the AD list.
+function emailHtml(p) {
+  const e = String(p.email || '');
+  if (!e) return '—';
+  const at = e.indexOf('@');
+  if (!p.ad_seen_at || at < 0) return esc(e);
+  return `<b style="color:var(--text, #111827)" title="AD account">${esc(e.slice(0, at))}</b>${esc(e.slice(at))}`;
+}
+const managerLine = (p) => (p.ad_manager ? `<div class="text-muted" style="font-size:11.5px">↑ ${esc(p.ad_manager)}</div>` : '');
+// Last AD logon: date + days since (amber after 30 days, red after 90); "never" if the account never logged on.
+function logonCell(p) {
+  if (!p.ad_seen_at) return '<span class="text-muted">—</span>';
+  if (p.ad_never_logon || !p.ad_last_logon) return '<span class="text-muted" title="This AD account has never logged on">never</span>';
+  const d = new Date(p.ad_last_logon.replace(' ', 'T'));
+  const days = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+  const txt = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+  const color = days > 90 ? '#dc2626' : days > 30 ? '#d97706' : 'var(--muted)';
+  const ago = days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`;
+  return `<div style="white-space:nowrap">${txt}</div><div style="font-size:11.5px;color:${color};${days > 90 ? 'font-weight:600' : ''}">${ago}</div>`;
 }
 let peopleBaseline = null;   // first big import — rows from it get no New / Edited badge
 
@@ -253,8 +259,8 @@ function renderTable(rows) {
     return `
       <tr>
         <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${notInAzure}${notInAd}
-          <div class="text-muted text-sm">${esc(p.email) || '—'}</div>${adLine(p)}</td>
-        <td class="when-cell">${whenCell(p.created_at, p.updated_at, peopleBaseline)}</td>
+          <div class="text-muted text-sm">${emailHtml(p)}</div>${managerLine(p)}</td>
+        <td class="when-cell">${logonCell(p)}</td>
         <td>${assetsCell}</td>
         <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
