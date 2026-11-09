@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Device Check: merge duplicate assets",
+    "items": [
+      "Same serial on two assets (typos like O/0 included) and at most one with an SAP code → Merge: keeps the SAP record with the Intune Computer No + Serial, the other goes to the Recycle Bin.",
+      "Same serial on two SAP assets → flagged to check by hand, never merged."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Asset Inventory: view by user",
     "items": [
       "Assets grouped by person, with each asset's Intune status and the person's other devices (PCs not in Asset Inventory highlighted, phones / tablets).",
