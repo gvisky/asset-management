@@ -11,6 +11,7 @@ const { countrySql, inScope, scopeList } = require('../lib/scope');
 const { resetCountryCache } = require('../lib/country-list');
 const { parseCsv, detectKind, buildDirectory } = require('../lib/directory-import');
 const { checkDevices, serialKey } = require('../lib/device-check');
+const { recheckDevices } = require('../lib/device-recheck');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const lcKey = (v) => String(v || '').trim().toLowerCase();
@@ -81,6 +82,7 @@ function deviceWhere(req) {
 
 // ── GET /api/devices — list ───────────────────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
+  await recheckDevices();            // differences follow Asset Inventory changes made after the upload
   const page = Math.max(1, Number(req.query.page) || 1);
   const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 50));
   const { where, params } = deviceWhere(req);
@@ -95,6 +97,7 @@ router.get('/', wrap(async (req, res) => {
 
 // ── GET /api/devices/stats — tiles + filter options (same filters as the list) ─
 router.get('/stats', wrap(async (req, res) => {
+  await recheckDevices();
   const { where, params } = deviceWhere(req);
   const and = where ? where + ' AND' : 'WHERE';
   const one = async (extra) => Number((await get(`SELECT COUNT(*) AS c FROM devices d ${and} ${extra}`, params)).c);
@@ -755,6 +758,7 @@ router.post('/check-upload', wrap(async (req, res) => {
     return res.status(500).json({ error: `Upload failed: ${errorText(e)} — the previous Devices list is kept; try again.` });
   }
   await setMeta('device_check_last', now);
+  await recheckDevices(true);
   const msg = `${req.user.full_name} uploaded Intune + Entra devices: ${stats.kept} devices of ${stats.users} AD users, `
     + `${stats.withIssues} with differences from Asset Inventory (${stats.notInAssets} not in Asset Inventory).`;
   await audit(req.user, 'IMPORT', null, msg);

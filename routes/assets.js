@@ -131,6 +131,7 @@ router.get('/', wrap(async (req, res) => {
 
   // ── View "by user": one block per holder (AD Name, else User Name), with their Intune / Entra devices ──
   if (req.query.group === 'user') {
+    await require('../lib/device-recheck').recheckDevices();   // device differences follow asset changes
     const gkey = `CASE WHEN TRIM(COALESCE(ad_name, '')) <> '' THEN 'ad:' || LOWER(TRIM(ad_name))
                        WHEN TRIM(COALESCE(user_name, '')) <> '' THEN 'name:' || LOWER(TRIM(user_name)) ELSE 'none' END`;
     const glimit = Math.min(100, Math.max(1, Number(limit) || 25));

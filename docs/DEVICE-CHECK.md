@@ -117,3 +117,10 @@ Entra." Example: #750 (VNHCMC0500, serial 5CG01204K7, no asset code, added from 
 (VNHCMC0293, serial typed 5CGO12O4K7 with letter O, asset code 255020000004) → Merge keeps #253 with
 Computer No VNHCMC0500 / Serial 5CG01204K7; #750 goes to the Recycle Bin.
 Test on the local copy: 4 duplicates to merge, 6 serials shared by two SAP assets (check by hand).
+
+## Kept up to date after the upload (10 Nov 2026)
+The differences used to be worked out only at upload time, so an asset added afterwards (e.g. with
+➕ Add on the Devices page) left the device showing "Not in Asset Inventory" and no Merge button.
+Now `lib/device-recheck.js` re-runs the comparison on the stored device list whenever assets or
+accepted checks changed since the last time (cheap signature check), before the Devices page and
+Asset Inventory → View: by user are loaded.
