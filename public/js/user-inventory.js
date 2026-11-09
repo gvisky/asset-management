@@ -20,6 +20,18 @@ function statusPill(s) {
 
 function esc(v) { return String(v == null ? '' : v).replace(/"/g, '&quot;'); }
 
+// Show script errors on screen (so a screenshot tells IT what went wrong).
+window.addEventListener('error', (e) => {
+  const m = `Page error: ${e.message || e}${e.filename ? ` (${String(e.filename).split('/').pop()}:${e.lineno})` : ''}`;
+  console.error(m);
+  if (typeof showToast === 'function') showToast(m, 'error'); else alert(m);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const m = `Page error: ${(e.reason && e.reason.message) || e.reason}`;
+  console.error(m);
+  if (typeof showToast === 'function') showToast(String(m).slice(0, 200), 'error');
+});
+
 function optionList(values, selected, labels) {
   return values.map(v =>
     `<option value="${esc(v)}"${v === (selected || '') ? ' selected' : ''}>${v === '' ? '—' : ((labels && labels[v]) || v)}</option>`
@@ -472,9 +484,24 @@ function adLogonText(r) {
   const t = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
   return days > 90 ? `<span style="color:#dc2626">${t}</span>` : t;
 }
+// Button: onclick="openAdUpload()" in the page — works even if the setup below hasn't run yet.
+const adOpenFallback = function () {
+  try {
+    if (!adUploadReady) setupAdUpload();
+    if (window.openAdUpload === adOpenFallback) throw new Error('the upload window could not be prepared');
+    window.openAdUpload();
+  } catch (e) {
+    alert('The AD upload window could not open: ' + (e && e.message ? e.message : e) + '\nPlease reload the page with Ctrl+F5 and try again.');
+  }
+};
+window.openAdUpload = adOpenFallback;
+let adUploadReady = false;
 function setupAdUpload() {
+  if (adUploadReady) return;
+  adUploadReady = true;
   const input = document.getElementById('ad-file');
   const ov = document.getElementById('ad-overlay');
+  if (!ov) throw new Error('the upload window is missing from the page (old copy of the page?)');
   const body = document.getElementById('ad-body');
   const apply = document.getElementById('ad-apply');
   const foot = document.getElementById('ad-foot');
@@ -508,11 +535,11 @@ function setupAdUpload() {
     const pick = document.getElementById('ad-file-pick');
     if (pick) pick.addEventListener('change', () => handleFile(pick.files && pick.files[0]));
   }
-  document.getElementById('btn-ad-upload').addEventListener('click', () => {
+  window.openAdUpload = () => {
     fileB64 = null; apply.disabled = true; foot.textContent = '';
     body.innerHTML = pickerHtml; wirePicker();
     ov.classList.add('open');
-  });
+  };
   input.addEventListener('change', () => { ov.classList.add('open'); handleFile(input.files && input.files[0]); });
 
   function section(title, open, inner) {
@@ -583,4 +610,5 @@ function setupAdUpload() {
   document.getElementById('ad-close').addEventListener('click', close);
   document.getElementById('ad-cancel').addEventListener('click', close);
 }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', setupAdUpload); else setupAdUpload();
+const adSetupSafe = () => { try { setupAdUpload(); } catch (e) { console.error('[AD upload setup]', e); } };
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', adSetupSafe); else adSetupSafe();
