@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-11-09",
+    "title": "User Inventory: upload the AD user list (IT admin)",
+    "items": [
+      "⬆ Upload AD list: preview first, then apply — matches people by AD account / email / name, adds new people, merges doubles, skips resource accounts (shared mailboxes, groups).",
+      "Each person shows their AD account, manager and last logon (red after 90 days).",
+      "New filters: Not in latest AD list · AD: no logon for 90+ days · AD: never logged on."
+    ]
+  },
+  {
     "date": "2026-11-03",
     "title": "New: System Health page (IT)",
     "items": [

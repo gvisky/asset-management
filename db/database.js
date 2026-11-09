@@ -923,6 +923,11 @@ async function migrate() {
   if (!pcols2.includes('employee_id'))    await backend.run("ALTER TABLE personnel ADD COLUMN employee_id TEXT DEFAULT ''");
   if (!pcols2.includes('ad_department'))  await backend.run("ALTER TABLE personnel ADD COLUMN ad_department TEXT DEFAULT ''");
   if (!pcols2.includes('azure_seen_at'))  await backend.run("ALTER TABLE personnel ADD COLUMN azure_seen_at TEXT DEFAULT NULL");
+  // Active Directory export (IT uploads the AD user list): account, manager, OU, last logon.
+  for (const [col, type] of [['ad_sam', "TEXT DEFAULT ''"], ['ad_manager', "TEXT DEFAULT ''"], ['ad_ou', "TEXT DEFAULT ''"],
+                             ['ad_last_logon', 'TEXT DEFAULT NULL'], ['ad_never_logon', 'INTEGER NOT NULL DEFAULT 0'], ['ad_seen_at', 'TEXT DEFAULT NULL']]) {
+    if (!pcols2.includes(col)) await backend.run(`ALTER TABLE personnel ADD COLUMN ${col} ${type}`);
+  }
 
   // Devices ← Intune + Entra device exports (replaced on every import; one row per device).
   await backend.script(`
