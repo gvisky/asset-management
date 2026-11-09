@@ -246,14 +246,16 @@ function complianceBadge(d) {
   const cls = /^compliant$/i.test(c) ? 'badge-active' : /noncompliant/i.test(c) ? 'badge-broken' : 'badge-retired';
   return `<span class="badge ${cls}" style="font-size:10px">${hEsc(c)}</span>`;
 }
-const SHORT_DIFF = { pc_no: 'Intune PC', serial: 'Intune serial', user: 'Intune user', brand: 'Intune brand', conflict: 'PC / serial on 2 assets' };
+const SHORT_DIFF = { pc_no: 'Intune PC', serial: 'Intune serial', user: 'Intune user', brand: 'Intune brand', conflict: 'PC / serial on 2 assets', duplicate: 'Duplicate' };
 // Device status shown under the asset's Computer No: compliance · last check-in · differences.
 function deviceLine(d) {
   const n = daysAgo(d.last_checkin || d.last_sign_in);
   const iss = issuesOf(d).filter(i => i.code !== 'not_in_assets');
   return `<div class="inv-dev">${complianceBadge(d)} <span style="color:${daysColor(n)}" title="Days since the last Intune check-in (or Entra sign-in)">⟳ ${daysTxt(n)}</span>
     ${d.ownership && /personal/i.test(d.ownership) ? '<span class="badge badge-retired" style="font-size:10px">Personal</span>' : ''}
-    ${iss.map(i => `<div class="inv-diff" title="${hEsc(i.text)} — Asset: ${hEsc(i.asset || '∅')} · Intune: ${hEsc(i.intune || '∅')}">⚠ ${SHORT_DIFF[i.code] || 'Differs'}: <b>${hEsc(i.intune || '∅')}</b></div>`).join('')}</div>`;
+    ${iss.map(i => i.code === 'duplicate'
+      ? `<div class="inv-diff" title="${hEsc(i.text)}">⚠ Same serial as #${hEsc(i.other)}${isITAdmin() ? ` <button class="btn btn-primary btn-sm" style="padding:1px 7px;font-size:10.5px" onclick="mergeAssets(${d.id}, ${Number(i.other)}, () => loadAssets(currentPage))">Merge</button>` : ''}</div>`
+      : `<div class="inv-diff" title="${hEsc(i.text)} — Asset: ${hEsc(i.asset || '∅')} · Intune: ${hEsc(i.intune || '∅')}">⚠ ${SHORT_DIFF[i.code] || 'Differs'}: <b>${hEsc(i.intune || '∅')}</b></div>`).join('')}</div>`;
 }
 // A device of this user that is not linked to any of their assets.
 function looseDeviceRow(d) {

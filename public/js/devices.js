@@ -57,7 +57,8 @@ function issuesHtml(d) {
   if (!list.length) return '';
   return list.map(i => `<div class="dc-issue">⚠ <b>${dEsc(i.text)}</b>${i.code === 'not_in_assets' ? '' : `<br><span class="text-muted">Asset: ${dEsc(i.asset || '∅')} · Intune: ${dEsc(i.intune || '∅')}</span>`}
       ${isITAdmin() ? `<div style="margin-top:3px">${FIXABLE.includes(i.code) ? `<button class="btn btn-ghost btn-sm dc-use" data-id="${d.id}" data-code="${i.code}" title="Copy the Intune value to the asset (History Usage + audit log)">Use Intune value</button>` : ''}
-        <button class="btn btn-ghost btn-sm dc-ack" data-id="${d.id}" data-code="${i.code}" title="It's correct as it is — don't flag it again while the Intune value stays the same">Mark as checked</button></div>` : ''}</div>`).join('');
+        ${i.code === 'duplicate' ? `<button class="btn btn-primary btn-sm dc-merge" data-id="${d.id}" data-other="${i.other}" title="Merge the two assets into one with the Intune Computer No and Serial">Merge</button>` : ''}
+        <button class="btn btn-ghost btn-sm dc-ack" data-id="${d.id}" data-code="${i.code}"${i.other ? ` data-other="${i.other}"` : ''} title="It's correct as it is — don't flag it again">Mark as checked</button></div>` : ''}</div>`).join('');
 }
 function compliantCell(v) {
   if (v === 1) return '<span class="badge badge-active">Yes</span>';
@@ -110,6 +111,7 @@ async function loadDevices(page = devPage) {
       }));
       tbody.querySelectorAll('.add-asset').forEach(b => b.addEventListener('click', () => openAddAssets([Number(b.dataset.id)])));
       tbody.querySelectorAll('.dc-use, .dc-ack').forEach(b => b.addEventListener('click', () => resolveIssue(b)));
+      tbody.querySelectorAll('.dc-merge').forEach(b => b.addEventListener('click', () => mergeAssets(b.dataset.id, b.dataset.other, refresh)));
       tbody.querySelectorAll('.add-person').forEach(b => b.addEventListener('click', () => openAddPeople([Number(b.dataset.id)])));
     }
     document.getElementById('sel-page').checked = r.data.length > 0 && r.data.every(d => selected.has(d.id));
@@ -574,7 +576,7 @@ async function resolveIssue(b) {
   if (use && !confirm('Copy the Intune value to the asset? It is written to the asset\'s History Usage.')) return;
   b.disabled = true;
   try {
-    await apiPost(`/api/devices/${b.dataset.id}/${use ? 'use-intune' : 'ack'}`, { code: b.dataset.code });
+    await apiPost(`/api/devices/${b.dataset.id}/${use ? 'use-intune' : 'ack'}`, { code: b.dataset.code, ...(b.dataset.other ? { other: Number(b.dataset.other) } : {}) });
     showToast(use ? 'Asset updated from Intune' : 'Marked as checked');
     refresh();
   } catch (err) {
@@ -606,7 +608,7 @@ function setupCheckUpload() {
       body.innerHTML = picker + `<p style="color:#dc2626;font-weight:600">${dEsc(String(m).slice(0, 300))}</p>`; wire();
     }
   });
-  const LBL = { not_in_assets: 'Not in Asset Inventory', serial: 'Serial differs / missing', pc_no: 'Computer No differs',
+  const LBL = { duplicate: 'Duplicate asset (same serial)', not_in_assets: 'Not in Asset Inventory', serial: 'Serial differs / missing', pc_no: 'Computer No differs',
     user: 'User differs / missing', brand: 'Brand differs', conflict: 'PC No & serial → different assets' };
   function show(r) {
     const st = r.stats;

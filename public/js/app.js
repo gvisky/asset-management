@@ -372,3 +372,18 @@ function initMobileNav() {
   // Reset state if the viewport grows back to desktop
   window.addEventListener('resize', () => { if (window.innerWidth > 768) close(); });
 }
+
+// Merge two assets that are the same machine (same serial) — Device Check. IT admin.
+async function mergeAssets(deviceId, otherId, after) {
+  if (!confirm('Merge these two assets into one?\n\n• The record with the asset code (else the older one) is kept\n'
+    + '• It gets the Computer No and Serial from Intune, and empty fields are filled from the other record\n'
+    + '• The other record goes to the Recycle Bin (can be restored)\n• Everything is written to History Usage')) return;
+  try {
+    const r = await apiPost(`/api/devices/${deviceId}/merge`, { other: Number(otherId) });
+    showToast(`Merged: asset #${r.drop} → #${r.keep} (the other is in the Recycle Bin)`);
+    if (typeof after === 'function') after();
+  } catch (err) {
+    let m = 'Could not merge'; try { m = JSON.parse(err.message).error || m; } catch { /* keep */ }
+    showToast(m, 'error');
+  }
+}

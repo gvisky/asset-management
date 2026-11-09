@@ -10,7 +10,7 @@ const { learnModels, proposeAsset, assetMissing, personMissing } = require('../l
 const { countrySql, inScope, scopeList } = require('../lib/scope');
 const { resetCountryCache } = require('../lib/country-list');
 const { parseCsv, detectKind, buildDirectory } = require('../lib/directory-import');
-const { checkDevices } = require('../lib/device-check');
+const { checkDevices, serialKey } = require('../lib/device-check');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const lcKey = (v) => String(v || '').trim().toLowerCase();
@@ -734,7 +734,7 @@ router.post('/check-upload', wrap(async (req, res) => {
   await new Promise(r => setImmediate(r));                         // let other requests through after parsing
   const people = await all('SELECT id, email, ad_sam, ad_seen_at, country, display_name FROM personnel');
   if (!people.some(p => p.ad_seen_at)) return res.status(400).json({ error: 'Upload the AD user list in User Inventory first — devices are kept only for people in the AD list.' });
-  const assets = await all('SELECT id, computer_no, serial_no, brand_model, ad_name, user_name, asset_type FROM assets WHERE deleted_at IS NULL');
+  const assets = await all('SELECT id, computer_no, serial_no, brand_model, ad_name, user_name, asset_type, asset_code, asset_s4 FROM assets WHERE deleted_at IS NULL');
   const acks = await all('SELECT device_key, code, value FROM device_ack');
   const { devices, stats } = checkDevices(files, people, assets, acks);
   const sample = devices.filter(d => d.issues).slice(0, 400).map(d => ({ name: d.name, user: d.user_name, upn: d.user_upn, country: d.country,
@@ -773,14 +773,77 @@ router.post('/:id/ack', wrap(async (req, res) => {
   const d = await get('SELECT * FROM devices WHERE id = ?', [req.params.id]);
   if (!d) return res.status(404).json({ error: 'Device not found' });
   const list = issuesOf(d);
-  const it = list.find(i => i.code === req.body.code);
+  const other = req.body.other != null ? Number(req.body.other) : null;
+  const it = list.find(i => i.code === req.body.code && (other == null || Number(i.other) === other));
   if (!it) return res.status(400).json({ error: 'That difference is no longer open' });
+  // Duplicates are remembered per other asset ("duplicate:<id>"), the rest per Intune value.
+  const perOther = it.code === 'duplicate' || (it.code === 'conflict' && it.other);
+  const ackCode = perOther ? 'duplicate' : it.code;
+  const ackValue = perOther ? String(it.other) : lcKey(it.intune);
   await run(`INSERT INTO device_ack (device_key, code, value, by_user) VALUES (?, ?, ?, ?)
              ON CONFLICT (device_key, code) DO UPDATE SET value = excluded.value, by_user = excluded.by_user, at = datetime('now')`,
-    [d.device_key || '', it.code, lcKey(it.intune), req.user.username]);
-  await saveIssues(d.id, list.filter(i => i.code !== it.code));
+    [(d.device_key || '') + (perOther ? `#${it.other}` : ''), ackCode, ackValue, req.user.username]);
+  await saveIssues(d.id, list.filter(i => i !== it));
   await audit(req.user, 'UPDATE', d.asset_id || null, `Device check: marked "${it.text}" as checked for ${d.name} (asset "${it.asset}", Intune "${it.intune}")`);
   res.json({ ok: true });
+}));
+
+// POST /api/devices/:id/merge — { other } the device's asset and asset #other are the same machine
+// (same serial). Keep the record with the asset code (else the older one), give it the Intune Computer
+// No + Serial, fill its blanks from the other, move maintenance / license links, and put the other in
+// the Recycle Bin (restorable).
+const MERGE_FILL = ['location', 'country', 'department', 'cost_center', 'cost_center_desc', 'ecc_cc', 'asset_code', 'asset_s4',
+  'asset_description', 'brand_model', 'asset_type', 'user_name', 'ad_name', 'purchase_date', 'warranty_expiry', 'vendor', 'cost',
+  'po_number', 'remark', 'date_assigned', 'mk'];
+router.post('/:id/merge', wrap(async (req, res) => {
+  if (!isITAdmin(req.user)) return res.status(403).json({ error: 'Only an IT admin can merge assets' });
+  const d = await get('SELECT * FROM devices WHERE id = ?', [req.params.id]);
+  if (!d) return res.status(404).json({ error: 'Device not found' });
+  const otherId = Number(req.body && req.body.other);
+  const list = issuesOf(d);
+  const it = list.find(i => i.code === 'duplicate' && Number(i.other) === otherId);
+  if (!it) return res.status(400).json({ error: 'That duplicate is no longer open' });
+  const A = d.asset_id ? await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [d.asset_id]) : null;
+  const B = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [otherId]);
+  if (!A || !B) return res.status(404).json({ error: 'One of the two assets no longer exists' });
+  if (serialKey(A.serial_no) !== serialKey(d.serial_no) && serialKey(B.serial_no) !== serialKey(d.serial_no)) {
+    return res.status(400).json({ error: 'The serials no longer match the Intune device — check by hand' });
+  }
+  const codeOf = (x) => [x.asset_s4, x.asset_code].map(v => String(v || '').trim()).find(v => v && !/^(missing|none|n\/?a|-+|—|0+|null|tbd|\?)$/i.test(v)) || '';
+  if (codeOf(A) && codeOf(B) && codeOf(A) !== codeOf(B)) {
+    return res.status(409).json({ error: `Assets #${A.id} (${codeOf(A)}) and #${B.id} (${codeOf(B)}) are two SAP assets — not merged. Check which serial is right and fix it by hand.` });
+  }
+  const hasCode = (x) => !!codeOf(x);
+  const keep = hasCode(A) !== hasCode(B) ? (hasCode(A) ? A : B) : (A.id < B.id ? A : B);
+  const drop = keep === A ? B : A;
+  const sets = {};
+  if (d.name && keep.computer_no !== d.name) sets.computer_no = d.name;
+  if (d.serial_no && keep.serial_no !== d.serial_no) {
+    if (keep.fields_locked) return res.status(403).json({ error: `Serial is locked on asset #${keep.id} — an IT admin must unlock it first (History Usage), then merge.` });
+    sets.serial_no = d.serial_no;
+  }
+  for (const k of MERGE_FILL) if (!String(keep[k] || '').trim() && String(drop[k] || '').trim()) sets[k] = drop[k];
+  const ts = ts16();
+  const line = `${ts} UTC: merged with asset #${drop.id}${drop.asset_s4 || drop.asset_code ? ` (${drop.asset_s4 || drop.asset_code})` : ''} — same machine as Intune device ${d.name}`
+    + `${Object.keys(sets).length ? `; set ${Object.entries(sets).map(([k, v]) => `${k}: "${keep[k] || '∅'}"→"${v}"`).join('; ')}` : ''} by ${req.user.username}`;
+  const dropHist = drop.history_usage ? `\n— history of merged asset #${drop.id} —\n${drop.history_usage}` : '';
+  const hist = (keep.history_usage ? keep.history_usage + '\n' : '') + line + dropHist;
+  const cols = Object.keys(sets);
+  await batch([
+    { sql: `UPDATE assets SET ${cols.map(k => `${k} = ?`).concat(['history_usage = ?', 'sap_confirmed = 0']).join(', ')} WHERE id = ?`,
+      args: [...cols.map(k => sets[k]), hist, keep.id] },
+    { sql: "UPDATE assets SET deleted_at = datetime('now'), deleted_by = ?, history_usage = ? WHERE id = ?",
+      args: [`${req.user.username} (merged into #${keep.id})`, `${drop.history_usage ? drop.history_usage + '\n' : ''}${ts} UTC: merged into asset #${keep.id} (same serial) by ${req.user.username}`, drop.id] },
+    { sql: "UPDATE maintenance_log SET asset_id = ? WHERE asset_id = ? AND asset_type = 'asset'", args: [keep.id, drop.id] },
+    { sql: "UPDATE license_assignments SET assignee_ref = ? WHERE assignee_type = 'asset' AND assignee_ref = ?", args: [String(keep.id), String(drop.id)] },
+    { sql: 'UPDATE devices SET asset_id = ? WHERE asset_id = ?', args: [keep.id, drop.id] },
+  ]);
+  const fresh = await get('SELECT computer_no, serial_no, brand_model, ad_name, user_name FROM assets WHERE id = ?', [keep.id]);
+  await run('UPDATE devices SET asset_values = ? WHERE id = ?', [JSON.stringify(fresh), d.id]);
+  // Merged: the duplicate and the PC No / serial differences of this device are settled.
+  await saveIssues(d.id, list.filter(i => !(i.code === 'duplicate' && Number(i.other) === otherId) && !['pc_no', 'serial'].includes(i.code)));
+  await audit(req.user, 'UPDATE', keep.id, `Merged asset #${drop.id} into #${keep.id} (same machine as Intune device ${d.name}); #${drop.id} moved to the Recycle Bin`);
+  res.json({ ok: true, keep: keep.id, drop: drop.id, set: sets });
 }));
 
 // POST /api/devices/:id/use-intune — { code: 'pc_no' | 'serial' | 'user' } copy that one Intune value

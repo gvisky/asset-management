@@ -43,7 +43,8 @@ often the IMEI, and many phones are personal).
 | `serial` | Found by Computer No, but the asset's Serial # is empty or differs from Intune |
 | `user` | The asset's AD Name is empty or another person than the device's primary user |
 | `brand` | The asset's brand (first word of Brand / Model) is another maker than Intune's manufacturer |
-| `conflict` | Computer No points to one asset and the serial to another |
+| `duplicate` | Another asset has the same serial (typos O↔0, I↔1, spaces / dashes ignored) and at most one of the two has an SAP asset code → the same machine recorded twice → **Merge** |
+| `conflict` | Same serial on two assets that both have (different) SAP asset codes → two real assets, one serial is probably mistyped → check by hand (never merged) |
 
 Model is shown side by side for information only (Intune gives machine types like
 `20N3SHLH00`, Asset Inventory friendly names like `Lenovo T490` — they can't be compared exactly).
@@ -54,6 +55,11 @@ Model is shown side by side for information only (Intune gives machine types lik
   It refuses when another asset already has that Serial / Computer No (no duplicates), and follows the
   same locks as a manual edit (locked Serial / locked model / user lock → unlock first); copying a
   Serial or a new user sets the same locks a manual edit would.
+- **Merge** (duplicates only, 10 Nov 2026) — keeps the record with the SAP asset code (else the older
+  one), gives it the Intune Computer No + Serial, fills its empty fields from the other record, moves
+  maintenance / license links and the device link, combines both History Usage logs, and puts the other
+  record in the **Recycle Bin** (restorable). Refused when both records have different SAP codes, or
+  the kept record's Serial is locked. Placeholder codes like "Missing" / "N/A" don't count as codes.
 - **Mark as checked** — the difference is accepted as is; it stays hidden on later uploads as long
   as the values don't change (stored in `device_ack`).
 - Or open the asset and edit by hand.
@@ -104,3 +110,10 @@ The old 3-file import / "Add all" stays switched off (`IMPORTS_ENABLED`).
 - A person with assets but **no** Intune computer (laptop not enrolled / lost?).
 - Compare model names through a machine-type → model map (e.g. Lenovo 20N3 → T490).
 - Scheduled pull from Microsoft Graph instead of uploading CSVs (needs an app registration with read rights).
+
+## Duplicates (added 10 Nov 2026)
+Asked: "If a device has the same Serial but a different Computer No, merge to the one from Intune and
+Entra." Example: #750 (VNHCMC0500, serial 5CG01204K7, no asset code, added from Intune) and #253
+(VNHCMC0293, serial typed 5CGO12O4K7 with letter O, asset code 255020000004) → Merge keeps #253 with
+Computer No VNHCMC0500 / Serial 5CG01204K7; #750 goes to the Recycle Bin.
+Test on the local copy: 4 duplicates to merge, 6 serials shared by two SAP assets (check by hand).
