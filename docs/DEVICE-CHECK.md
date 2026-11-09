@@ -56,7 +56,12 @@ Model is shown side by side for information only (Intune gives machine types lik
   same locks as a manual edit (locked Serial / locked model / user lock → unlock first); copying a
   Serial or a new user sets the same locks a manual edit would.
 - **Merge** (duplicates only, 10 Nov 2026) — keeps the record with the SAP asset code (else the older
-  one), gives it the Intune Computer No + Serial, fills its empty fields from the other record, moves
+  one) and **puts the system first**: Computer No + Serial from Intune, User Name (AD display name) +
+  AD Name from the device's AD user, Brand / Model, Asset Type, Location, Country, Status from the newer
+  record (the one created from Intune) when it has a value. Accounting / IT details (SAP codes,
+  department, cost center, purchase date, warranty, vendor, cost, PO, remark, history) stay from the
+  kept record, its empty fields filled from the other. A real holder change (another AD Name) locks the
+  record like a manual edit. Then it moves
   maintenance / license links and the device link, combines both History Usage logs, and puts the other
   record in the **Recycle Bin** (restorable). Refused when both records have different SAP codes, or
   the kept record's Serial is locked. Placeholder codes like "Missing" / "N/A" don't count as codes.

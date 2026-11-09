@@ -796,6 +796,8 @@ router.post('/:id/ack', wrap(async (req, res) => {
 // (same serial). Keep the record with the asset code (else the older one), give it the Intune Computer
 // No + Serial, fill its blanks from the other, move maintenance / license links, and put the other in
 // the Recycle Bin (restorable).
+// Taken from the newer record (the one created from Intune) when it has a value — the machine as it is today.
+const MERGE_SYSTEM = ['brand_model', 'asset_type', 'location', 'country', 'status'];
 const MERGE_FILL = ['location', 'country', 'department', 'cost_center', 'cost_center_desc', 'ecc_cc', 'asset_code', 'asset_s4',
   'asset_description', 'brand_model', 'asset_type', 'user_name', 'ad_name', 'purchase_date', 'warranty_expiry', 'vendor', 'cost',
   'po_number', 'remark', 'date_assigned', 'mk'];
@@ -826,15 +828,37 @@ router.post('/:id/merge', wrap(async (req, res) => {
     if (keep.fields_locked) return res.status(403).json({ error: `Serial is locked on asset #${keep.id} — an IT admin must unlock it first (History Usage), then merge.` });
     sets.serial_no = d.serial_no;
   }
-  for (const k of MERGE_FILL) if (!String(keep[k] || '').trim() && String(drop[k] || '').trim()) sets[k] = drop[k];
+  // The system wins for who uses the machine: the device's user from the AD list
+  // (User Name = AD display name, AD Name = the account before @).
+  const person = d.person_id ? await get('SELECT display_name FROM personnel WHERE id = ?', [d.person_id]) : null;
+  const sysAd = String(d.user_upn || '').split('@')[0];
+  const sysUser = (person && person.display_name) || d.user_name || '';
+  if (sysAd && lcKey(keep.ad_name) !== lcKey(sysAd)) sets.ad_name = sysAd;
+  if (sysUser && String(keep.user_name || '') !== sysUser) sets.user_name = sysUser;
+  // …and for what describes the machine today, the newer record (created from Intune) wins when it has a value.
+  if (drop.id > keep.id) {
+    let lockedModels = [];
+    try { lockedModels = JSON.parse(await getMeta('locked_models') || '[]'); } catch { lockedModels = []; }
+    const modelLocked = keep.brand_model && lockedModels.some(m => lcKey(m) === lcKey(keep.brand_model));
+    for (const k of MERGE_SYSTEM) {
+      if (k === 'brand_model' && modelLocked) continue;
+      if (String(drop[k] || '').trim() && String(drop[k]) !== String(keep[k] || '')) sets[k] = drop[k];
+    }
+  }
+  // Accounting / IT details stay from the kept record; only its empty fields are filled from the other.
+  for (const k of MERGE_FILL) if (sets[k] === undefined && !String(keep[k] || '').trim() && String(drop[k] || '').trim()) sets[k] = drop[k];
+  // A real change of holder (another AD account) locks the record, like a manual edit.
+  const holderChanged = sets.ad_name !== undefined && String(keep.ad_name || '').trim() !== '';
   const ts = ts16();
   const line = `${ts} UTC: merged with asset #${drop.id}${drop.asset_s4 || drop.asset_code ? ` (${drop.asset_s4 || drop.asset_code})` : ''} — same machine as Intune device ${d.name}`
     + `${Object.keys(sets).length ? `; set ${Object.entries(sets).map(([k, v]) => `${k}: "${keep[k] || '∅'}"→"${v}"`).join('; ')}` : ''} by ${req.user.username}`;
   const dropHist = drop.history_usage ? `\n— history of merged asset #${drop.id} —\n${drop.history_usage}` : '';
-  const hist = (keep.history_usage ? keep.history_usage + '\n' : '') + line + dropHist;
+  const lockLine = holderChanged ? `\n${ts} UTC: 🔒 locked — User Name & AD Name changed by ${req.user.username} (IT admin to unlock)` : '';
+  const hist = (keep.history_usage ? keep.history_usage + '\n' : '') + line + lockLine + dropHist;
   const cols = Object.keys(sets);
   await batch([
-    { sql: `UPDATE assets SET ${cols.map(k => `${k} = ?`).concat(['history_usage = ?', 'sap_confirmed = 0']).join(', ')} WHERE id = ?`,
+    { sql: `UPDATE assets SET ${cols.map(k => `${k} = ?`).concat(['history_usage = ?', 'sap_confirmed = 0',
+             `user_locked = CASE WHEN ${holderChanged ? 1 : 0} = 1 THEN 1 ELSE user_locked END`]).join(', ')} WHERE id = ?`,
       args: [...cols.map(k => sets[k]), hist, keep.id] },
     { sql: "UPDATE assets SET deleted_at = datetime('now'), deleted_by = ?, history_usage = ? WHERE id = ?",
       args: [`${req.user.username} (merged into #${keep.id})`, `${drop.history_usage ? drop.history_usage + '\n' : ''}${ts} UTC: merged into asset #${keep.id} (same serial) by ${req.user.username}`, drop.id] },
