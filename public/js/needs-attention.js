@@ -75,6 +75,7 @@
           <div class="seg" data-na="country" role="tablist" aria-label="Country"></div>
           ${opts.onClose ? '<button type="button" class="btn btn-ghost btn-sm" data-na="close" title="Back to the full list">✕ Close</button>' : ''}
         </div>
+        <div class="cs-grid cs-grid-3" data-na="summary" style="border-bottom:1px solid var(--border)"></div>
         <div class="na-bar">
           <select class="filter-select na-type" data-na="type" aria-label="Asset type"></select>
           <div class="seg seg-sm" data-na="site" role="tablist" aria-label="Site"></div>
@@ -117,6 +118,39 @@
       const badge = $('count');
       badge.textContent = `${fmt(st.rows.length)} to fix`;
       badge.style.display = st.rows.length ? '' : 'none';
+
+      // Summary chart: everything to fix, whatever the filters below — by what's missing, country and asset type.
+      // (One series → one colour, the count beside each bar; click a bar to list those assets.)
+      const sumEl = $('summary');
+      if (!st.rows.length) sumEl.style.display = 'none';
+      else {
+        sumEl.style.display = '';
+        const tallyBy = (keysOf) => { const m = new Map(); st.rows.forEach(a => keysOf(a).forEach(k => m.set(k, (m.get(k) || 0) + 1))); return [...m.entries()].sort((x, y) => y[1] - x[1]); };
+        const bars = (title, kind, entries, label) => {
+          if (!entries.length) return '';
+          const max = Math.max(1, ...entries.map(e => e[1]));
+          return `<div><div class="cs-title">${title}</div>${entries.map(([k, n]) =>
+            `<a href="#" class="cs-row" data-kind="${kind}" data-v="${esc(k)}" title="${esc(label(k))}: ${fmt(n)} asset${n === 1 ? '' : 's'} — click to list">
+              <span class="cs-label">${esc(label(k))}</span><span class="cs-track"><span class="cs-bar" style="width:${Math.max(2, (n / max) * 100)}%"></span></span>
+              <span class="cs-val">${fmt(n)}</span></a>`).join('')}</div>`;
+        };
+        const typeEntries = tallyBy(a => [a.asset_type || '']);
+        const topTypes = typeEntries.slice(0, 6);
+        sumEl.innerHTML = bars(opts.mode === 'ad' ? 'By problem' : "By what's missing", 'issue', tallyBy(a => a._issues), k => k)
+          + (userCountry ? '' : bars('By country', 'country', tallyBy(a => [a.country || '']), k => k || 'Unknown'))
+          + bars(`By asset type${typeEntries.length > topTypes.length ? ' (top 6)' : ''}`, 'type', topTypes, k => k || 'Type not set');
+        sumEl.querySelectorAll('.cs-row').forEach(el => el.addEventListener('click', (e) => {
+          e.preventDefault();
+          const v = el.dataset.v, kind = el.dataset.kind;
+          // One click = one clear answer: reset the other filters, then apply this one.
+          st.site = ''; st.issue = ''; st.type = ''; if (!userCountry) st.country = '';
+          if (kind === 'issue') st.issue = v;
+          else if (kind === 'country') st.country = v;
+          else st.type = v || '__none';
+          render();
+          root.querySelector('.na-bar').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }));
+      }
 
       // Country tabs with counts.
       const tabs = $('country');
