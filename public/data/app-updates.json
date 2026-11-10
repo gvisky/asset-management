@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Spare parts: counted from every broken laptop, by model",
+    "items": [
+      "Each broken laptop counts as 1 of each part unless marked broken / used or Total broken.",
+      "Screen, Keyboard, Mainboard, Battery are counted per model (fit the same model only); RAM, SSD, Charger are counted together (fit any laptop)."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Alerts box moved to Needs Attention",
     "items": [
       "The 🔔 Alerts list is no longer on Maintenance & Repairs; it is at the bottom of the ⚠️ Needs Attention page."

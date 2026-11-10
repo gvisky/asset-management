@@ -101,29 +101,48 @@ router.put('/devices/:id/parts', requireRole('admin', 'editor'), wrap(async (req
   res.json({ ok: true, parts: next, condition: conditionOf({ ...a, parts: JSON.stringify(next) }) });
 }));
 
-// GET /api/maintenance/spare-parts — usable parts from broken laptops, by part and model.
+// GET /api/maintenance/spare-parts — spare-part stock from broken laptops.
+// Every broken laptop holds one of each part: a part counts as in stock unless it is marked broken or used,
+// or the laptop is "Total broken". Screen / Keyboard / Mainboard / Battery fit the same model only → counted
+// per model; RAM / SSD / Charger fit any laptop → counted together. "checked" = confirmed usable.
+const MODEL_PARTS = ['screen', 'keyboard', 'mainboard', 'battery'];
+const SHARED_PARTS = ['ram', 'storage', 'charger'];
 router.get('/spare-parts', wrap(async (req, res) => {
   const cs = countrySql(req, 'country', '');
   const rows = await all(`SELECT id, asset_code, asset_s4, brand_model, country, location, parts FROM assets
-      WHERE deleted_at IS NULL AND status = 'Broken' AND LOWER(asset_type) = 'laptop' AND parts <> ''${cs.clause ? ' AND ' + cs.clause : ''}`, cs.params);
-  const groups = new Map();
+      WHERE deleted_at IS NULL AND status = 'Broken' AND LOWER(asset_type) = 'laptop'${cs.clause ? ' AND ' + cs.clause : ''}
+      ORDER BY brand_model, id`, cs.params);
+  const name = Object.fromEntries(PARTS);
+  const inStock = (st) => st === '' || st === 'ok';
+  const models = new Map();
+  const shared = Object.fromEntries(SHARED_PARTS.map(k => [k, { part: k, partName: name[k], stock: 0, checked: 0, used: 0, sources: [] }]));
+  let laptops = 0, totalBroken = 0;
   for (const a of rows) {
     const p = parseParts(a.parts);
-    if (p.total) continue;
-    for (const [k, name] of PARTS) {
-      if (p[k] !== 'ok' && p[k] !== 'used') continue;
-      const model = a.brand_model || 'Model not set';
-      const key = `${k}|${model.toLowerCase()}`;
-      if (!groups.has(key)) groups.set(key, { part: k, partName: name, model, available: 0, used: 0, sources: [] });
-      const g = groups.get(key);
-      if (p[k] === 'ok') g.available++; else g.used++;
-      g.sources.push({ id: a.id, code: a.asset_s4 || a.asset_code || '', country: a.country, location: a.location, state: p[k] });
+    if (p.total) { totalBroken++; continue; }
+    laptops++;
+    const states = Object.fromEntries(PARTS.map(([k]) => [k, p[k] || '']));
+    const src = { id: a.id, code: a.asset_s4 || a.asset_code || '', model: a.brand_model || '', country: a.country, location: a.location, states };
+    const mk = (a.brand_model || 'Model not set').trim();
+    const key = mk.toLowerCase();
+    if (!models.has(key)) models.set(key, { model: mk, laptops: [], counts: Object.fromEntries(MODEL_PARTS.map(k => [k, { stock: 0, checked: 0, used: 0 }])) });
+    const m = models.get(key);
+    m.laptops.push(src);
+    for (const k of MODEL_PARTS) {
+      if (inStock(states[k])) { m.counts[k].stock++; if (states[k] === 'ok') m.counts[k].checked++; }
+      if (states[k] === 'used') m.counts[k].used++;
+    }
+    for (const k of SHARED_PARTS) {
+      const g = shared[k];
+      if (inStock(states[k])) { g.stock++; if (states[k] === 'ok') g.checked++; g.sources.push(src); }
+      if (states[k] === 'used') g.used++;
     }
   }
-  const order = Object.fromEntries(PARTS.map(([k], i) => [k, i]));
-  const list = [...groups.values()].sort((x, y) => order[x.part] - order[y.part] || y.available - x.available || x.model.localeCompare(y.model));
-  const byPart = PARTS.map(([k, name]) => ({ part: k, partName: name, available: list.filter(g => g.part === k).reduce((n, g) => n + g.available, 0) }));
-  res.json({ groups: list, byPart });
+  const modelList = [...models.values()].sort((x, y) => y.laptops.length - x.laptops.length || x.model.localeCompare(y.model));
+  const totals = PARTS.map(([k, n]) => ({ part: k, partName: n, shared: SHARED_PARTS.includes(k),
+    stock: SHARED_PARTS.includes(k) ? shared[k].stock : modelList.reduce((t, m) => t + m.counts[k].stock, 0) }));
+  res.json({ laptops, totalBroken, modelParts: MODEL_PARTS.map(k => ({ part: k, partName: name[k] })),
+    sharedParts: SHARED_PARTS.map(k => shared[k]), models: modelList, totals });
 }));
 
 // ── GET /api/maintenance — list repairs across assets AND servers ─────────────
