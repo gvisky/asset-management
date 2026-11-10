@@ -844,3 +844,5 @@ tbody tr.sp-detail > td { background: #fafafa; padding-top: 5px; padding-bottom:
 .sp-remark { display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
   color: #92400e; background: #fffbeb; border-radius: 4px; padding: 0 5px; font-size: 11.5px; }
 th.sp-any { color: #6d28d9; }
+.rep-group + .rep-group { margin-top: 18px; }
+.rep-group-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }

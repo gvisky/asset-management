@@ -5,6 +5,8 @@ const { all } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
 const { ASSET_COLUMNS } = require('../lib/asset-columns');
 const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
+const { PARTS, PART_WORD, CONDITION_LABEL, MODEL_PARTS, SHARED_PARTS, parseParts, conditionOf, computeSpares } = require('../lib/parts');
+const { inScope } = require('../lib/scope');
 
 router.use(requireAuth);
 // HR-only users (no Asset Inventory access) can't use the asset reports/export.
@@ -20,6 +22,17 @@ function scoped(req, col = 'country') {
   const cs = countrySql(req, col);
   return cs.clause ? { clause: ` AND ${cs.clause}`, params: cs.params } : { clause: '', params: [] };
 }
+
+// Days since a date ('YYYY-MM-DD HH:MM' / ISO) → number, '' when none.
+function daysSince(v) {
+  const t = Date.parse(String(v || '').trim().replace(' ', 'T'));
+  return Number.isFinite(t) ? Math.max(0, Math.floor((Date.now() - t) / 86400000)) : '';
+}
+const yesNo = (v) => (v === 1 ? 'Yes' : v === 0 ? 'No' : '');
+const ISSUE_LABEL = { duplicate: 'Duplicate (same serial)', conflict: 'Two SAP assets, same serial', sap_desc: 'SAP description names another serial' };
+const issuesOf = (v) => { try { const a = v ? JSON.parse(v) : []; return Array.isArray(a) ? a : []; } catch { return []; } };
+const isTeam = (req, ...teams) => !!(req.user && teams.includes(req.user.team));
+class Forbidden extends Error {}
 
 // Each report returns { sheets: [{ name, rows }] }.
 const REPORTS = {
@@ -141,6 +154,126 @@ const REPORTS = {
     return { sheets: [{ name: 'Open Maintenance', rows }] };
   },
 
+  // Intune + Entra devices of AD users (last Device Check upload) and the differences found with Asset Inventory.
+  async devices(req) {
+    const sc = scoped(req, 'd.country');
+    const raw = await all(
+      `SELECT d.*, p.display_name AS person_name, p.email AS person_email,
+              a.asset_code AS a_code, a.asset_s4 AS a_s4, a.computer_no AS a_pc, a.status AS a_status
+         FROM devices d
+         LEFT JOIN personnel p ON p.id = d.person_id
+         LEFT JOIN assets a ON a.id = d.asset_id AND a.deleted_at IS NULL
+        WHERE 1=1${sc.clause} ORDER BY d.country, p.display_name COLLATE NOCASE, d.name`, sc.params);
+    const devices = raw.map(d => {
+      const iss = issuesOf(d.issues);
+      return {
+        'Device': d.name, 'User': d.person_name || d.user_name || '', 'User email / UPN': d.person_email || d.user_upn || '',
+        'Country': d.country, 'OS': d.os, 'OS version': d.os_version, 'Manufacturer': d.manufacturer, 'Model': d.model,
+        'Serial': d.serial_no, 'Ownership': d.ownership, 'Managed by': d.managed_by,
+        'Compliance': d.compliance || (d.is_compliant === 1 ? 'Compliant' : d.is_compliant === 0 ? 'Noncompliant' : ''),
+        'Last Intune check-in': d.last_checkin || '', 'Days since check-in': daysSince(d.last_checkin),
+        'Last Entra sign-in': d.last_sign_in || '', 'In Intune': d.in_intune ? 'Yes' : 'No', 'In Entra': d.in_entra ? 'Yes' : 'No',
+        'Asset ID': d.asset_id || '', 'Asset code (S4 / ECC)': d.a_s4 || d.a_code || '', 'Asset Computer No': d.a_pc || '', 'Asset status': d.a_status || '',
+        'In Asset Inventory': d.asset_id ? 'Yes' : 'No', 'Differences': iss.length,
+      };
+    });
+    const diffs = [];
+    for (const d of raw) {
+      for (const i of issuesOf(d.issues)) {
+        diffs.push({ 'Device': d.name, 'User': d.person_name || d.user_upn || '', 'Country': d.country, 'Serial': d.serial_no,
+          'Asset ID': d.asset_id || '', 'Check': ISSUE_LABEL[i.code] || i.text || i.code, 'Asset Inventory': i.asset || '', 'Intune / Entra': i.intune || '',
+          'Details': i.text || '' });
+      }
+    }
+    return { sheets: [{ name: 'Devices', rows: devices }, { name: 'Differences to check', rows: diffs }] };
+  },
+
+  // People with their AD account, last AD logon, last Intune check-in / Entra sign-in, and why they need a check.
+  async activity(req) {
+    if (!isTeam(req, 'IT', 'HR')) throw new Forbidden('User activity is for HR and IT members only');
+    const { AD_COND, INTUNE_LAST_SQL, ENTRA_LAST_SQL } = require('./personnel').peopleChecks;
+    const sc = scoped(req, 'p.country');
+    const flag = (k) => `CASE WHEN ${AD_COND[k]} THEN 1 ELSE 0 END AS f_${k}`;
+    const raw = await all(
+      `SELECT p.*, ${INTUNE_LAST_SQL} AS intune_last, ${ENTRA_LAST_SQL} AS entra_last,
+              ${flag('missing')}, ${flag('stale')}, ${flag('never')}, ${flag('inactive')}
+         FROM personnel p WHERE p.status <> 'deleted'${sc.clause}
+        ORDER BY p.country, p.display_name COLLATE NOCASE`, sc.params);
+    const rows = raw.map(p => {
+      const res = p.ad_resource === 1;
+      const reasons = res ? [] : [p.f_missing && 'Not in the last AD list', p.f_never && 'Never logged on (AD)',
+        p.f_stale && 'AD logon 90+ days ago', p.f_inactive && 'No AD / Intune / Entra activity 90+ days'].filter(Boolean);
+      const last = res ? '' : [p.ad_last_logon, p.intune_last, p.entra_last].filter(Boolean).sort().pop() || '';
+      return {
+        'ID': p.id, 'Name': p.display_name, 'Email': p.email, 'AD account': p.ad_sam || '', 'Country': p.country,
+        'Position': p.position || '', 'Department': p.department || '', 'Status': p.status || '',
+        'Account type': res ? 'Resource (shared mailbox / group)' : (p.ad_seen_at ? 'User' : 'Not in AD list'),
+        'AD manager': p.ad_manager || '', 'AD OU': p.ad_ou || '',
+        'AD last logon': res ? '' : (p.ad_never_logon ? 'never' : (p.ad_last_logon || '')),
+        'Intune last check-in': res ? '' : (p.intune_last || ''), 'Entra last sign-in': res ? '' : (p.entra_last || ''),
+        'Last seen (any)': last, 'Days since last seen': last ? daysSince(last) : '',
+        'Needs check': reasons.join('; '),
+      };
+    });
+    const needs = rows.filter(r => r['Needs check']);
+    return { sheets: [{ name: 'Needs check', rows: needs }, { name: 'All people', rows }] };
+  },
+
+  // Broken + Stock devices, the parts check of broken laptops, and the spare-part stock.
+  async broken(req) {
+    const sc = scoped(req);
+    const raw = await all(
+      `SELECT * FROM assets WHERE deleted_at IS NULL AND status IN ('Broken', 'Stock')${sc.clause}
+        ORDER BY CASE status WHEN 'Broken' THEN 0 ELSE 1 END, asset_type, brand_model, id`, sc.params);
+    const devices = raw.map(a => {
+      const p = parseParts(a.parts);
+      const cond = conditionOf(a);
+      const o = { 'ID': a.id, 'Status': a.status, 'Type': a.asset_type, 'Brand/Model': a.brand_model, 'Serial': a.serial_no,
+        'Asset S4': a.asset_s4, 'Asset Code (ECC)': a.asset_code, 'Computer No': a.computer_no, 'Country': a.country,
+        'Location': a.location, 'Department': a.department, 'User Name': a.user_name, 'Purchase date': a.purchase_date,
+        'Condition': CONDITION_LABEL[cond] || '' };
+      for (const [k, n] of PARTS) o[n] = cond ? (p.total ? 'broken' : PART_WORD[p[k] || '']) : '';
+      Object.assign(o, { 'Parts note': p.note || '', 'Parts checked by': p.checked_by || '', 'Parts checked at (UTC)': p.checked_at || '',
+        'Remark': a.remark || '' });
+      return o;
+    });
+    const laptops = raw.filter(a => a.status === 'Broken' && String(a.asset_type || '').toLowerCase() === 'laptop');
+    const sp = computeSpares(laptops);
+    const order = [...MODEL_PARTS, ...SHARED_PARTS];
+    const byModel = sp.models.map(m => {
+      const o = { 'Model': m.model, 'Broken laptops (not total)': m.laptops.length };
+      for (const k of order) o[sp.name[k] + (SHARED_PARTS.includes(k) ? ' (any laptop)' : '')] = m.counts[k].stock;
+      return o;
+    });
+    const totals = sp.totals.map(t => ({ 'Part': t.partName, 'Fits': t.shared ? 'any laptop' : 'same model only', 'In stock': t.stock,
+      'Confirmed usable': t.shared ? sp.shared[t.part].checked : sp.models.reduce((n, m) => n + m.counts[t.part].checked, 0),
+      'Used as spare': t.shared ? sp.shared[t.part].used : sp.models.reduce((n, m) => n + m.counts[t.part].used, 0) }));
+    totals.push({ 'Part': `From ${sp.laptops} broken laptops (${sp.totalBroken} total broken not counted)` });
+    return { sheets: [{ name: 'Broken & Stock', rows: devices }, { name: 'Spare parts by model', rows: byModel }, { name: 'Spare parts total', rows: totals }] };
+  },
+
+  // System Health: collectors, the latest status of each check, and recent status changes (IT team).
+  async health(req) {
+    if (!isTeam(req, 'IT')) throw new Forbidden('System Health is for the IT team');
+    const mine = (country) => (country ? inScope(req, country) : !scopeList(req));
+    const collectors = (await all(`SELECT *, CAST((julianday('now') - julianday(last_seen_at)) * 86400 AS INTEGER) AS age_s
+        FROM health_collectors ORDER BY country, site, name`)).filter(c => mine(c.country));
+    const byId = new Map(collectors.map(c => [c.id, c]));
+    const STALE = 180;
+    const cols = collectors.map(c => ({ 'Collector': c.name, 'Site': c.site, 'Country': c.country,
+      'State': c.revoked ? 'revoked' : (c.age_s != null && c.age_s <= STALE ? 'online' : 'offline'),
+      'Last report (UTC)': c.last_seen_at || '', 'Last IP': c.last_ip || '', 'Version': c.version || '', 'Created by': c.created_by, 'Created (UTC)': c.created_at }));
+    const checks = (await all(`SELECT *, CAST((julianday('now') - julianday(last_seen_at)) * 86400 AS INTEGER) AS age_s FROM health_checks ORDER BY name`))
+      .filter(k => byId.has(k.collector_id))
+      .map(k => { const c = byId.get(k.collector_id); return { 'Collector': c.name, 'Site': c.site, 'Country': c.country, 'Check': k.name,
+        'Type': k.kind, 'Target': k.target, 'Status': (k.age_s == null || k.age_s > STALE) ? 'no data' : k.status, 'Summary': k.summary,
+        'Latency (ms)': k.latency_ms == null ? '' : k.latency_ms, 'Status since (UTC)': k.status_since, 'Last report (UTC)': k.last_seen_at }; });
+    const events = (await all('SELECT * FROM health_events ORDER BY id DESC LIMIT 3000')).filter(e => byId.has(e.collector_id))
+      .map(e => ({ 'When (UTC)': e.created_at || '', 'Collector': byId.get(e.collector_id).name, 'Check': e.name,
+        'From': e.from_status, 'To': e.to_status, 'Summary': e.summary }));
+    return { sheets: [{ name: 'Checks', rows: checks }, { name: 'Collectors', rows: cols }, { name: 'Status changes', rows: events }] };
+  },
+
   async warranty(req) {
     const sc = scoped(req);
     const assets = await all(
@@ -168,7 +301,9 @@ router.get('/:name', wrap(async (req, res) => {
   const builder = REPORTS[name];
   if (!builder) return res.status(404).json({ error: 'Unknown report' });
 
-  const { sheets } = await builder(req);
+  let sheets;
+  try { ({ sheets } = await builder(req)); }
+  catch (e) { if (e instanceof Forbidden) return res.status(403).json({ error: e.message }); throw e; }
   const wb = XLSX.utils.book_new();
   for (const s of sheets) {
     const ws = XLSX.utils.json_to_sheet(s.rows.length ? s.rows : [{ '(no data)': '' }]);

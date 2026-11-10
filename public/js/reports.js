@@ -1,15 +1,19 @@
 /* Reports & Export page logic */
 
 const REPORTS = [
-  { id: 'assets',      title: 'Asset Inventory',     desc: 'Every field we hold, keyed by ID — edit & re-upload below to sync.' },
-  { id: 'servers',     title: 'Server Inventory',    desc: 'All servers with hostname, IP, OS, specs.' },
-  { id: 'users',       title: 'User Inventory',      desc: 'All people, keyed by ID — edit & re-upload below to sync.' },
-  { id: 'locked',      title: 'Locked Items',        desc: 'Records locked by a User Name / AD Name change, with cost center, dept, model, serial, codes & user.' },
-  { id: 'summary',     title: 'Asset Summary',       desc: 'Counts by status, location, country, cost center & asset type.' },
-  { id: 'warranty',    title: 'Warranty Due',        desc: 'Assets & servers expiring/expired within 90 days.' },
-  { id: 'maintenance', title: 'Open Maintenance',    desc: 'Open repairs/services across assets and servers.' },
-  { id: 'offboarding', title: 'Offboarding Reclaim', desc: 'Leaving personnel and the assets they hold.' },
-  { id: 'licenses',    title: 'Licenses',            desc: 'Licenses with seats used and renewal dates.' },
+  { group: 'Inventory', id: 'assets',   title: 'Asset Inventory',  desc: 'Every field we hold, keyed by ID — edit & re-upload below to sync.' },
+  { group: 'Inventory', id: 'users',    title: 'User Inventory',   desc: 'All people, keyed by ID — edit & re-upload below to sync.' },
+  { group: 'Inventory', id: 'servers',  title: 'Server Inventory', desc: 'All servers with hostname, IP, OS, specs.' },
+  { group: 'Inventory', id: 'summary',  title: 'Asset Summary',    desc: 'Counts by status, location, country, cost center & asset type.' },
+  { group: 'Inventory', id: 'locked',   title: 'Locked Items',     desc: 'Records locked by a User Name / AD Name change, with cost center, dept, model, serial, codes & user.' },
+  { group: 'Devices & users', id: 'devices',  title: 'Devices (Intune / Entra)', desc: 'Every device of AD users: compliance, last check-in / sign-in, linked asset — plus a sheet of differences to check.' },
+  { group: 'Devices & users', id: 'activity', title: 'User activity (AD / Intune / Entra)', desc: 'AD account, last AD logon, Intune check-in, Entra sign-in, days since last seen — and who needs a check.', teams: ['IT', 'HR'] },
+  { group: 'Devices & users', id: 'offboarding', title: 'Offboarding Reclaim', desc: 'Leaving personnel and the assets they hold.' },
+  { group: 'Maintenance', id: 'broken',      title: 'Broken & Stock + spare parts', desc: 'Broken and stock devices with the parts check of each broken laptop, spare parts per model and in total.' },
+  { group: 'Maintenance', id: 'maintenance', title: 'Open Maintenance', desc: 'Open repairs/services across assets and servers.' },
+  { group: 'Maintenance', id: 'warranty',    title: 'Warranty Due',     desc: 'Assets & servers expiring/expired within 90 days.' },
+  { group: 'IT', id: 'health',   title: 'System Health', desc: 'Collectors, the latest status of every check, and the history of status changes.', teams: ['IT'] },
+  { group: 'IT', id: 'licenses', title: 'Licenses',      desc: 'Licenses with seats used and renewal dates.' },
 ];
 
 function card(r) {
@@ -20,6 +24,14 @@ function card(r) {
     <div><div class="stat-label" style="font-size:13.5px;color:var(--text);font-weight:600">${r.title}</div>
     <div class="text-muted text-sm" style="margin-top:2px">${r.desc}</div></div>
   </a>`;
+}
+// Reports grouped by area; reports for one team only are shown to that team.
+function renderReports(u) {
+  const team = u && u.team;
+  const list = REPORTS.filter(r => !r.teams || r.teams.includes(team));
+  const groups = [...new Set(list.map(r => r.group))];
+  document.getElementById('report-grid').innerHTML = groups.map(g =>
+    `<div class="rep-group"><div class="rep-group-title">${g}</div><div class="stat-grid">${list.filter(r => r.group === g).map(card).join('')}</div></div>`).join('');
 }
 
 // Read a File as base64 (without the data: prefix).
@@ -93,10 +105,11 @@ async function runImportBudget() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('report-grid').innerHTML = REPORTS.map(card).join('');
+  renderReports(window.CURRENT_USER);
 
   // Import / Sync — IT administrators only (wait for auth to resolve).
   const setupImport = (u) => {
+    renderReports(u);
     if (!u || u.team !== 'IT' || u.role !== 'admin') return;
     const card = document.getElementById('import-card');
     if (card) card.style.display = '';
