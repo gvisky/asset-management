@@ -4,7 +4,7 @@
     "title": "Broken laptops: parts check from Asset Inventory",
     "items": [
       "Asset Inventory: a broken laptop's status is clickable and opens the parts check; below it you see \"check parts\", \"N parts usable\" or \"total broken\".",
-      "Setting a laptop to Broken (Edit, or Add Asset) now asks for the parts check first: every part must be set, or tick Total broken. Cancel = the asset is not saved."
+      "Setting a laptop to Broken (Edit, or Add Asset) now asks for the parts check first: all parts start as Usable — just mark the broken ones (or tick Total broken). Cancel = the asset is not saved."
     ]
   },
   {

@@ -26,9 +26,11 @@ function partsCheck({ title, parts, required }) {
   const p = parsePartsJson(parts);
   const ov = pcxOverlay();
   document.getElementById('pcx-title').textContent = title || 'Parts check';
-  const opt = (k, v, label) => `<label class="pc-opt"><input type="radio" name="pcx-${k}" value="${v}"${(p[k] || '') === v ? ' checked' : ''}> ${label}</label>`;
+  // Required (laptop just set to Broken): parts start as Usable — tick only the broken ones.
+  const cur = (k) => p[k] || (required ? 'ok' : '');
+  const opt = (k, v, label) => `<label class="pc-opt"><input type="radio" name="pcx-${k}" value="${v}"${cur(k) === v ? ' checked' : ''}> ${label}</label>`;
   document.getElementById('pcx-body').innerHTML = `
-    ${required ? '<div class="pc-required">⚠ This laptop is set to <b>Broken</b>: check which parts are broken before saving — set every part, or tick <b>Total broken</b>.</div>' : ''}
+    ${required ? '<div class="pc-required">⚠ This laptop is set to <b>Broken</b>: mark the parts that are <b>broken</b> (the others stay usable), or tick <b>Total broken</b>.</div>' : ''}
     <label class="pc-total"><input type="checkbox" id="pcx-total"${p.total ? ' checked' : ''}> <b>Total broken</b> — no part can be used</label>
     <table class="pc-table" id="pcx-parts"><tbody>${PC_PARTS.map(([k, name]) => `<tr><td><b>${name}</b></td><td>
       ${opt(k, 'ok', '✓ Usable')}${opt(k, 'bad', '✗ Broken')}${opt(k, 'used', '↪ Used as spare')}${required ? '' : opt(k, '', 'Not checked')}</td></tr>`).join('')}</tbody></table>
