@@ -93,11 +93,11 @@
     <div class="card" id="sp-card" style="margin-bottom:20px">
       <div class="card-header" style="flex-wrap:wrap;gap:10px">
         <span class="card-title">🔩 Spare parts from broken laptops <span class="text-muted text-sm" style="font-weight:400" id="sp-total"></span></span>
-        <span class="text-muted text-sm">each broken laptop = 1 of each part, unless marked broken / used or Total broken · <b>Use</b> takes a part for a repair</span>
+        <span class="text-muted text-sm">each broken laptop = 1 of each part, unless marked broken / used or Total broken · tick <b>broken</b> when a part is bad or taken — it is no longer counted</span>
       </div>
       <div id="sp-parts" class="sp-parts"></div>
       <div class="sp-section">
-        <div class="cs-title">Fit the same model only — Screen · Keyboard · Mainboard · Battery</div>
+        <div class="cs-title">By model — Screen · Keyboard · Mainboard · Battery fit the same model only; RAM · SSD · Charger fit any laptop</div>
         <div class="table-wrap"><table>
           <thead id="sp-model-head"></thead>
           <tbody id="sp-model-body"><tr><td class="empty-state">Loading…</td></tr></tbody>
@@ -183,6 +183,21 @@
   </div>
 </div>
 
+<!-- Asset details popup (same fields as Asset Inventory → View) -->
+<div class="modal-overlay" id="av-overlay">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header">
+      <span class="modal-title" id="av-title">Asset details</span>
+      <button class="modal-close" id="av-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="av-body" style="max-height:70vh;overflow-y:auto"></div>
+    <div class="modal-footer">
+      <a class="btn btn-ghost" id="av-open" href="#">Open in Asset Inventory →</a>
+      <button class="btn btn-primary" id="av-ok">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Parts check of a broken laptop -->
 <div class="modal-overlay" id="pc-overlay">
   <div class="modal" style="max-width:560px">
@@ -203,6 +218,6 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
-<script src="/js/maintenance.js?v=20261110d"></script>
+<script src="/js/maintenance.js?v=20261110e"></script>
 </body>
 </html>
