@@ -5,6 +5,26 @@ const PAGE_SIZE = 25;
 let deleteTargetId = null;
 let viewAsset = null;
 let editMode = false;
+let editOrig = { status: '', parts: {}, checked: false };   // the asset as it was when the Edit form opened
+
+// Broken laptop: short parts summary under the status, and a click opens the parts check.
+function partsHint(v) {
+  const p = parsePartsJson(v);
+  if (p.total) return 'total broken';
+  const ok = PC_PARTS.filter(([k]) => p[k] === 'ok').length;
+  if (!PC_PARTS.some(([k]) => p[k])) return 'check parts';
+  return ok ? `${ok} part${ok > 1 ? 's' : ''} usable` : 'no usable part';
+}
+async function invPartsCheck(id) {
+  try {
+    const a = await apiGet(`${API}/${id}`);
+    const body = await partsCheck({ title: `Parts check — ${a.asset_s4 || a.asset_code || '#' + a.id} · ${a.brand_model || ''}`, parts: a.parts });
+    if (!body) return;
+    await savePartsCheckFor(id, body);
+    showToast('Parts check saved');
+    loadAssets(currentPage);
+  } catch (err) { showToast(partsErr(err, 'Could not save the parts check'), 'error'); }
+}
 // Cost-center linkage maps (Department ⇄ Cost Center ⇄ ECC CC ⇄ Description are 1:1).
 let CC_BY_CODE = {};   // cost_center code → { code, descr, ecc }
 let CC_BY_DESC = {};   // cost_center description (=department) → { code, descr, ecc }
@@ -211,7 +231,9 @@ function assetRowHtml(a, devHtml = '', extraClass = '') {
       <td class="text-muted text-sm">${adNameCell(a)}</td>
       <td class="text-muted text-sm">${esc(a.serial_no) || '—'}</td>
       <td class="text-sm" title="${a.purchase_date ? 'Purchased ' + esc(a.purchase_date) : 'No purchase date'}">${yearsInUse(a.purchase_date) || '—'}</td>
-      <td>${statusBadge(a.status)}</td>
+      <td>${a.status === 'Broken' && isLaptopType(a.asset_type) && canEdit()
+        ? `<span class="inv-parts-link" role="button" tabindex="0" title="Check parts — which parts are broken / usable" onclick="invPartsCheck(${a.id})">${statusBadge(a.status)}<span class="inv-parts-hint">${partsHint(a.parts)}</span></span>`
+        : statusBadge(a.status)}</td>
       <td>
         <div style="display:flex;gap:6px">
           <button class="btn btn-ghost btn-sm" onclick="onView(${a.id})" title="View">
@@ -523,6 +545,8 @@ function applyHistoryLock() {
 async function onEdit(id) {
   try {
     const a = await apiGet(`${API}/${id}`);
+    const pp = parsePartsJson(a.parts);
+    editOrig = { status: a.status, parts: pp, checked: !!(pp.total || PC_PARTS.some(([k]) => pp[k])) };
     setFormData(a);
     applyHistoryLock();
     applyFieldLock(a);
@@ -861,14 +885,27 @@ document.addEventListener('DOMContentLoaded', () => {
   saveBtn.addEventListener('click', async () => {
     const data = getFormData();
     if (locationApplies(data.country) && !data.location) { showToast('Please select a location (Office / Factory)', 'error'); return; }
+    // A laptop set to Broken (new, or changed to Broken): the parts check is a must, before saving.
+    const id = document.getElementById('asset-id').value;
+    let parts = null;
+    if (data.status === 'Broken' && isLaptopType(data.asset_type) && !(editMode && id && editOrig.status === 'Broken')) {
+      parts = await partsCheck({ title: `Parts check — ${data.asset_s4 || data.asset_code || data.brand_model || 'laptop'} · set to Broken`,
+        parts: editMode ? editOrig.parts : null, required: true });
+      if (!parts) { showToast('Parts check is needed to set a laptop to Broken', 'error'); return; }
+    }
     try {
-      const id = document.getElementById('asset-id').value;
+      let savedId = id;
       if (editMode && id) {
         await apiPut(`${API}/${id}`, data);
         showToast('Asset updated');
       } else {
-        await apiPost(API, data);
+        const created = await apiPost(API, data);
+        savedId = created && created.id;
         showToast('Asset added');
+      }
+      if (parts && savedId) {
+        try { await savePartsCheckFor(savedId, parts); }
+        catch (e) { showToast(partsErr(e, 'Asset saved, but the parts check could not be saved'), 'error'); }
       }
       closeModal();
       editMode = false;
