@@ -134,9 +134,17 @@ router.get('/', wrap(async (req, res) => {
     await require('../lib/device-recheck').recheckDevices();   // device differences follow asset changes
     // Holder key: the AD Name; an asset with only a User Name joins that person's AD group when another
     // asset (same User Name) or a User Inventory person (same display name) tells the AD Name.
-    const gkey = `CASE WHEN TRIM(COALESCE(assets.ad_name, '')) <> '' THEN 'ad:' || LOWER(TRIM(assets.ad_name))
-                       WHEN TRIM(COALESCE(assets.user_name, '')) <> '' THEN COALESCE(
+    // Words typed instead of a person ("broken", "missing", "none" …) are not a holder: they must not
+    // gather unrelated assets into one block.
+    const NOT_HOLDER_WORDS = new Set(['broken', 'total broken', 'missing', 'lost', 'none', 'no user', 'n/a', 'na', '-', '--', '?', 'x',
+      'null', 'unknown', 'tbd', 'stock', 'spare', 'free', 'available', 'unassigned', 'retired', 'disposed']);
+    const NOT_HOLDER = `(${[...NOT_HOLDER_WORDS].map(w => `'${w}'`).join(',')})`;
+    const realAd = `TRIM(COALESCE(assets.ad_name, '')) <> '' AND LOWER(TRIM(assets.ad_name)) NOT IN ${NOT_HOLDER}`;
+    const realUser = `TRIM(COALESCE(assets.user_name, '')) <> '' AND LOWER(TRIM(assets.user_name)) NOT IN ${NOT_HOLDER}`;
+    const gkey = `CASE WHEN ${realAd} THEN 'ad:' || LOWER(TRIM(assets.ad_name))
+                       WHEN ${realUser} THEN COALESCE(
                          (SELECT 'ad:' || LOWER(TRIM(a2.ad_name)) FROM assets a2 WHERE a2.deleted_at IS NULL AND TRIM(COALESCE(a2.ad_name, '')) <> ''
+                             AND LOWER(TRIM(a2.ad_name)) NOT IN ${NOT_HOLDER}
                              AND LOWER(TRIM(a2.user_name)) = LOWER(TRIM(assets.user_name)) ORDER BY a2.id LIMIT 1),
                          (SELECT 'ad:' || LOWER(substr(p.email, 1, instr(p.email, '@') - 1)) FROM personnel p WHERE instr(p.email, '@') > 0
                              AND LOWER(TRIM(p.display_name)) = LOWER(TRIM(assets.user_name)) ORDER BY p.id LIMIT 1),
@@ -196,7 +204,8 @@ router.get('/', wrap(async (req, res) => {
       const assets = assetRows.filter(a => a.gkey === g.gkey);
       const ids = new Set(assets.map(a => a.id));
       const devs = devices.filter(d => (person && d.person_id === person.id) || (d.asset_id && ids.has(d.asset_id)));
-      return { key: g.gkey, label: person ? person.display_name : (assets[0] ? (assets[0].user_name || assets[0].ad_name) : ''), person, assets, devices: devs };
+      const nameOf = (a) => [a.user_name, a.ad_name].map(v => String(v || '').trim()).find(v => v && !NOT_HOLDER_WORDS.has(v.toLowerCase())) || '';
+      return { key: g.gkey, label: person ? person.display_name : (assets.map(nameOf).find(Boolean) || ''), person, assets, devices: devs };
     });
     return res.json({ grouped: true, total: totalGroups, totalAssets, page: Number(page), limit: glimit, groups: out, deviceHits,
                       baseline: await getMeta('baseline_assets'), deviceCheckLast: await getMeta('device_check_last') });
