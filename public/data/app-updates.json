@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Maintenance: Broken & Stock devices + spare parts",
+    "items": [
+      "All Broken and Stock devices are listed on Maintenance & Repairs, with a summary chart (status & type, laptop condition, country).",
+      "Broken laptops get a parts check: Total broken, or Screen / Mainboard / RAM / Keyboard / Battery as usable, broken or used as spare.",
+      "Spare parts list: usable parts by part and model, with the laptop they come from; Use marks a part as taken."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "User Inventory: Needs check chart + last seen from AD, Intune and Entra",
     "items": [
       "A chart at the top shows the people to check (no activity anywhere 90+ days, no AD logon 90+ days, not in the AD list, never logged on) and by country. Click a bar to list them.",

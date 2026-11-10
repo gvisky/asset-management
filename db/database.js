@@ -985,6 +985,10 @@ async function migrate() {
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_personnel', datetime('now'))");
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_devices', datetime('now'))");
 
+  // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
+  const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
+  if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");
+
   // Device Check (docs/DEVICE-CHECK.md): live Intune / Entra state compared with Asset Inventory.
   const dcols2 = (await backend.all('PRAGMA table_info(devices)')).map(c => c.name);
   for (const [col, type] of [['device_key', "TEXT DEFAULT ''"], ['compliance', "TEXT DEFAULT ''"], ['last_checkin', "TEXT DEFAULT ''"],
