@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Needs Attention: summary chart",
+    "items": [
+      "Both Needs Attention panels now start with a chart of everything to fix — by what's missing, by country and by asset type. Click a bar to list those assets."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Devices: Needs check summary chart",
     "items": [
       "A chart at the top shows everything that needs a check — by difference type and by country — for all devices, whatever the list filters.",
