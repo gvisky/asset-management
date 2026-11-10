@@ -818,8 +818,9 @@ tbody tr.inv-hits > td { background: #eff6ff; border-bottom: 2px solid #bfdbfe; 
 .pc-table { width: 100%; }
 .pc-table td { padding: 6px 4px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .pc-opt { margin-right: 12px; white-space: nowrap; font-size: 12.5px; }
-.sp-parts { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.sp-parts { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
 .sp-part { background: #f6f7f9; border-radius: 8px; padding: 8px 12px; }
 .sp-num { font-size: 22px; font-weight: 700; }
 .sp-src { display: inline-flex; align-items: center; gap: 4px; margin: 2px 10px 2px 0; }
 .sp-used { opacity: .6; }
+@media (max-width: 1200px) { .sp-parts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

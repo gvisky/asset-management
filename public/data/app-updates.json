@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Maintenance: SSD / Storage and Charger in the parts check",
+    "items": [
+      "Broken laptops' parts check and the spare parts list now also cover SSD / Storage and Charger."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Maintenance: Broken & Stock devices + spare parts",
     "items": [
       "All Broken and Stock devices are listed on Maintenance & Repairs, with a summary chart (status & type, laptop condition, country).",

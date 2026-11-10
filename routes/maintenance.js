@@ -32,8 +32,9 @@ async function source(kind, id) {
 
 // ── Broken & Stock devices + spare parts from broken laptops ───────────────────
 // assets.parts (JSON): { total: true|false, screen|mainboard|ram|keyboard|battery: 'ok'|'bad'|'used'|'',
-//   note, checked_by, checked_at }. 'ok' = usable spare, 'bad' = broken, 'used' = taken as a spare, '' = not checked.
-const PARTS = [['screen', 'Screen'], ['mainboard', 'Mainboard'], ['ram', 'RAM'], ['keyboard', 'Keyboard'], ['battery', 'Battery']];
+//   storage|charger as well, note, checked_by, checked_at }. 'ok' = usable spare, 'bad' = broken, 'used' = taken as a spare, '' = not checked.
+const PARTS = [['screen', 'Screen'], ['mainboard', 'Mainboard'], ['ram', 'RAM'], ['keyboard', 'Keyboard'], ['battery', 'Battery'],
+  ['storage', 'SSD / Storage'], ['charger', 'Charger']];
 const PART_STATES = ['', 'ok', 'bad', 'used'];
 const isLaptop = (a) => String(a.asset_type || '').toLowerCase() === 'laptop';
 const parseParts = (v) => { try { const p = v ? JSON.parse(v) : {}; return p && typeof p === 'object' ? p : {}; } catch { return {}; } };
@@ -45,6 +46,8 @@ function conditionOf(a) {
   const states = PARTS.map(([k]) => p[k] || '');
   if (states.includes('ok')) return 'parts';
   if (states.every(x => x)) return 'none_left';
+  // Checked before SSD / Charger were added: the old five parts all set and none usable → still "no usable part left".
+  if (p.checked_at && PARTS.slice(0, 5).every(([k]) => p[k]) && !p.storage && !p.charger) return 'none_left';
   return 'unchecked';
 }
 
