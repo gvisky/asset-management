@@ -417,3 +417,5 @@ router.put('/:id', wrap(async (req, res) => {
 }));
 
 module.exports = router;
+// Shared with Reports (User activity report): the same "Needs check" rules.
+module.exports.peopleChecks = { AD_COND, INTUNE_LAST_SQL, ENTRA_LAST_SQL };

@@ -1,6 +1,17 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Reports: new Excel exports for the new functions",
+    "items": [
+      "Devices (Intune / Entra): every device of AD users with compliance, last check-in / sign-in and linked asset, plus a sheet of differences to check.",
+      "User activity (AD / Intune / Entra): AD account, last AD logon, Intune check-in, Entra sign-in, days since last seen, and who needs a check (HR & IT).",
+      "Broken & Stock + spare parts: broken / stock devices with each laptop's parts check, spare parts per model and in total.",
+      "System Health (IT): collectors, latest status of every check, history of status changes.",
+      "Reports page is now grouped: Inventory · Devices & users · Maintenance · IT."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Broken laptops: parts check from Asset Inventory",
     "items": [
       "Asset Inventory: a broken laptop's status is clickable and opens the parts check; below it you see \"check parts\", \"N parts usable\" or \"total broken\".",
