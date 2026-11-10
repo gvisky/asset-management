@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Alerts box moved to Needs Attention",
+    "items": [
+      "The 🔔 Alerts list is no longer on Maintenance & Repairs; it is at the bottom of the ⚠️ Needs Attention page."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Maintenance: SSD / Storage and Charger in the parts check",
     "items": [
       "Broken laptops' parts check and the spare parts list now also cover SSD / Storage and Charger."

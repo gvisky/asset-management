@@ -263,7 +263,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('bs-reset').addEventListener('click', () => { Object.assign(bsF, { search: '', status: '', type: '', country: '', cond: '' }); renderBroken(); });
   document.getElementById('pc-save').addEventListener('click', savePartsCheck);
   ['pc-close', 'pc-cancel'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('pc-overlay').classList.remove('open')));
-  if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'asset');
   document.getElementById('filter-status').addEventListener('change', loadMaint);
   document.getElementById('filter-country').addEventListener('change', loadMaint);
   document.getElementById('filter-type').addEventListener('change', loadMaint);
