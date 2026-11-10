@@ -139,10 +139,46 @@ function renderDevPagination(total, page, limit) {
   el.querySelectorAll('.page-btn').forEach(b => b.addEventListener('click', () => loadDevices(Number(b.dataset.p))));
 }
 
-// Tiles follow the same filters as the table; clicking one applies its filter.
+// Summary chart: devices that need a check, per difference type and per country (all devices in the
+// user's scope — not the list filters). One series → one colour; the value is written beside each bar.
+const CS_LABEL = { not_in_assets: 'Not in Asset Inventory', user: 'User differs / missing', serial: 'Serial differs / missing',
+  pc_no: 'Computer No differs', duplicate: 'Duplicate asset — merge', sap_desc: 'SAP description names this serial',
+  conflict: 'Same serial on two SAP assets', brand: 'Brand differs' };
+function renderCheckSummary(cs) {
+  const card = document.getElementById('check-summary');
+  if (!cs || !cs.devices) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('cs-total').textContent = `· ${dFmt(cs.devices)} device${cs.devices === 1 ? '' : 's'}`;
+  const bars = (obj, label, attr) => {
+    const rows = Object.entries(obj).sort((a, b) => b[1] - a[1]);
+    const max = Math.max(1, ...rows.map(r => r[1]));
+    return rows.map(([k, n]) => `<a href="#" class="cs-row" data-${attr}="${dEsc(k)}" title="${dEsc(label(k))}: ${dFmt(n)} device${n === 1 ? '' : 's'} — click to list">
+        <span class="cs-label">${dEsc(label(k))}</span>
+        <span class="cs-track"><span class="cs-bar" style="width:${Math.max(2, (n / max) * 100)}%"></span></span>
+        <span class="cs-val">${dFmt(n)}</span></a>`).join('');
+  };
+  const byCode = document.getElementById('cs-by-code'), byCountry = document.getElementById('cs-by-country');
+  byCode.innerHTML = bars(cs.byCode, k => CS_LABEL[k] || k, 'code');
+  byCountry.innerHTML = bars(cs.byCountry, k => k, 'country');
+  const go = (issue, country) => {
+    document.getElementById('f-view').value = 'check';
+    document.getElementById('f-issue').value = issue;
+    const fc = document.getElementById('f-country');
+    fc.value = [...fc.options].some(o => o.value === country) ? country : '';
+    ['f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('search-input').value = '';
+    refresh();
+    document.querySelector('#dev-tbody').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  byCode.querySelectorAll('.cs-row').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); go(a.dataset.code, ''); }));
+  byCountry.querySelectorAll('.cs-row').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); go('', a.dataset.country === 'Unknown' ? '__none' : a.dataset.country); }));
+}
+
+// Tiles cover all devices (not the list filters); clicking one applies its filter to the list.
 async function loadDevStats() {
   try {
-    const s = await apiGet(`/api/devices/stats?${devQuery()}`);
+    // The summary (tiles + chart) always covers ALL devices; the filters below only change the list.
+    const s = await apiGet('/api/devices/stats');
     const pct = (n) => (s.total ? `${((n / s.total) * 100).toFixed(0)}% of ${dFmt(s.total)}` : '—');
     const tiles = [
       { label: 'Devices', color: '#1a56db', value: s.total, sub: `<b>${dFmt(s.intune)}</b> managed in Intune`, act: () => setExtra('', '') },
@@ -152,6 +188,7 @@ async function loadDevStats() {
       { label: 'Company devices not in Asset Inventory', color: '#7c3aed', value: s.corpNotInAssets, sub: `${dFmt(s.linkedAsset)} devices already linked to an asset`, act: () => setExtra('corp_unlinked') },
       { label: 'Needs check', color: '#dc2626', value: s.needsCheck, sub: 'differs from Asset Inventory', act: () => setSel('f-view', 'check') },
     ];
+    renderCheckSummary(s.checkSummary);
     const grid = document.getElementById('dev-tiles');
     grid.innerHTML = tiles.map((t, i) => `<div class="kpi" style="--kpi-color:${t.color}">
         <a class="kpi-main" href="#" data-i="${i}"><div class="kpi-label"><span class="kpi-dot"></span>${dEsc(t.label)}</div>
@@ -168,7 +205,7 @@ async function loadDevStats() {
     // Dropdown options come from ALL devices (not the current view), so a country stays
     // pickable even when nothing is left to add there.
     const needOpts = !document.getElementById('f-os').dataset.filled || !document.getElementById('f-country').dataset.filled;
-    const full = needOpts ? await apiGet('/api/devices/stats') : null;
+    const full = needOpts ? s : null;
     if (!document.getElementById('f-os').dataset.filled) {
       fill('f-os', full.byOs.filter(x => x.os).map(x => ({ v: x.os, t: `${x.os} (${dFmt(x.count)})` })), 'OS', 'All OS');
       document.getElementById('f-os').dataset.filled = '1';

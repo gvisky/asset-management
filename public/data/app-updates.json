@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Devices: Needs check summary chart",
+    "items": [
+      "A chart at the top shows everything that needs a check — by difference type and by country — for all devices, whatever the list filters.",
+      "The tiles also always count all devices; filters only change the list. Click a bar or tile to list those devices.",
+      "Asset Inventory by user: each user is now a separate block."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Bug fixes after a full review",
     "items": [
       "Needs Info tile = Needs Attention list; tiles clear the Laptop filter; one person no longer split in View by user; sort works there.",

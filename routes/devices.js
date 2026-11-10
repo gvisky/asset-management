@@ -92,6 +92,23 @@ function deviceWhere(req) {
   return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
 }
 
+// Everything that needs a check, whatever the list filters say (only the user's country scope applies):
+// devices per difference type and per country — for the summary chart on the Devices page.
+async function checkSummary(req) {
+  const cs = countrySql(req, 'd.country', '');
+  const rows = await all(`SELECT d.country, d.issues FROM devices d WHERE d.issues <> ''${cs.clause ? ' AND ' + cs.clause : ''}`, cs.params);
+  const byCode = {}, byCountry = {};
+  for (const r of rows) {
+    let list = [];
+    try { list = JSON.parse(r.issues); } catch { list = []; }
+    if (!list.length) continue;
+    for (const code of new Set(list.map(i => i.code))) byCode[code] = (byCode[code] || 0) + 1;
+    const c = r.country || 'Unknown';
+    byCountry[c] = (byCountry[c] || 0) + 1;
+  }
+  return { devices: rows.length, byCode, byCountry };
+}
+
 // ── GET /api/devices — list ───────────────────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
   await recheckDevices();            // differences follow Asset Inventory changes made after the upload
@@ -136,6 +153,7 @@ router.get('/stats', wrap(async (req, res) => {
     byCountry: byCountry.map(r => ({ country: r.v || '', count: Number(r.c) })),
     lastImport: await getMeta('directory_last_import'),
     needsCheck: await one("d.issues <> ''"),
+    checkSummary: await checkSummary(req),
     deviceCheckLast: await getMeta('device_check_last'),
     canCheck: globalITAdmin(req),
     canImport: IMPORTS_ENABLED && isITAdmin(req.user),
