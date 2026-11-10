@@ -206,7 +206,7 @@ function assetRowHtml(a, devHtml = '', extraClass = '') {
       <td class="text-muted text-sm">${esc(a.computer_no) || '—'}${devHtml}${(a.device_refs || []).map(r => `<div class="inv-diff" title="${hEsc(r.text)}">⚠ SAP description names ${hEsc(r.serial)} = Intune <b>${hEsc(r.device)}</b> (${hEsc(String(r.upn || '').split('@')[0])})</div>`).join('')}</td>
       <td><span class="badge badge-factory">${esc(a.country) || '—'}</span></td>
       <td>${locationBadge(a.location)}</td>
-      <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}>${esc(a.department) || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
+      <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${esc(a.department) || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
       <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${esc(a.user_name) || '—'}</td>
       <td class="text-muted text-sm">${adNameCell(a)}</td>
       <td class="text-muted text-sm">${esc(a.serial_no) || '—'}</td>
@@ -311,10 +311,13 @@ function renderGrouped(r) {
       logon ? `AD logon <b style="color:${daysColor(logon === 'never' ? 999 : daysAgo(p.ad_last_logon))}">${logon}</b>` : '',
       p && p.ad_manager ? `↑ ${hEsc(p.ad_manager)}` : '',
       toCheck ? `<span class="badge badge-broken" style="font-size:10px">⚠ ${toCheck} to check</span>` : ''].filter(Boolean).join(' · ');
-    return `<tr class="inv-group"><td colspan="14">${head}<span class="inv-group-meta">${meta}</span></td></tr>`
+    // One block per user: gap · header · their assets · "other devices" section.
+    return `<tr class="inv-gap"><td colspan="14"></td></tr>`
+      + `<tr class="inv-group"><td colspan="14">${head}<span class="inv-group-meta">${meta}</span></td></tr>`
       + g.assets.map(a => assetRowHtml(a, (linked.get(a.id) || []).map(deviceLine).join(''), 'inv-in-group')).join('')
+      + (looseUnique.length ? `<tr class="inv-loose inv-loose-head"><td></td><td colspan="13">Other devices of this user in Intune / Entra (${looseUnique.length})</td></tr>` : '')
       + looseUnique.map(looseDeviceRow).join('');
-  }).join('');
+  }).join('') + '<tr class="inv-gap"><td colspan="14"></td></tr>';
 }
 
 // Years in use = Purchase Date (YYYY-MM-DD) → today, e.g. "4.3 yrs". '' when no valid date.
