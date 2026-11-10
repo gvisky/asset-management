@@ -202,31 +202,12 @@ function renderBroken() {
 function syncBsFilters() { for (const k of ['search', 'status', 'type', 'country', 'cond']) { const el = document.getElementById('bs-' + k); if (el) el.value = bsF[k]; } }
 
 // Parts check of one broken laptop.
-let pcId = null;
-function openPartsCheck(id) {
+async function openPartsCheck(id) {
   const a = bsData.data.find(x => x.id === id); if (!a) return;
-  pcId = id;
-  document.getElementById('pc-title').textContent = `Parts check — ${a.asset_s4 || a.asset_code || '#' + a.id} · ${a.brand_model || ''}`;
-  const opt = (k, v, label) => `<label class="pc-opt"><input type="radio" name="pc-${k}" value="${v}"${(a.parts[k] || '') === v ? ' checked' : ''}> ${label}</label>`;
-  document.getElementById('pc-body').innerHTML = `
-    <label class="pc-total"><input type="checkbox" id="pc-total"${a.parts.total ? ' checked' : ''}> <b>Total broken</b> — no part can be used</label>
-    <table class="pc-table" id="pc-parts"><tbody>${bsData.parts.map(([k, name]) => `<tr><td><b>${name}</b></td><td>
-      ${opt(k, 'ok', '✓ Usable')}${opt(k, 'bad', '✗ Broken')}${opt(k, 'used', '↪ Used as spare')}${opt(k, '', 'Not checked')}</td></tr>`).join('')}</tbody></table>
-    <div class="form-group" style="margin-top:10px"><label class="form-label">Note</label><input class="form-control" id="pc-note" maxlength="300" value="${htmlEsc(a.parts.note || '')}" placeholder="e.g. water damage, screen cracked"></div>
-    ${a.parts.checked_by ? `<p class="text-muted text-sm">Last check by ${htmlEsc(a.parts.checked_by)} · ${htmlEsc(a.parts.checked_at)} UTC</p>` : ''}`;
-  const tot = document.getElementById('pc-total');
-  const sync = () => { document.getElementById('pc-parts').style.opacity = tot.checked ? .4 : 1; document.querySelectorAll('#pc-parts input').forEach(i => { i.disabled = tot.checked; }); };
-  tot.addEventListener('change', sync); sync();
-  document.getElementById('pc-overlay').classList.add('open');
-}
-async function savePartsCheck() {
-  const body = { total: document.getElementById('pc-total').checked, note: document.getElementById('pc-note').value, parts: {} };
-  bsData.parts.forEach(([k]) => { const c = document.querySelector(`input[name="pc-${k}"]:checked`); body.parts[k] = c ? c.value : ''; });
-  try {
-    await apiPut(`/api/maintenance/devices/${pcId}/parts`, body);
-    document.getElementById('pc-overlay').classList.remove('open');
-    showToast('Parts check saved'); loadBroken();
-  } catch (err) { let m = 'Could not save'; try { m = JSON.parse(err.message).error || m; } catch {} showToast(m, 'error'); }
+  const body = await partsCheck({ title: `Parts check — ${a.asset_s4 || a.asset_code || '#' + a.id} · ${a.brand_model || ''}`, parts: a.parts });
+  if (!body) return;
+  try { await savePartsCheckFor(id, body); showToast('Parts check saved'); loadBroken(); }
+  catch (err) { showToast(partsErr(err, 'Could not save'), 'error'); }
 }
 
 // Spare parts: stock per part. Model parts (Screen / Keyboard / Mainboard / Battery) per model,
@@ -319,9 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('bs-search').addEventListener('input', (e) => { bsF.search = e.target.value; renderBroken(); });
   ['status', 'type', 'country', 'cond'].forEach(k => document.getElementById('bs-' + k).addEventListener('change', (e) => { bsF[k] = e.target.value; renderBroken(); }));
   document.getElementById('bs-reset').addEventListener('click', () => { Object.assign(bsF, { search: '', status: '', type: '', country: '', cond: '' }); renderBroken(); });
-  document.getElementById('pc-save').addEventListener('click', savePartsCheck);
   ['av-close', 'av-ok'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('av-overlay').classList.remove('open')));
-  ['pc-close', 'pc-cancel'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('pc-overlay').classList.remove('open')));
   document.getElementById('filter-status').addEventListener('change', loadMaint);
   document.getElementById('filter-country').addEventListener('change', loadMaint);
   document.getElementById('filter-type').addEventListener('change', loadMaint);

@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Broken laptops: parts check from Asset Inventory",
+    "items": [
+      "Asset Inventory: a broken laptop's status is clickable and opens the parts check; below it you see \"check parts\", \"N parts usable\" or \"total broken\".",
+      "Setting a laptop to Broken (Edit, or Add Asset) now asks for the parts check first: every part must be set, or tick Total broken. Cancel = the asset is not saved."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Asset Inventory by user: \"broken\" is not a person",
     "items": [
       "Assets whose AD Name or User Name is just \"broken\", \"missing\", \"none\", \"stock\"… are no longer grouped together as one user: each goes to its real user, or to \"No user assigned\".",

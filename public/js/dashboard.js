@@ -466,9 +466,18 @@ document.addEventListener('DOMContentLoaded', () => {
   saveBtn.addEventListener('click', async () => {
     const data = getFormData();
     if (locationApplies(data.country) && !data.location) { showToast('Please select a location (Office / Factory)', 'error'); return; }
+    // A laptop added as Broken: the parts check is a must.
+    let parts = null;
+    if (data.status === 'Broken' && isLaptopType(data.asset_type)) {
+      parts = await partsCheck({ title: `Parts check — ${data.asset_s4 || data.asset_code || data.brand_model || 'laptop'} · Broken`, parts: null, required: true });
+      if (!parts) { showToast('Parts check is needed to add a broken laptop', 'error'); return; }
+    }
     try {
       if (_saveMode === 'add') {
-        await apiPost(API, data);
+        const created = await apiPost(API, data);
+        if (parts && created && created.id) {
+          try { await savePartsCheckFor(created.id, parts); } catch (e) { showToast(partsErr(e, 'Asset added, but the parts check could not be saved'), 'error'); }
+        }
         showToast('Asset added successfully');
       }
       closeModal();
