@@ -176,6 +176,8 @@ async function loadPeople(page = 1) {
   else if (status === '__ad_stale') params.set('ad', 'stale');
   else if (status === '__ad_never') params.set('ad', 'never');
   else if (status === '__ad_resource') params.set('ad', 'resource');
+  else if (status === '__ad_inactive') params.set('ad', 'inactive');
+  else if (status === '__ad_attention') params.set('ad', 'attention');
   else if (status) params.set('status', status);
   if (user_type) params.set('user_type', user_type);
 
@@ -216,16 +218,23 @@ function emailHtml(p) {
   return `<b style="color:var(--text, #111827)" title="AD account">${esc(e.slice(0, at))}</b>${esc(e.slice(at))}`;
 }
 const managerLine = (p) => (p.ad_manager ? `<div class="text-muted" style="font-size:11.5px">↑ ${esc(p.ad_manager)}</div>` : '');
-// Last AD logon: date + days since (amber after 30 days, red after 90); "never" if the account never logged on.
+// Last seen, three sources side by side: AD logon · Intune check-in · Entra sign-in (latest over the person's
+// devices). Days since each — amber after 30, red after 90. Resource accounts (shared mailboxes) show nothing.
 function logonCell(p) {
-  if (!p.ad_seen_at) return '<span class="text-muted">—</span>';
-  if (p.ad_never_logon || !p.ad_last_logon) return '<span class="text-muted" title="This AD account has never logged on">never</span>';
-  const d = new Date(p.ad_last_logon.replace(' ', 'T'));
-  const days = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
-  const txt = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
-  const color = days > 90 ? '#dc2626' : days > 30 ? '#d97706' : 'var(--muted)';
-  const ago = days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`;
-  return `<div style="white-space:nowrap">${txt}</div><div style="font-size:11.5px;color:${color};${days > 90 ? 'font-weight:600' : ''}">${ago}</div>`;
+  if (p.ad_resource) return '<span class="text-muted" title="Resource account — no logon check">—</span>';
+  const line = (label, t, opts = {}) => {
+    if (opts.never) return `<div class="lg-row"><span class="lg-src">${label}</span><span class="text-muted">never</span></div>`;
+    if (!t) return `<div class="lg-row"><span class="lg-src">${label}</span><span class="text-muted">—</span></div>`;
+    const d = new Date(String(t).replace(' ', 'T') + (opts.utc ? 'Z' : ''));
+    if (isNaN(d)) return '';
+    const days = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+    const color = days > 90 ? '#dc2626' : days > 30 ? '#d97706' : 'inherit';
+    const when = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+    return `<div class="lg-row" title="${label}: ${when} (${days} day${days === 1 ? '' : 's'} ago)"><span class="lg-src">${label}</span>`
+      + `<span style="color:${color};${days > 90 ? 'font-weight:600' : ''}">${days === 0 ? 'today' : days + ' d'}</span></div>`;
+  };
+  const ad = p.ad_seen_at ? line('AD', p.ad_last_logon, { never: !!p.ad_never_logon || !p.ad_last_logon }) : line('AD', '');
+  return `<div class="lg-cell">${ad}${line('Intune', p.intune_last, { utc: true })}${line('Entra', p.entra_last, { utc: true })}</div>`;
 }
 let peopleBaseline = null;   // first big import — rows from it get no New / Edited badge
 
@@ -358,6 +367,7 @@ async function loadSummary() {
       document.getElementById('filter-country').value = country || '';
       document.getElementById('filter-status').value = status || '';
       document.getElementById('filter-usertype').value = userType || '';
+      document.getElementById('search-input').value = '';
       loadPeople(1);
       document.querySelector('.table-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
@@ -366,6 +376,7 @@ async function loadSummary() {
       return { label, color, value: Object.values(counts).reduce((a, b) => a + b, 0), onClick: () => show('', status, userType),
         splits: order.map(c => ({ country: c, count: counts[c] || 0, onClick: () => show(c, status, userType) })) };
     };
+    renderPeopleCheck(s.attention, show);
     renderKpiTiles('summary-grid', [
       tile('Total People', '#4338ca', () => true),
       tile('Hayat: No', '#dc2626', r => r.user_type === 'No Hayat Member', '', 'No Hayat Member'),
@@ -374,6 +385,32 @@ async function loadSummary() {
       tile('Deleted', '#b91c1c', r => r.status === 'deleted', 'deleted'),
     ]);
   } catch (e) { /* ignore */ }
+}
+
+// "Needs check" chart: people to look at, whatever the list filters — by reason and by country.
+// (One series → one colour, count beside each bar; click a bar to list those people.)
+function renderPeopleCheck(a, show) {
+  const card = document.getElementById('people-check');
+  if (!card) return;
+  if (!a || !a.adLoaded || !a.total) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('pc-total').textContent = `· ${a.total} people`;
+  const bars = (entries, attr) => {
+    const max = Math.max(1, ...entries.map(e => e[1]));
+    return entries.filter(e => e[1]).map(([label, n, v]) => `<a href="#" class="cs-row" data-${attr}="${esc(v)}" title="${esc(label)}: ${n} — click to list">
+        <span class="cs-label">${esc(label)}</span><span class="cs-track"><span class="cs-bar" style="width:${Math.max(2, (n / max) * 100)}%"></span></span>
+        <span class="cs-val">${n}</span></a>`).join('') || '<span class="text-muted text-sm">Nothing to check.</span>';
+  };
+  const reasons = document.getElementById('pc-by-reason'), countries = document.getElementById('pc-by-country');
+  reasons.innerHTML = bars([
+    ['No activity anywhere 90+ days (AD, Intune, Entra)', a.inactive, '__ad_inactive'],
+    ['No AD logon for 90+ days', a.stale, '__ad_stale'],
+    ['Not in latest AD list', a.missing, '__ad_missing'],
+    ['AD: never logged on', a.never, '__ad_never'],
+  ].sort((x, y) => y[1] - x[1]), 'status');
+  countries.innerHTML = bars(Object.entries(a.byCountry).sort((x, y) => y[1] - x[1]).map(([c, n]) => [c, n, c]), 'country');
+  reasons.querySelectorAll('.cs-row').forEach(el => el.addEventListener('click', (e) => { e.preventDefault(); show('', el.dataset.status, ''); }));
+  countries.querySelectorAll('.cs-row').forEach(el => el.addEventListener('click', (e) => { e.preventDefault(); show(el.dataset.country === 'Unknown' ? '' : el.dataset.country, '__ad_attention', ''); }));
 }
 
 // Load last-import info; show the upload button (IT) and the monthly reminder.

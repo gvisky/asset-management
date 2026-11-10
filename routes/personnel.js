@@ -16,6 +16,24 @@ const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const USER_TYPES = ['', 'Hayat Member', 'No Hayat Member'];
 const STATUSES   = ['Active', 'to be delete', 'pending delete', 'deleted'];
 
+// "Needs check" rules for people (table alias p). Resource accounts (shared mailboxes / groups) are never flagged.
+const AD_MISSING_SQL = `((SELECT value FROM app_meta WHERE key = 'ad_last_import') IS NOT NULL
+      AND instr(COALESCE((SELECT value FROM app_meta WHERE key = 'ad_import_countries'), ''), '"' || p.country || '"') > 0
+      AND (p.ad_seen_at IS NULL OR p.ad_seen_at < (SELECT value FROM app_meta WHERE key = 'ad_last_import')) AND p.status <> 'deleted')`;
+const NOT_RESOURCE_SQL = 'COALESCE(p.ad_resource, 0) = 0';
+const AD_STALE_SQL = `(p.ad_last_logon IS NOT NULL AND p.ad_last_logon < datetime('now', '-90 days') AND ${NOT_RESOURCE_SQL})`;
+const AD_NEVER_SQL = `(p.ad_seen_at IS NOT NULL AND p.ad_never_logon = 1 AND ${NOT_RESOURCE_SQL})`;
+// Latest Intune check-in / Entra sign-in over the person's devices ('' when none).
+const INTUNE_LAST_SQL = "(SELECT COALESCE(MAX(d.last_checkin), '') FROM devices d WHERE d.person_id = p.id)";
+const ENTRA_LAST_SQL = "(SELECT COALESCE(MAX(d.last_sign_in), '') FROM devices d WHERE d.person_id = p.id)";
+// No sign of life anywhere for 90+ days: AD logon, Intune check-in and Entra sign-in all older (or none).
+const INACTIVE_SQL = `(p.ad_seen_at IS NOT NULL AND ${NOT_RESOURCE_SQL} AND p.status <> 'deleted'
+      AND MAX(COALESCE(p.ad_last_logon, ''), ${INTUNE_LAST_SQL}, ${ENTRA_LAST_SQL}) < datetime('now', '-90 days'))`;
+const AD_COND = {
+  missing: AD_MISSING_SQL, stale: AD_STALE_SQL, never: AD_NEVER_SQL, inactive: INACTIVE_SQL, resource: 'p.ad_resource = 1',
+  attention: `(${AD_MISSING_SQL} OR ${AD_STALE_SQL} OR ${AD_NEVER_SQL} OR ${INACTIVE_SQL})`,
+};
+
 router.use(requireAuth);
 
 const isHR = (req) => req.user && req.user.team === 'HR';
@@ -38,7 +56,7 @@ router.get('/', wrap(async (req, res) => {
     created: 'p.id DESC',
     name: 'p.display_name COLLATE NOCASE',
     // Longest since the last AD logon first: never logged on → oldest logon → no AD data.
-    logon: `CASE WHEN p.ad_seen_at IS NOT NULL AND p.ad_never_logon = 1 THEN 0 WHEN p.ad_last_logon IS NULL THEN 2 ELSE 1 END,
+    logon: `COALESCE(p.ad_resource, 0), CASE WHEN p.ad_seen_at IS NOT NULL AND p.ad_never_logon = 1 THEN 0 WHEN p.ad_last_logon IS NULL THEN 2 ELSE 1 END,
             p.ad_last_logon ASC, p.display_name COLLATE NOCASE`,
   };
   const conditions = [];
@@ -54,18 +72,8 @@ router.get('/', wrap(async (req, res) => {
   }
   if (status)    { conditions.push('status = ?');    params.push(status); }
   if (user_type) { conditions.push('user_type = ?'); params.push(user_type); }
-  // Active Directory: not in the latest AD upload / no logon for 90+ days / never logged on.
-  if (req.query.ad === 'missing') {
-    conditions.push(`(SELECT value FROM app_meta WHERE key = 'ad_last_import') IS NOT NULL
-      AND instr(COALESCE((SELECT value FROM app_meta WHERE key = 'ad_import_countries'), ''), '"' || country || '"') > 0
-      AND (ad_seen_at IS NULL OR ad_seen_at < (SELECT value FROM app_meta WHERE key = 'ad_last_import')) AND status <> 'deleted'`);
-  } else if (req.query.ad === 'stale') {
-    conditions.push("ad_last_logon IS NOT NULL AND ad_last_logon < datetime('now', '-90 days') AND COALESCE(ad_resource, 0) = 0");
-  } else if (req.query.ad === 'resource') {
-    conditions.push('ad_resource = 1');
-  } else if (req.query.ad === 'never') {
-    conditions.push('ad_seen_at IS NOT NULL AND ad_never_logon = 1 AND COALESCE(ad_resource, 0) = 0');
-  }
+  // Active Directory / activity filters (same rules as the summary chart).
+  if (AD_COND[req.query.ad]) conditions.push(AD_COND[req.query.ad]);
   // Not found in the latest Azure user export (left / disabled / renamed?).
   if (req.query.azure === 'missing') {
     conditions.push("azure_seen_at IS NOT NULL AND azure_seen_at < (SELECT value FROM app_meta WHERE key = 'personnel_last_import')");
@@ -74,7 +82,7 @@ router.get('/', wrap(async (req, res) => {
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
   const offset = (Number(page) - 1) * Number(limit);
 
-  const total = Number((await get(`SELECT COUNT(*) AS c FROM personnel ${where}`, params)).c);
+  const total = Number((await get(`SELECT COUNT(*) AS c FROM personnel p ${where}`, params)).c);
   // asset_count links a person to the Asset Inventory by AD Name:
   // asset.ad_name == the local-part of the person's email (before @hayat.com.tr).
   // Department & Cost Center are stored on the person (editable by HR/IT, seeded
@@ -83,7 +91,8 @@ router.get('/', wrap(async (req, res) => {
         AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1))`;
   const data = await all(
     `SELECT p.*, (SELECT COUNT(*) FROM assets a WHERE ${adMatch}) AS asset_count,
-            (SELECT COUNT(*) FROM devices d WHERE d.person_id = p.id) AS device_count
+            (SELECT COUNT(*) FROM devices d WHERE d.person_id = p.id) AS device_count,
+            ${INTUNE_LAST_SQL} AS intune_last, ${ENTRA_LAST_SQL} AS entra_last
      FROM personnel p ${where} ORDER BY ${ORDER[sort] || ORDER.updated} LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );
@@ -222,7 +231,17 @@ router.get('/summary', wrap(async (req, res) => {
        FROM personnel ${cond} GROUP BY 1, 2, 3, 4`, params
   )).map(r => ({ country: r.country || '', status: r.status || '', user_type: r.user_type || '', leaving: Number(r.leaving), cnt: Number(r.c) }));
 
-  res.json({ total, byStatus, byCountry, noHayat, leaving, breakdown });
+  // "Needs check" chart: people per reason and per country (all people in scope, not the list filters).
+  const and = cs.clause ? `WHERE p.${cs.clause} AND` : 'WHERE';
+  const cnt = async (sql) => Number((await get(`SELECT COUNT(*) AS c FROM personnel p ${and} ${sql}`, params)).c);
+  const attention = {
+    total: await cnt(AD_COND.attention),
+    missing: await cnt(AD_MISSING_SQL), stale: await cnt(AD_STALE_SQL), never: await cnt(AD_NEVER_SQL), inactive: await cnt(INACTIVE_SQL),
+    byCountry: (await all(`SELECT p.country AS country, COUNT(*) AS c FROM personnel p ${and} ${AD_COND.attention} GROUP BY p.country`, params))
+      .reduce((a, r) => { a[r.country || 'Unknown'] = Number(r.c); return a; }, {}),
+    adLoaded: !!(await getMeta('ad_last_import')),
+  };
+  res.json({ total, byStatus, byCountry, noHayat, leaving, breakdown, attention });
 }));
 
 // ── GET /api/personnel/meta — last import + monthly reminder (for IT) ──────────
