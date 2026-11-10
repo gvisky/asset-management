@@ -61,6 +61,17 @@
   <main class="content">
     <div class="text-muted text-sm" id="last-import" style="margin:-6px 0 12px"></div>
     <div class="kpi-grid kpi-6" id="dev-tiles"></div>
+    <!-- What needs a check, at a glance (not affected by the list filters below) -->
+    <div class="card" id="check-summary" style="display:none;margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">⚠ Needs check <span class="text-muted text-sm" style="font-weight:400" id="cs-total"></span></span>
+        <span class="text-muted text-sm">all devices, whatever the filters below · click a bar to list them</span>
+      </div>
+      <div class="cs-grid">
+        <div><div class="cs-title">By difference</div><div id="cs-by-code"></div></div>
+        <div><div class="cs-title">By country</div><div id="cs-by-country"></div></div>
+      </div>
+    </div>
 
     <div class="card">
       <div class="card-header" style="flex-wrap:wrap;gap:10px">
@@ -269,6 +280,6 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
-<script src="/js/devices.js?v=20261110d"></script>
+<script src="/js/devices.js?v=20261110h"></script>
 </body>
 </html>
