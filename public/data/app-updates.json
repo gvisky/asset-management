@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Spare parts: broken checkbox, all parts per laptop, remark, popup",
+    "items": [
+      "Each laptop shows all 7 parts; tick \"broken\" on a part to take it off the count (untick to count it again).",
+      "The asset's remark is shown next to it; clicking the asset opens a details popup on the page."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Spare parts: counted from every broken laptop, by model",
     "items": [
       "Each broken laptop counts as 1 of each part unless marked broken / used or Total broken.",

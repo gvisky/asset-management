@@ -187,7 +187,7 @@ function renderBroken() {
     }
     const code = a.asset_s4 || a.asset_code;
     return `<tr>
-      <td><a href="/inventory.html?edit=${a.id}">${code ? htmlEsc(code) : '#' + a.id}</a><div class="text-muted text-sm">${htmlEsc(a.asset_type || 'Type not set')}</div></td>
+      <td><a href="#" onclick="openAssetPopup(${a.id}); return false">${code ? htmlEsc(code) : '#' + a.id}</a><div class="text-muted text-sm">${htmlEsc(a.asset_type || 'Type not set')}</div></td>
       <td>${htmlEsc(a.brand_model) || '—'}</td>
       <td class="text-sm">${htmlEsc(a.serial_no) || '—'}<div class="text-muted">${htmlEsc(a.computer_no)}</div></td>
       <td class="text-sm">${htmlEsc(a.country)}${a.location ? ` · ${htmlEsc(a.location)}` : ''}</td>
@@ -238,26 +238,33 @@ async function loadSpares() {
   catch (e) { document.getElementById('sp-model-body').innerHTML = '<tr><td class="empty-state">Could not load.</td></tr>'; }
 }
 const spNum = (c) => (c.stock ? `<b style="color:#16a34a">${c.stock}</b>${c.checked ? ` <span class="text-muted text-sm" title="confirmed usable">(${c.checked} ✓)</span>` : ''}` : '<span class="text-muted">0</span>');
+// One part of one laptop: a "broken" checkbox — ticked = broken, taken off the stock count.
 function useBtn(src, part, partName) {
   const st = src.states[part];
-  if (st === 'used') return `<span class="text-muted text-sm">used</span>`;
-  if (st === 'bad') return `<span class="text-sm" style="color:#dc2626">broken</span>`;
-  return canEdit() ? `<button class="btn btn-ghost btn-sm sp-use" onclick="useSpare(${src.id}, ${jsArg(part)}, ${jsArg(partName)})" title="${st === 'ok' ? 'Confirmed usable' : 'Not checked yet'} — mark as taken for a repair">Use${st === 'ok' ? ' ✓' : ''}</button>` : (st === 'ok' ? '✓' : '?');
+  if (st === 'used') return `<span class="text-muted text-sm" title="Already taken as a spare">used</span>`;
+  const dis = canEdit() ? '' : ' disabled';
+  return `<label class="sp-broken${st === 'bad' ? ' is-bad' : ''}" title="${st === 'bad' ? 'Broken — not counted' : st === 'ok' ? 'Confirmed usable' : 'Counted as usable (not checked)'}">
+    <input type="checkbox"${st === 'bad' ? ' checked' : ''}${dis} onchange="setPartBroken(${src.id}, ${jsArg(part)}, ${jsArg(partName)}, this)"> broken${st === 'ok' ? ' <span style="color:#16a34a">✓</span>' : ''}</label>`;
+}
+// Asset code + site + remark (or parts-check note); the code opens the details popup.
+function srcLabel(src) {
+  const extra = [src.remark, src.note].filter(Boolean).join(' · ');
+  return `<a href="#" onclick="openAssetPopup(${src.id}); return false">${htmlEsc(src.code || '#' + src.id)}</a>
+    <span class="text-muted">${htmlEsc(src.country)}${src.location ? ' · ' + htmlEsc(src.location) : ''}</span>${extra ? ` <span class="sp-remark" title="${htmlEsc(extra)}">${htmlEsc(extra)}</span>` : ''}`;
 }
 function renderSpares() {
   const r = spData;
   document.getElementById('sp-total').textContent = `· from ${r.laptops} broken laptop${r.laptops === 1 ? '' : 's'}${r.totalBroken ? ` (+${r.totalBroken} total broken, not counted)` : ''}`;
   document.getElementById('sp-parts').innerHTML = r.totals.map(t => `<div class="sp-part" title="${t.shared ? 'fits any laptop' : 'fits the same model only'}"><div class="sp-num">${t.stock}</div><div class="text-muted text-sm">${htmlEsc(t.partName)}${t.shared ? ' · any' : ''}</div></div>`).join('');
-  // Model parts table
-  const mp = r.modelParts;
-  document.getElementById('sp-model-head').innerHTML = `<tr><th>Model</th><th>Broken laptops</th>${mp.map(p => `<th>${htmlEsc(p.partName)}</th>`).join('')}<th></th></tr>`;
+  // Model table: every part (model parts fit the same model only; RAM / SSD / Charger fit any laptop).
+  const mp = r.allParts;
+  document.getElementById('sp-model-head').innerHTML = `<tr><th>Model</th><th>Broken laptops</th>${mp.map(p => `<th${p.shared ? ' class="sp-any" title="fits any laptop"' : ''}>${htmlEsc(p.partName)}${p.shared ? ' · any' : ''}</th>`).join('')}<th></th></tr>`;
   const body = document.getElementById('sp-model-body');
   body.innerHTML = r.models.length ? r.models.map((m, i) => {
     const open = spOpen.has(m.model);
     const main = `<tr><td><b>${htmlEsc(m.model)}</b></td><td>${m.laptops.length}</td>${mp.map(p => `<td>${spNum(m.counts[p.part])}</td>`).join('')}
       <td><button class="btn btn-ghost btn-sm" onclick="toggleSpModel(${i})">${open ? 'Hide' : 'Show'} laptops</button></td></tr>`;
-    const detail = open ? m.laptops.map(src => `<tr class="sp-detail"><td colspan="2" class="text-sm"><a href="/inventory.html?edit=${src.id}">${htmlEsc(src.code || '#' + src.id)}</a>
-        <span class="text-muted">${htmlEsc(src.country)}${src.location ? ' · ' + htmlEsc(src.location) : ''}</span></td>
+    const detail = open ? m.laptops.map(src => `<tr class="sp-detail"><td colspan="2" class="text-sm">${srcLabel(src)}</td>
         ${mp.map(p => `<td>${useBtn(src, p.part, p.partName)}</td>`).join('')}<td></td></tr>`).join('') : '';
     return main + detail;
   }).join('') : `<tr><td colspan="${mp.length + 3}" class="empty-state">No broken laptops with usable parts.</td></tr>`;
@@ -265,17 +272,44 @@ function renderSpares() {
   document.getElementById('sp-shared').innerHTML = `<div class="sp-shared-grid">${r.sharedParts.map(g => `<div class="sp-shared">
       <div><b>${htmlEsc(g.partName)}</b> — <b style="color:${g.stock ? '#16a34a' : 'var(--muted)'}">${g.stock}</b> in stock${g.checked ? ` <span class="text-muted text-sm">(${g.checked} ✓ checked)</span>` : ''}${g.used ? ` <span class="text-muted text-sm">· ${g.used} used</span>` : ''}</div>
       <details${g.sources.length && g.sources.length <= 6 ? ' open' : ''}><summary class="text-sm text-muted">from ${g.sources.length} laptop${g.sources.length === 1 ? '' : 's'}</summary>
-        ${g.sources.map(src => `<div class="sp-src"><a href="/inventory.html?edit=${src.id}">${htmlEsc(src.code || '#' + src.id)}</a>
-          <span class="text-muted text-sm">${htmlEsc(src.model)} · ${htmlEsc(src.country)}</span> ${useBtn(src, g.part, g.partName)}</div>`).join('')}
+        ${g.sources.map(src => `<div class="sp-src"><span class="text-sm">${srcLabel(src)} <span class="text-muted">${htmlEsc(src.model)}</span></span> ${useBtn(src, g.part, g.partName)}</div>`).join('')}
       </details></div>`).join('')}</div>`;
 }
 function toggleSpModel(i) { const m = spData.models[i]; if (spOpen.has(m.model)) spOpen.delete(m.model); else spOpen.add(m.model); renderSpares(); }
-async function useSpare(id, part, partName) {
+async function setPartBroken(id, part, partName, cb) {
   const a = bsData && bsData.data.find(x => x.id === id);
-  if (!a || !confirm(`Mark the ${partName} of ${a.asset_s4 || a.asset_code || '#' + id} as used for a repair?`)) return;
-  const parts = {}; bsData.parts.forEach(([k]) => { parts[k] = a.parts[k] || ''; }); parts[part] = 'used';
-  try { await apiPut(`/api/maintenance/devices/${id}/parts`, { total: false, note: a.parts.note || '', parts }); showToast(`${partName} marked as used`); loadBroken(); }
-  catch (err) { let m = 'Could not save'; try { m = JSON.parse(err.message).error || m; } catch {} showToast(m, 'error'); }
+  if (!a) return;
+  const parts = {}; bsData.parts.forEach(([k]) => { parts[k] = a.parts[k] || ''; });
+  parts[part] = cb.checked ? 'bad' : '';
+  cb.disabled = true;
+  try {
+    await apiPut(`/api/maintenance/devices/${id}/parts`, { total: false, note: a.parts.note || '', parts });
+    showToast(`${partName} of ${a.asset_s4 || a.asset_code || '#' + id}: ${cb.checked ? 'broken — not counted' : 'counted again'}`);
+    loadBroken();
+  } catch (err) { let m = 'Could not save'; try { m = JSON.parse(err.message).error || m; } catch {} showToast(m, 'error'); cb.checked = !cb.checked; cb.disabled = false; }
+}
+
+// Asset details popup (instead of leaving the page).
+async function openAssetPopup(id) {
+  const ov = document.getElementById('av-overlay'), body = document.getElementById('av-body');
+  body.innerHTML = 'Loading…'; ov.classList.add('open');
+  document.getElementById('av-open').href = `/inventory.html?edit=${id}`;
+  try {
+    const a = await apiGet(`/api/assets/${id}`);
+    document.getElementById('av-title').textContent = `${a.asset_s4 || a.asset_code || 'Asset #' + a.id} · ${a.brand_model || ''}`;
+    const p = (() => { try { return a.parts ? JSON.parse(a.parts) : {}; } catch { return {}; } })();
+    const partsTxt = p.total ? 'Total broken' : (bsData ? bsData.parts.map(([k, n]) => `${n}: ${({ ok: 'usable', bad: 'broken', used: 'used' })[p[k]] || 'not checked'}`).join(' · ') : '');
+    const fields = [['Asset S4 (main)', a.asset_s4], ['Asset Code (ECC)', a.asset_code], ['Asset Type', a.asset_type], ['Brand / Model', a.brand_model],
+      ['Serial #', a.serial_no], ['Computer No', a.computer_no], ['Country', a.country], ['Location', a.location], ['Department', a.department],
+      ['Cost Center', a.cost_center ? `${a.cost_center}${a.cost_center_desc ? ' — ' + a.cost_center_desc : ''}` : ''], ['User Name', a.user_name], ['AD Name', a.ad_name],
+      ['Status', a.status], ['Purchase Date', a.purchase_date], ['Years in Use', yrs(a.purchase_date)], ['Warranty', a.warranty_expiry], ['Vendor', a.vendor],
+      ['Cost', a.cost], ['PO Number', a.po_number], ['Asset Description', a.asset_description], ['Remark', a.remark],
+      ...(a.status === 'Broken' && String(a.asset_type).toLowerCase() === 'laptop' ? [['Parts', partsTxt + (p.note ? ` — ${p.note}` : '')]] : []),
+      ['History Usage', a.history_usage]];
+    body.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 18px">${fields.map(([l, v]) =>
+      `<div${l === 'History Usage' || l === 'Parts' || l === 'Asset Description' ? ' style="grid-column:span 2"' : ''}><div class="form-label" style="margin-bottom:2px">${l}</div>
+        <div style="font-size:13.5px;white-space:pre-line">${v ? htmlEsc(v) : '<span class="text-muted">—</span>'}</div></div>`).join('')}</div>`;
+  } catch (e) { body.innerHTML = '<p class="text-muted">Could not load this asset.</p>'; }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -286,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ['status', 'type', 'country', 'cond'].forEach(k => document.getElementById('bs-' + k).addEventListener('change', (e) => { bsF[k] = e.target.value; renderBroken(); }));
   document.getElementById('bs-reset').addEventListener('click', () => { Object.assign(bsF, { search: '', status: '', type: '', country: '', cond: '' }); renderBroken(); });
   document.getElementById('pc-save').addEventListener('click', savePartsCheck);
+  ['av-close', 'av-ok'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('av-overlay').classList.remove('open')));
   ['pc-close', 'pc-cancel'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('pc-overlay').classList.remove('open')));
   document.getElementById('filter-status').addEventListener('change', loadMaint);
   document.getElementById('filter-country').addEventListener('change', loadMaint);

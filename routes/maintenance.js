@@ -109,7 +109,7 @@ const MODEL_PARTS = ['screen', 'keyboard', 'mainboard', 'battery'];
 const SHARED_PARTS = ['ram', 'storage', 'charger'];
 router.get('/spare-parts', wrap(async (req, res) => {
   const cs = countrySql(req, 'country', '');
-  const rows = await all(`SELECT id, asset_code, asset_s4, brand_model, country, location, parts FROM assets
+  const rows = await all(`SELECT id, asset_code, asset_s4, brand_model, country, location, remark, parts FROM assets
       WHERE deleted_at IS NULL AND status = 'Broken' AND LOWER(asset_type) = 'laptop'${cs.clause ? ' AND ' + cs.clause : ''}
       ORDER BY brand_model, id`, cs.params);
   const name = Object.fromEntries(PARTS);
@@ -122,13 +122,14 @@ router.get('/spare-parts', wrap(async (req, res) => {
     if (p.total) { totalBroken++; continue; }
     laptops++;
     const states = Object.fromEntries(PARTS.map(([k]) => [k, p[k] || '']));
-    const src = { id: a.id, code: a.asset_s4 || a.asset_code || '', model: a.brand_model || '', country: a.country, location: a.location, states };
+    const src = { id: a.id, code: a.asset_s4 || a.asset_code || '', model: a.brand_model || '', country: a.country, location: a.location,
+      remark: a.remark || '', note: p.note || '', states };
     const mk = (a.brand_model || 'Model not set').trim();
     const key = mk.toLowerCase();
-    if (!models.has(key)) models.set(key, { model: mk, laptops: [], counts: Object.fromEntries(MODEL_PARTS.map(k => [k, { stock: 0, checked: 0, used: 0 }])) });
+    if (!models.has(key)) models.set(key, { model: mk, laptops: [], counts: Object.fromEntries(PARTS.map(([k]) => [k, { stock: 0, checked: 0, used: 0 }])) });
     const m = models.get(key);
     m.laptops.push(src);
-    for (const k of MODEL_PARTS) {
+    for (const [k] of PARTS) {          // per model: all parts (shared ones are also pooled below)
       if (inStock(states[k])) { m.counts[k].stock++; if (states[k] === 'ok') m.counts[k].checked++; }
       if (states[k] === 'used') m.counts[k].used++;
     }
@@ -139,9 +140,11 @@ router.get('/spare-parts', wrap(async (req, res) => {
     }
   }
   const modelList = [...models.values()].sort((x, y) => y.laptops.length - x.laptops.length || x.model.localeCompare(y.model));
-  const totals = PARTS.map(([k, n]) => ({ part: k, partName: n, shared: SHARED_PARTS.includes(k),
+  const totals = [...MODEL_PARTS, ...SHARED_PARTS].map(k => [k, name[k]]).map(([k, n]) => ({ part: k, partName: n, shared: SHARED_PARTS.includes(k),
     stock: SHARED_PARTS.includes(k) ? shared[k].stock : modelList.reduce((t, m) => t + m.counts[k].stock, 0) }));
   res.json({ laptops, totalBroken, modelParts: MODEL_PARTS.map(k => ({ part: k, partName: name[k] })),
+    // Same-model parts first, then the ones that fit any laptop.
+    allParts: [...MODEL_PARTS, ...SHARED_PARTS].map(k => ({ part: k, partName: name[k], shared: SHARED_PARTS.includes(k) })),
     sharedParts: SHARED_PARTS.map(k => shared[k]), models: modelList, totals });
 }));
 

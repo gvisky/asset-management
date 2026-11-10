@@ -833,3 +833,9 @@ tbody tr.sp-detail > td { background: #fafafa; padding-top: 5px; padding-bottom:
 @media (max-width: 1000px) { .sp-shared-grid { grid-template-columns: 1fr; } }
 .sp-shared { background: #f6f7f9; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
 .sp-shared .sp-src { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
+
+.sp-broken { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.sp-broken.is-bad { color: #dc2626; font-weight: 600; }
+.sp-remark { display: inline-block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+  color: #92400e; background: #fffbeb; border-radius: 4px; padding: 0 5px; font-size: 11.5px; }
+th.sp-any { color: #6d28d9; }
