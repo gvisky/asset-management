@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-10",
+    "title": "Asset Inventory by user: \"broken\" is not a person",
+    "items": [
+      "Assets whose AD Name or User Name is just \"broken\", \"missing\", \"none\", \"stock\"… are no longer grouped together as one user: each goes to its real user, or to \"No user assigned\"."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Spare parts: broken checkbox, all parts per laptop, remark, popup",
     "items": [
       "Each laptop shows all 7 parts; tick \"broken\" on a part to take it off the count (untick to count it again).",
