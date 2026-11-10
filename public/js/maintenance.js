@@ -229,23 +229,47 @@ async function savePartsCheck() {
   } catch (err) { let m = 'Could not save'; try { m = JSON.parse(err.message).error || m; } catch {} showToast(m, 'error'); }
 }
 
-// Spare parts list; "Use" marks one part of one laptop as taken.
+// Spare parts: stock per part. Model parts (Screen / Keyboard / Mainboard / Battery) per model,
+// shared parts (RAM / SSD / Charger) for any laptop. "Use" marks one part of one laptop as taken.
+let spData = null;
+const spOpen = new Set();      // models whose laptops are expanded
 async function loadSpares() {
-  try {
-    const r = await apiGet('/api/maintenance/spare-parts');
-    const total = r.byPart.reduce((n, p) => n + p.available, 0);
-    document.getElementById('sp-total').textContent = `· ${total} usable part${total === 1 ? '' : 's'}`;
-    document.getElementById('sp-parts').innerHTML = r.byPart.map(p => `<div class="sp-part"><div class="sp-num">${p.available}</div><div class="text-muted text-sm">${p.partName}</div></div>`).join('');
-    const tbody = document.getElementById('sp-tbody');
-    tbody.innerHTML = r.groups.length ? r.groups.map(g => `<tr>
-        <td><b>${htmlEsc(g.partName)}</b></td><td>${htmlEsc(g.model)}</td>
-        <td><b style="color:${g.available ? '#16a34a' : 'var(--muted)'}">${g.available}</b></td><td class="text-muted">${g.used || '—'}</td>
-        <td class="text-sm">${g.sources.map(src => `<span class="sp-src${src.state === 'used' ? ' sp-used' : ''}">
-          <a href="/inventory.html?edit=${src.id}">${htmlEsc(src.code || '#' + src.id)}</a> <span class="text-muted">${htmlEsc(src.country)}</span>
-          ${src.state === 'ok' && canEdit() ? `<button class="btn btn-ghost btn-sm" style="padding:1px 6px;font-size:11px" onclick="useSpare(${src.id}, ${jsArg(g.part)}, ${jsArg(g.partName)})">Use</button>` : src.state === 'used' ? '<span class="text-muted">used</span>' : ''}</span>`).join('')}</td></tr>`).join('')
-      : '<tr><td colspan="5" class="empty-state">No usable parts recorded yet — use “Check parts” on a broken laptop.</td></tr>';
-  } catch (e) { document.getElementById('sp-tbody').innerHTML = '<tr><td colspan="5" class="empty-state">Could not load.</td></tr>'; }
+  try { spData = await apiGet('/api/maintenance/spare-parts'); renderSpares(); }
+  catch (e) { document.getElementById('sp-model-body').innerHTML = '<tr><td class="empty-state">Could not load.</td></tr>'; }
 }
+const spNum = (c) => (c.stock ? `<b style="color:#16a34a">${c.stock}</b>${c.checked ? ` <span class="text-muted text-sm" title="confirmed usable">(${c.checked} ✓)</span>` : ''}` : '<span class="text-muted">0</span>');
+function useBtn(src, part, partName) {
+  const st = src.states[part];
+  if (st === 'used') return `<span class="text-muted text-sm">used</span>`;
+  if (st === 'bad') return `<span class="text-sm" style="color:#dc2626">broken</span>`;
+  return canEdit() ? `<button class="btn btn-ghost btn-sm sp-use" onclick="useSpare(${src.id}, ${jsArg(part)}, ${jsArg(partName)})" title="${st === 'ok' ? 'Confirmed usable' : 'Not checked yet'} — mark as taken for a repair">Use${st === 'ok' ? ' ✓' : ''}</button>` : (st === 'ok' ? '✓' : '?');
+}
+function renderSpares() {
+  const r = spData;
+  document.getElementById('sp-total').textContent = `· from ${r.laptops} broken laptop${r.laptops === 1 ? '' : 's'}${r.totalBroken ? ` (+${r.totalBroken} total broken, not counted)` : ''}`;
+  document.getElementById('sp-parts').innerHTML = r.totals.map(t => `<div class="sp-part" title="${t.shared ? 'fits any laptop' : 'fits the same model only'}"><div class="sp-num">${t.stock}</div><div class="text-muted text-sm">${htmlEsc(t.partName)}${t.shared ? ' · any' : ''}</div></div>`).join('');
+  // Model parts table
+  const mp = r.modelParts;
+  document.getElementById('sp-model-head').innerHTML = `<tr><th>Model</th><th>Broken laptops</th>${mp.map(p => `<th>${htmlEsc(p.partName)}</th>`).join('')}<th></th></tr>`;
+  const body = document.getElementById('sp-model-body');
+  body.innerHTML = r.models.length ? r.models.map((m, i) => {
+    const open = spOpen.has(m.model);
+    const main = `<tr><td><b>${htmlEsc(m.model)}</b></td><td>${m.laptops.length}</td>${mp.map(p => `<td>${spNum(m.counts[p.part])}</td>`).join('')}
+      <td><button class="btn btn-ghost btn-sm" onclick="toggleSpModel(${i})">${open ? 'Hide' : 'Show'} laptops</button></td></tr>`;
+    const detail = open ? m.laptops.map(src => `<tr class="sp-detail"><td colspan="2" class="text-sm"><a href="/inventory.html?edit=${src.id}">${htmlEsc(src.code || '#' + src.id)}</a>
+        <span class="text-muted">${htmlEsc(src.country)}${src.location ? ' · ' + htmlEsc(src.location) : ''}</span></td>
+        ${mp.map(p => `<td>${useBtn(src, p.part, p.partName)}</td>`).join('')}<td></td></tr>`).join('') : '';
+    return main + detail;
+  }).join('') : `<tr><td colspan="${mp.length + 3}" class="empty-state">No broken laptops with usable parts.</td></tr>`;
+  // Shared parts
+  document.getElementById('sp-shared').innerHTML = `<div class="sp-shared-grid">${r.sharedParts.map(g => `<div class="sp-shared">
+      <div><b>${htmlEsc(g.partName)}</b> — <b style="color:${g.stock ? '#16a34a' : 'var(--muted)'}">${g.stock}</b> in stock${g.checked ? ` <span class="text-muted text-sm">(${g.checked} ✓ checked)</span>` : ''}${g.used ? ` <span class="text-muted text-sm">· ${g.used} used</span>` : ''}</div>
+      <details${g.sources.length && g.sources.length <= 6 ? ' open' : ''}><summary class="text-sm text-muted">from ${g.sources.length} laptop${g.sources.length === 1 ? '' : 's'}</summary>
+        ${g.sources.map(src => `<div class="sp-src"><a href="/inventory.html?edit=${src.id}">${htmlEsc(src.code || '#' + src.id)}</a>
+          <span class="text-muted text-sm">${htmlEsc(src.model)} · ${htmlEsc(src.country)}</span> ${useBtn(src, g.part, g.partName)}</div>`).join('')}
+      </details></div>`).join('')}</div>`;
+}
+function toggleSpModel(i) { const m = spData.models[i]; if (spOpen.has(m.model)) spOpen.delete(m.model); else spOpen.add(m.model); renderSpares(); }
 async function useSpare(id, part, partName) {
   const a = bsData && bsData.data.find(x => x.id === id);
   if (!a || !confirm(`Mark the ${partName} of ${a.asset_s4 || a.asset_code || '#' + id} as used for a repair?`)) return;

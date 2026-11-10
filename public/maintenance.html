@@ -93,14 +93,19 @@
     <div class="card" id="sp-card" style="margin-bottom:20px">
       <div class="card-header" style="flex-wrap:wrap;gap:10px">
         <span class="card-title">🔩 Spare parts from broken laptops <span class="text-muted text-sm" style="font-weight:400" id="sp-total"></span></span>
-        <span class="text-muted text-sm">usable parts by part and model · <b>Use</b> marks a part as taken for a repair</span>
+        <span class="text-muted text-sm">each broken laptop = 1 of each part, unless marked broken / used or Total broken · <b>Use</b> takes a part for a repair</span>
       </div>
       <div id="sp-parts" class="sp-parts"></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Part</th><th>Model</th><th>Available</th><th>Used</th><th>From laptops</th></tr></thead>
-          <tbody id="sp-tbody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
-        </table>
+      <div class="sp-section">
+        <div class="cs-title">Fit the same model only — Screen · Keyboard · Mainboard · Battery</div>
+        <div class="table-wrap"><table>
+          <thead id="sp-model-head"></thead>
+          <tbody id="sp-model-body"><tr><td class="empty-state">Loading…</td></tr></tbody>
+        </table></div>
+      </div>
+      <div class="sp-section">
+        <div class="cs-title">Fit any laptop — RAM · SSD / Storage · Charger</div>
+        <div id="sp-shared"></div>
       </div>
     </div>
 
@@ -198,6 +203,6 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
-<script src="/js/maintenance.js?v=20261110c"></script>
+<script src="/js/maintenance.js?v=20261110d"></script>
 </body>
 </html>

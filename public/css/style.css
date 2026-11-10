@@ -824,3 +824,12 @@ tbody tr.inv-hits > td { background: #eff6ff; border-bottom: 2px solid #bfdbfe; 
 .sp-src { display: inline-flex; align-items: center; gap: 4px; margin: 2px 10px 2px 0; }
 .sp-used { opacity: .6; }
 @media (max-width: 1200px) { .sp-parts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.sp-section { padding: 12px 20px 16px; border-bottom: 1px solid var(--border); }
+.sp-section:last-child { border-bottom: none; }
+tbody tr.sp-detail > td { background: #fafafa; padding-top: 5px; padding-bottom: 5px; }
+.sp-use { padding: 1px 7px !important; font-size: 11px !important; }
+.sp-shared-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1000px) { .sp-shared-grid { grid-template-columns: 1fr; } }
+.sp-shared { background: #f6f7f9; border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.sp-shared .sp-src { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
