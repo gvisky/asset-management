@@ -25,5 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   panels.missing = NeedsAttention({ root: document.getElementById('na-missing'), mode: 'missing', maxHeight: 480, onSaved: reloadOther('missing') });
   panels.ad = NeedsAttention({ root: document.getElementById('na-ad'), mode: 'ad', maxHeight: 420, onSaved: reloadOther('ad') });
   loadHrChanges();
+  // Asset alerts list (moved here from Maintenance & Repairs), at the bottom of the page.
+  if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'asset');
   if (typeof loadAlertButton === 'function') loadAlertButton('alert-btn-slot', '');
 });
