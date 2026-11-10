@@ -57,6 +57,54 @@
 
   <main class="content">
     <div id="alert-box"></div>
+
+    <!-- Broken & Stock devices (with the parts check of broken laptops) -->
+    <div class="card" id="bs-card" style="margin-bottom:20px">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">🧰 Broken &amp; Stock devices <span class="text-muted text-sm" style="font-weight:400" id="bs-total"></span></span>
+        <span class="text-muted text-sm">from Asset Inventory (status Broken or Stock) · click a bar to list them</span>
+      </div>
+      <div class="cs-grid cs-grid-3" id="bs-summary" style="border-bottom:1px solid var(--border)"></div>
+      <div class="na-bar">
+        <div class="search-box" style="min-width:220px;flex:1">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="bs-search" placeholder="Search code, model, serial, user…">
+        </div>
+        <select class="filter-select" id="bs-status"><option value="">Broken &amp; Stock</option><option value="Broken">Broken</option><option value="Stock">Stock</option></select>
+        <select class="filter-select" id="bs-type"><option value="">All asset types</option></select>
+        <select class="filter-select" id="bs-country"><option value="">All countries</option></select>
+        <select class="filter-select" id="bs-cond" title="Condition of broken laptops">
+          <option value="">Any condition</option>
+          <option value="unchecked">Laptops — parts not checked</option>
+          <option value="parts">Laptops — has usable parts</option>
+          <option value="total">Laptops — total broken</option>
+          <option value="none_left">Laptops — no usable part left</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" id="bs-reset">Reset</button>
+      </div>
+      <div class="table-wrap" style="max-height:560px;overflow-y:auto">
+        <table>
+          <thead><tr><th>Asset</th><th>Brand / Model</th><th>Serial / PC No</th><th>Country / Site</th><th>Last user</th><th>Years</th><th>Status</th><th>Condition / parts</th><th></th></tr></thead>
+          <tbody id="bs-tbody"><tr><td colspan="9" class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Spare parts from broken laptops -->
+    <div class="card" id="sp-card" style="margin-bottom:20px">
+      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+        <span class="card-title">🔩 Spare parts from broken laptops <span class="text-muted text-sm" style="font-weight:400" id="sp-total"></span></span>
+        <span class="text-muted text-sm">usable parts by part and model · <b>Use</b> marks a part as taken for a repair</span>
+      </div>
+      <div id="sp-parts" class="sp-parts"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Part</th><th>Model</th><th>Available</th><th>Used</th><th>From laptops</th></tr></thead>
+          <tbody id="sp-tbody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header" style="flex-wrap:wrap;gap:10px">
         <span class="card-title" style="flex:1">Repair / Service Log</span>
@@ -131,11 +179,26 @@
   </div>
 </div>
 
+<!-- Parts check of a broken laptop -->
+<div class="modal-overlay" id="pc-overlay">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <span class="modal-title" id="pc-title">Parts check</span>
+      <button class="modal-close" id="pc-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" id="pc-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="pc-cancel">Cancel</button>
+      <button class="btn btn-primary" id="pc-save">Save</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
-<script src="/js/maintenance.js"></script>
+<script src="/js/maintenance.js?v=20261110a"></script>
 </body>
 </html>

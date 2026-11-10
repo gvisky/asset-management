@@ -30,6 +30,99 @@ async function source(kind, id) {
   return a && { row: a, label: a.asset_code || a.brand_model || `#${a.id}`, country: a.country };
 }
 
+// ── Broken & Stock devices + spare parts from broken laptops ───────────────────
+// assets.parts (JSON): { total: true|false, screen|mainboard|ram|keyboard|battery: 'ok'|'bad'|'used'|'',
+//   note, checked_by, checked_at }. 'ok' = usable spare, 'bad' = broken, 'used' = taken as a spare, '' = not checked.
+const PARTS = [['screen', 'Screen'], ['mainboard', 'Mainboard'], ['ram', 'RAM'], ['keyboard', 'Keyboard'], ['battery', 'Battery']];
+const PART_STATES = ['', 'ok', 'bad', 'used'];
+const isLaptop = (a) => String(a.asset_type || '').toLowerCase() === 'laptop';
+const parseParts = (v) => { try { const p = v ? JSON.parse(v) : {}; return p && typeof p === 'object' ? p : {}; } catch { return {}; } };
+// Condition of a broken laptop: total (nothing usable) / parts (some usable) / none_left / unchecked.
+function conditionOf(a) {
+  if (!isLaptop(a) || a.status !== 'Broken') return '';
+  const p = parseParts(a.parts);
+  if (p.total) return 'total';
+  const states = PARTS.map(([k]) => p[k] || '');
+  if (states.includes('ok')) return 'parts';
+  if (states.every(x => x)) return 'none_left';
+  return 'unchecked';
+}
+
+// GET /api/maintenance/devices — Broken + Stock assets (country scope), with a summary for the chart.
+router.get('/devices', wrap(async (req, res) => {
+  const cs = countrySql(req, 'country', '');
+  const rows = await all(`SELECT id, asset_code, asset_s4, asset_type, brand_model, computer_no, serial_no, country, location,
+        department, user_name, ad_name, status, purchase_date, parts, updated_at, remark
+      FROM assets WHERE deleted_at IS NULL AND status IN ('Broken', 'Stock')${cs.clause ? ' AND ' + cs.clause : ''}
+      ORDER BY CASE status WHEN 'Broken' THEN 0 ELSE 1 END, asset_type, brand_model, id`, cs.params);
+  const open = new Set((await all("SELECT DISTINCT asset_id FROM maintenance_log WHERE asset_type = 'asset' AND status <> 'done'")).map(r => r.asset_id));
+  const data = rows.map(a => ({ ...a, parts: parseParts(a.parts), condition: conditionOf(a), open_repair: open.has(a.id) }));
+  const tally = (key) => data.reduce((m, a) => { const k = key(a) || ''; m[k] = (m[k] || 0) + 1; return m; }, {});
+  res.json({
+    data, parts: PARTS,
+    summary: {
+      byStatus: tally(a => a.status),
+      byType: tally(a => a.asset_type || 'Type not set'),
+      byCountry: tally(a => a.country || 'Unknown'),
+      laptopCondition: tally(a => a.condition),
+    },
+  });
+}));
+
+// PUT /api/maintenance/devices/:id/parts — { total: bool, parts: { screen: 'ok', … }, note } (admin / editor)
+router.put('/devices/:id/parts', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  const a = await get('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+  if (!a) return res.status(404).json({ error: 'Asset not found' });
+  if (!inScope(req, a.country)) return res.status(403).json({ error: 'Not in your region' });
+  if (!isLaptop(a) || a.status !== 'Broken') return res.status(400).json({ error: 'Parts are tracked for broken laptops only' });
+  const b = req.body || {};
+  const before = parseParts(a.parts);
+  const next = { total: !!b.total, note: String(b.note || '').trim().slice(0, 300), checked_by: req.user.username,
+    checked_at: new Date().toISOString().slice(0, 16).replace('T', ' ') };
+  for (const [k] of PARTS) {
+    const v = b.parts && b.parts[k] !== undefined ? String(b.parts[k]) : (before[k] || '');
+    next[k] = next.total ? 'bad' : (PART_STATES.includes(v) ? v : '');
+  }
+  const label = Object.fromEntries(PARTS);
+  const word = { ok: 'usable', bad: 'broken', used: 'used as spare', '': 'not checked' };
+  const changes = next.total && !before.total ? ['total broken']
+    : PARTS.filter(([k]) => (before[k] || '') !== next[k]).map(([k]) => `${label[k]} ${word[next[k]]}`);
+  if (!next.total && before.total) changes.unshift('not total broken');
+  let hist = a.history_usage || '';
+  if (changes.length || (next.note && next.note !== before.note)) {
+    const line = `${next.checked_at} UTC: parts check — ${changes.join(', ') || 'note'}${next.note ? ` (${next.note})` : ''} by ${req.user.username}`;
+    hist = hist ? `${hist}\n${line}` : line;
+  }
+  await run('UPDATE assets SET parts = ?, history_usage = ? WHERE id = ?', [JSON.stringify(next), hist, a.id]);
+  await audit(req.user, 'UPDATE', a.id, `Parts check of "${a.asset_code || a.brand_model || '#' + a.id}": ${changes.join(', ') || 'note'}`);
+  res.json({ ok: true, parts: next, condition: conditionOf({ ...a, parts: JSON.stringify(next) }) });
+}));
+
+// GET /api/maintenance/spare-parts — usable parts from broken laptops, by part and model.
+router.get('/spare-parts', wrap(async (req, res) => {
+  const cs = countrySql(req, 'country', '');
+  const rows = await all(`SELECT id, asset_code, asset_s4, brand_model, country, location, parts FROM assets
+      WHERE deleted_at IS NULL AND status = 'Broken' AND LOWER(asset_type) = 'laptop' AND parts <> ''${cs.clause ? ' AND ' + cs.clause : ''}`, cs.params);
+  const groups = new Map();
+  for (const a of rows) {
+    const p = parseParts(a.parts);
+    if (p.total) continue;
+    for (const [k, name] of PARTS) {
+      if (p[k] !== 'ok' && p[k] !== 'used') continue;
+      const model = a.brand_model || 'Model not set';
+      const key = `${k}|${model.toLowerCase()}`;
+      if (!groups.has(key)) groups.set(key, { part: k, partName: name, model, available: 0, used: 0, sources: [] });
+      const g = groups.get(key);
+      if (p[k] === 'ok') g.available++; else g.used++;
+      g.sources.push({ id: a.id, code: a.asset_s4 || a.asset_code || '', country: a.country, location: a.location, state: p[k] });
+    }
+  }
+  const order = Object.fromEntries(PARTS.map(([k], i) => [k, i]));
+  const list = [...groups.values()].sort((x, y) => order[x.part] - order[y.part] || y.available - x.available || x.model.localeCompare(y.model));
+  const byPart = PARTS.map(([k, name]) => ({ part: k, partName: name, available: list.filter(g => g.part === k).reduce((n, g) => n + g.available, 0) }));
+  res.json({ groups: list, byPart });
+}));
+
 // ── GET /api/maintenance — list repairs across assets AND servers ─────────────
 router.get('/', wrap(async (req, res) => {
   const { status = '', asset_type = '' } = req.query;
