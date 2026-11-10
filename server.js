@@ -38,6 +38,13 @@ app.use('/api/health',  require('./routes/health'));
 // Public files that must load before login (login page + shared CSS/JS)
 const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico'];
 
+// Which build is running (Render sets RENDER_GIT_COMMIT) — to check a deploy really went live.
+app.get('/api/version', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.json({ commit: (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || 'local', started: STARTED });
+});
+const STARTED = new Date().toISOString();
+
 // Gate the HTML pages: anyone not logged in is redirected to /login.html
 app.use(async (req, res, next) => {
   try {
@@ -56,11 +63,19 @@ app.use(async (req, res, next) => {
 // Static files (served after the gate above)
 // Pages, scripts and styles change with every deploy: browsers / Cloudflare must check for a newer copy.
 app.use(express.static(path.join(__dirname, 'public'), {
-  setHeaders: (res, file) => { if (/\.(html|js|css|json)$/i.test(file)) res.setHeader('Cache-Control', 'no-cache'); },
+  setHeaders: (res, file) => {
+    if (/\.(html|js|css|json)$/i.test(file)) {
+      // no-store: never keep a copy (browser or CDN) — pages are behind the login and change with every deploy.
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.setHeader('CDN-Cache-Control', 'no-store');
+      res.setHeader('Cloudflare-CDN-Cache-Control', 'no-store');
+    }
+  },
 }));
 
 // Fallback for any other GET → index.html (already gated above)
 app.get(/^(?!\/api).*$/, (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
