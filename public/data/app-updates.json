@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-10",
+    "title": "User Inventory: Needs check chart + last seen from AD, Intune and Entra",
+    "items": [
+      "A chart at the top shows the people to check (no activity anywhere 90+ days, no AD logon 90+ days, not in the AD list, never logged on) and by country. Click a bar to list them.",
+      "The Last seen column shows days since the last AD logon, Intune check-in and Entra sign-in together. Resource accounts are left out."
+    ]
+  },
+  {
+    "date": "2026-11-10",
     "title": "Needs Attention: summary chart",
     "items": [
       "Both Needs Attention panels now start with a chart of everything to fix — by what's missing, by country and by asset type. Click a bar to list those assets."

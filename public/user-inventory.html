@@ -65,6 +65,17 @@
   <main class="content">
 
     <div class="stat-grid" id="summary-grid" style="margin-bottom:18px"></div>
+    <!-- People to check, at a glance (not affected by the list filters) -->
+    <div class="card" id="people-check" style="display:none;margin-bottom:18px">
+      <div class="card-header">
+        <span class="card-title">⚠ Needs check <span class="text-muted text-sm" style="font-weight:400" id="pc-total"></span></span>
+        <span class="text-muted text-sm">all people (resource accounts excluded), whatever the filters below · click a bar to list them</span>
+      </div>
+      <div class="cs-grid">
+        <div><div class="cs-title">By reason</div><div id="pc-by-reason"></div></div>
+        <div><div class="cs-title">By country</div><div id="pc-by-country"></div></div>
+      </div>
+    </div>
 
     <!-- Monthly reminder for IT -->
     <div id="reminder" class="card" style="display:none;border-left:4px solid var(--retired);margin-bottom:18px">
@@ -98,6 +109,8 @@
           <option value="__ad_missing">⚠ Not in latest AD list</option>
           <option value="__ad_stale">AD: no logon for 90+ days</option>
           <option value="__ad_never">AD: never logged on</option>
+          <option value="__ad_inactive">No activity anywhere 90+ days</option>
+          <option value="__ad_attention">⚠ Needs check (any reason)</option>
           <option value="__ad_resource">AD: resource accounts</option>
         </select>
         <select class="filter-select" id="filter-usertype">
@@ -121,7 +134,7 @@
           <thead>
             <tr>
               <th>Name / Email</th>
-              <th>Last logon</th>
+              <th title="Days since the last AD logon, Intune check-in and Entra sign-in">Last seen</th>
               <th>Assets</th>
               <th>Department</th>
               <th>Cost Center</th>
@@ -233,6 +246,6 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
-<script src="/js/user-inventory.js?v=20261110f"></script>
+<script src="/js/user-inventory.js?v=20261110i"></script>
 </body>
 </html>
