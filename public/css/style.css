@@ -775,9 +775,10 @@ select.filter-select {
 tbody tr.inv-gap > td { height: 16px; padding: 0; background: var(--bg, #f3f4f6); border: none; }
 tbody tr.inv-gap:hover { background: none; }
 tbody tr.inv-group > td { background: #e4ecfb; border-top: 2px solid var(--brand, #1a56db); border-bottom: 1px solid #c7d2e8;
-  box-shadow: inset 4px 0 0 var(--brand, #1a56db); padding: 10px 14px 10px 16px; font-size: 14px; }
+  box-shadow: inset 4px 0 0 var(--brand, #1a56db); padding: 7px 14px 7px 16px; font-size: 14px; }
 tbody tr.inv-group:hover > td { background: #dbe6fa; }
-.inv-group-meta { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.inv-group-meta { display: inline; font-size: 12px; color: var(--muted); margin-left: 14px; }
+.inv-group-meta::before { content: "·"; margin-right: 8px; color: #94a3b8; }
 tbody tr.inv-in-group > td:first-child, tbody tr.inv-loose > td:first-child { box-shadow: inset 4px 0 0 #c7d2e8; }
 tbody tr.inv-loose > td { background: #fafafa; padding-top: 6px; padding-bottom: 6px; color: var(--muted); }
 tbody tr.inv-loose.inv-missing > td { background: #fff7ed; color: var(--text, #111827); }

@@ -3,7 +3,8 @@
     "date": "2026-11-10",
     "title": "Asset Inventory by user: \"broken\" is not a person",
     "items": [
-      "Assets whose AD Name or User Name is just \"broken\", \"missing\", \"none\", \"stock\"… are no longer grouped together as one user: each goes to its real user, or to \"No user assigned\"."
+      "Assets whose AD Name or User Name is just \"broken\", \"missing\", \"none\", \"stock\"… are no longer grouped together as one user: each goes to its real user, or to \"No user assigned\".",
+      "Each user's header is now one line: name, email, position, then assets · devices · AD logon · manager · to check."
     ]
   },
   {
