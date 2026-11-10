@@ -882,20 +882,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Add/Edit modal save
   const saveBtn = document.getElementById('modal-save');
+  let saving = false;    // one save at a time: a second click while saving must not add a copy of the asset
   saveBtn.addEventListener('click', async () => {
+    if (saving) return;
     const data = getFormData();
     if (locationApplies(data.country) && !data.location) { showToast('Please select a location (Office / Factory)', 'error'); return; }
-    // A laptop set to Broken (new, or changed to Broken): the parts check is a must, before saving.
+    // Fixed at the click: Edit stays Edit even if the form is closed / cleared meanwhile.
     const id = document.getElementById('asset-id').value;
+    const isEdit = !!(editMode && id);
+    saving = true; saveBtn.disabled = true;
+    try { await saveAssetForm(data, id, isEdit); } finally { saving = false; saveBtn.disabled = false; }
+  });
+  async function saveAssetForm(data, id, isEdit) {
+    // A laptop set to Broken (new, or changed to Broken): the parts check is a must, before saving.
     let parts = null;
-    if (data.status === 'Broken' && isLaptopType(data.asset_type) && !(editMode && id && editOrig.status === 'Broken')) {
+    if (data.status === 'Broken' && isLaptopType(data.asset_type) && !(isEdit && editOrig.status === 'Broken')) {
       parts = await partsCheck({ title: `Parts check — ${data.asset_s4 || data.asset_code || data.brand_model || 'laptop'} · set to Broken`,
-        parts: editMode ? editOrig.parts : null, required: true });
+        parts: isEdit ? editOrig.parts : null, required: true });
       if (!parts) { showToast('Parts check is needed to set a laptop to Broken', 'error'); return; }
     }
     try {
       let savedId = id;
-      if (editMode && id) {
+      if (isEdit) {
         await apiPut(`${API}/${id}`, data);
         showToast('Asset updated');
       } else {
@@ -914,7 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       showToast('Error saving asset', 'error');
     }
-  });
+  }
 
   // Add asset buttons
   document.querySelectorAll('#btn-add-top, #nav-add').forEach(el => {

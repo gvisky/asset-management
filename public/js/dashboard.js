@@ -463,7 +463,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  let saving = false;    // one save at a time (no double add)
   saveBtn.addEventListener('click', async () => {
+    if (saving) return;
+    saving = true; saveBtn.disabled = true;
+    try { await dashSave(); } finally { saving = false; saveBtn.disabled = false; }
+  });
+  async function dashSave() {
     const data = getFormData();
     if (locationApplies(data.country) && !data.location) { showToast('Please select a location (Office / Factory)', 'error'); return; }
     // A laptop added as Broken: the parts check is a must.
@@ -485,5 +491,5 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       showToast('Error saving asset', 'error');
     }
-  });
+  }
 });
