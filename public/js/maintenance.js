@@ -231,7 +231,7 @@ function useBtn(src, part, partName) {
 function srcLabel(src) {
   const extra = [src.remark, src.note].filter(Boolean).join(' · ');
   return `<a href="#" onclick="openAssetPopup(${src.id}); return false">${htmlEsc(src.code || '#' + src.id)}</a>
-    <span class="text-muted">${htmlEsc(src.country)}${src.location ? ' · ' + htmlEsc(src.location) : ''}</span>${extra ? ` <span class="sp-remark" title="${htmlEsc(extra)}">${htmlEsc(extra)}</span>` : ''}`;
+    <span class="text-muted">${htmlEsc(src.country)}${src.location ? ' · ' + htmlEsc(src.location) : ''}</span>${src.serial ? ` <span class="sp-serial"><b>Serial</b> ${htmlEsc(src.serial)}</span>` : ''}${extra ? ` <span class="sp-remark" title="${htmlEsc(extra)}">${htmlEsc(extra)}</span>` : ''}`;
 }
 function renderSpares() {
   const r = spData;

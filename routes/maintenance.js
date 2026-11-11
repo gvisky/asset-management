@@ -91,7 +91,7 @@ router.put('/devices/:id/parts', requireRole('admin', 'editor'), wrap(async (req
 // per model; RAM / SSD / Charger fit any laptop → counted together. "checked" = confirmed usable.
 router.get('/spare-parts', wrap(async (req, res) => {
   const cs = countrySql(req, 'country', '');
-  const rows = await all(`SELECT id, asset_code, asset_s4, brand_model, country, location, remark, parts FROM assets
+  const rows = await all(`SELECT id, asset_code, asset_s4, brand_model, serial_no, country, location, remark, parts FROM assets
       WHERE deleted_at IS NULL AND status = 'Broken' AND LOWER(asset_type) = 'laptop'${cs.clause ? ' AND ' + cs.clause : ''}
       ORDER BY brand_model, id`, cs.params);
   const { laptops, totalBroken, models: modelList, totals, shared, name } = computeSpares(rows);
