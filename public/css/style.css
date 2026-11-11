@@ -846,3 +846,4 @@ tbody tr.sp-detail > td { background: #fafafa; padding-top: 5px; padding-bottom:
 th.sp-any { color: #6d28d9; }
 .rep-group + .rep-group { margin-top: 18px; }
 .rep-group-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.sp-serial { margin-left: 6px; font-size: 12.5px; white-space: nowrap; }
