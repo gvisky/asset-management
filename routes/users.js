@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run } = require('../db/database');
+const { get, all, run, audit } = require('../db/database');
 const { hashPassword } = require('../db/auth-utils');
 const { requireGlobalAdmin } = require('../middleware/auth');
 
@@ -49,6 +49,7 @@ router.post('/', wrap(async (req, res) => {
     'INSERT INTO users (username, full_name, password_hash, role, country, team, asset_access) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [username.trim(), full_name.trim(), hashPassword(password), role, normCountry(country), normTeam(team), normAccess(asset_access)]
   );
+  await audit(req.user, 'USER', null, `Created login "${username.trim()}" — ${role}${normTeam(team) ? `, team ${normTeam(team)}` : ''}, ${normCountry(country) || 'all countries'}`);
   res.status(201).json(await get('SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [result.lastInsertRowid]));
 }));
 
@@ -81,6 +82,15 @@ router.put('/:id', wrap(async (req, res) => {
     if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     await run('UPDATE users SET password_hash = ? WHERE id = ?', [hashPassword(password), req.params.id]);
   }
+  const changed = [
+    newRole !== user.role && `role ${user.role} → ${newRole}`,
+    (newCountry || '') !== (user.country || '') && `countries ${user.country || 'all'} → ${newCountry || 'all'}`,
+    (newTeam || '') !== (user.team || '') && `team ${user.team || 'none'} → ${newTeam || 'none'}`,
+    Number(newAccess) !== Number(user.asset_access) && `Asset Inventory access ${newAccess ? 'on' : 'off'}`,
+    full_name !== undefined && full_name !== user.full_name && 'name',
+    password && 'password reset',
+  ].filter(Boolean);
+  await audit(req.user, 'USER', null, `Updated login "${user.username}"${changed.length ? ': ' + changed.join(', ') : ' (no change)'}`);
 
   res.json(await get('SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [req.params.id]));
 }));
@@ -98,14 +108,58 @@ router.delete('/:id', wrap(async (req, res) => {
   }
 
   await run('DELETE FROM users WHERE id = ?', [req.params.id]);
+  await audit(req.user, 'USER', null, `Deleted login "${user.username}" (${user.role})`);
   res.json({ message: 'User deleted' });
 }));
 
-// ── GET /api/users/audit/log — recent audit entries ───────────────────────
+// ── GET /api/users/audit/log — activity log with filters + paging ─────────
+// ?q= (text in user / details / IP) &user= &action= &from=YYYY-MM-DD &to=YYYY-MM-DD &page= &limit= (≤ 500)
+function auditWhere(q) {
+  const cond = [], params = [];
+  if (q.user)   { cond.push('username = ?'); params.push(String(q.user)); }
+  if (q.action) {
+    const acts = String(q.action).split(',').map(s => s.trim()).filter(Boolean);
+    if (acts.length) { cond.push(`action IN (${acts.map(() => '?').join(', ')})`); params.push(...acts); }
+  }
+  if (q.hideViews === '1') cond.push("action <> 'VIEW'");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(q.from || '')) { cond.push('created_at >= ?'); params.push(q.from); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(q.to || ''))   { cond.push("created_at < datetime(?, '+1 day')"); params.push(q.to); }
+  if (q.q) {
+    const like = `%${String(q.q).trim().toLowerCase()}%`;
+    cond.push('(LOWER(username) LIKE ? OR LOWER(details) LIKE ? OR LOWER(COALESCE(ip, \'\')) LIKE ? OR LOWER(action) LIKE ?)');
+    params.push(like, like, like, like);
+  }
+  return { where: cond.length ? 'WHERE ' + cond.join(' AND ') : '', params };
+}
 router.get('/audit/log', wrap(async (req, res) => {
-  const limit = Math.min(Number(req.query.limit) || 100, 500);
-  const rows = await all('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?', [limit]);
-  res.json(rows);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const { where, params } = auditWhere(req.query);
+  const total = Number((await get(`SELECT COUNT(*) AS c FROM audit_log ${where}`, params)).c);
+  const rows = await all(`SELECT * FROM audit_log ${where} ORDER BY id DESC LIMIT ? OFFSET ?`, [...params, limit, (page - 1) * limit]);
+  // For the filters: who appears in the log, which kinds of entries, and today's logins.
+  const users = (await all('SELECT username, COUNT(*) AS n, MAX(created_at) AS last FROM audit_log GROUP BY username ORDER BY username COLLATE NOCASE'));
+  const actions = (await all('SELECT action, COUNT(*) AS n FROM audit_log GROUP BY action ORDER BY n DESC'));
+  const lastLogins = await all(`SELECT u.username, u.full_name, u.role, u.team, u.country,
+      (SELECT MAX(created_at) FROM audit_log a WHERE a.username = u.username AND a.action = 'LOGIN') AS last_login,
+      (SELECT MAX(created_at) FROM audit_log a WHERE a.username = u.username) AS last_activity,
+      (SELECT COUNT(*) FROM audit_log a WHERE a.username = u.username AND a.action = 'LOGIN_FAILED' AND a.created_at >= datetime('now', '-7 days')) AS failed_7d
+    FROM users u ORDER BY last_activity IS NULL, last_activity DESC`);
+  res.json({ rows, total, page, limit, users, actions, lastLogins });
+}));
+
+// ── GET /api/users/audit/export.xlsx — the filtered log as Excel (max 50 000 rows) ─
+router.get('/audit/export.xlsx', wrap(async (req, res) => {
+  const XLSX = require('xlsx');
+  const { where, params } = auditWhere(req.query);
+  const rows = (await all(`SELECT * FROM audit_log ${where} ORDER BY id DESC LIMIT 50000`, params))
+    .map(r => ({ 'When (UTC)': r.created_at, 'User': r.username, 'Action': r.action, 'Details': r.details, 'IP': r.ip || '', 'Asset ID': r.asset_id || '' }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ '(no data)': '' }]), 'Audit log');
+  res.setHeader('Content-Disposition', `attachment; filename="audit-log-${new Date().toISOString().slice(0, 10)}.xlsx"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
 }));
 
 module.exports = router;
