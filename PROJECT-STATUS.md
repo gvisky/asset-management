@@ -66,3 +66,4 @@ The project is **one repo + one live site + one database**. Every push to `main`
 - **User Inventory re-import overdue** — last Azure CSV import was 29 May 2026.
 - **Malaysia/Thailand asset data** — Thailand has 46 assets and Malaysia 34 in the live DB; check whether the full lists still need importing.
 - **Account security** — default seeded passwords should be changed by each user; the `test` account (global IT admin) has a weak password — change it or lower its role when not testing.
+- **2027 proposal** — `docs/PROPOSAL-2027.md` (research-based roadmap: Graph sync, Entra SSO, lifecycle / refresh / depreciation, QR stocktake + e-signed handover, security views, licence reclaim, Teams alerts, KPI scorecard, new design) + clickable mockup `docs/proposal/mockup.html`.

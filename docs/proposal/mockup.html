@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hayat IT Ops — new design mockup</title>
+<!-- Design proposal (docs/PROPOSAL-2027.md §4). Static mockup with sample data only.
+     Try: Ctrl+K (search everything) · click a row (side panel) · ☀/☾ (theme) · tiles (filtered lists). -->
+<style>
+:root{--bg:#0b0f17;--panel:#121826;--panel2:#182032;--line:#243049;--text:#e6ebf5;--muted:#8a96ad;--brand:#4f8cff;
+  --ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--info:#38bdf8;--radius:14px;--shadow:0 1px 0 rgba(255,255,255,.03),0 8px 24px rgba(0,0,0,.25)}
+[data-theme=light]{--bg:#f4f6fb;--panel:#fff;--panel2:#f8fafc;--line:#e3e8f1;--text:#0f172a;--muted:#64748b;--brand:#1a56db;--shadow:0 1px 2px rgba(15,23,42,.06),0 6px 18px rgba(15,23,42,.06)}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);display:grid;grid-template-columns:64px 1fr;transition:background .2s}
+/* slim rail */
+.rail{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0}
+.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--brand),#7c3aed);display:grid;place-items:center;font-weight:800;color:#fff;margin-bottom:10px}
+.ri{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--muted);cursor:pointer;font-size:18px;position:relative}
+.ri:hover,.ri.on{background:var(--panel2);color:var(--text)}.ri.on::before{content:"";position:absolute;left:-12px;width:3px;height:20px;border-radius:2px;background:var(--brand)}
+.ri .dot{position:absolute;top:7px;right:7px;width:8px;height:8px;border-radius:50%;background:var(--bad);border:2px solid var(--panel)}
+.ri:hover::after{content:attr(data-tip);position:absolute;left:52px;background:#0f172a;color:#fff;font-size:12px;padding:4px 8px;border-radius:6px;white-space:nowrap;z-index:9}
+/* top bar */
+.wrap{display:flex;flex-direction:column;min-width:0}
+.top{display:flex;align-items:center;gap:14px;padding:12px 24px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--panel) 85%,transparent);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+.top h1{font-size:16px;margin:0;font-weight:650}.crumb{color:var(--muted);font-size:13px}
+.search{flex:1;max-width:520px;margin-left:auto;display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;color:var(--muted);cursor:text}
+.kbd{margin-left:auto;font:600 11px ui-monospace,monospace;border:1px solid var(--line);border-radius:6px;padding:2px 6px;color:var(--muted)}
+.icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;font-size:15px}
+.avatar{width:34px;height:34px;border-radius:50%;background:#334155;color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+main{padding:22px 24px 40px;max-width:1440px;width:100%;margin:0 auto}
+.hello{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px;gap:12px;flex-wrap:wrap}
+.hello h2{margin:0;font-size:22px;font-weight:700}.hello p{margin:2px 0 0;color:var(--muted)}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;color:var(--muted);padding:6px 12px;border-radius:7px;font:600 12.5px inherit;cursor:pointer}.seg button.on{background:var(--panel);color:var(--text);box-shadow:var(--shadow)}
+/* bento */
+.bento{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;min-width:0}
+.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+@media(max-width:1100px){.c3,.c4,.c5{grid-column:span 6}.c6,.c7,.c8{grid-column:span 12}}
+.k-l{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px}.k-v{font-size:30px;font-weight:750;letter-spacing:-.02em;margin:4px 0 8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}.chip{font-size:11.5px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--muted)}.chip b{color:var(--text)}
+.trend{font-size:12px;font-weight:650}.up{color:var(--ok)}.down{color:var(--bad)}
+.work{cursor:pointer;transition:transform .12s, border-color .12s}.work:hover{transform:translateY(-2px);border-color:var(--brand)}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:650;border-radius:999px;padding:2px 8px}
+.b-bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}.b-warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.b-ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}.b-info{background:color-mix(in srgb,var(--info) 16%,transparent);color:var(--info)}
+.ch{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.ch h3{margin:0;font-size:14.5px}
+.mix{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--panel2)}.mix i{display:block;height:100%}
+table{width:100%;border-collapse:collapse}th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;padding:8px 10px;font-weight:650}
+td{padding:10px;border-top:1px solid var(--line)}tbody tr{cursor:pointer}tbody tr:hover td{background:var(--panel2)}td.n{text-align:right;font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}.sm{font-size:12px}
+.spark{width:100%;height:46px}
+.gauge{display:flex;align-items:center;gap:14px}.ring{--p:0;width:64px;height:64px;border-radius:50%;background:conic-gradient(var(--c) calc(var(--p)*1%),var(--panel2) 0);display:grid;place-items:center}
+.ring span{width:48px;height:48px;border-radius:50%;background:var(--panel);display:grid;place-items:center;font-weight:750;font-size:13px}
+.list{display:flex;flex-direction:column;gap:8px}.li{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.li .t{flex:1;min-width:0}.li .t b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* side panel */
+.drawer{position:fixed;top:0;right:0;height:100%;width:min(460px,96vw);background:var(--panel);border-left:1px solid var(--line);box-shadow:-20px 0 40px rgba(0,0,0,.3);transform:translateX(105%);transition:transform .22s ease;z-index:20;display:flex;flex-direction:column}
+.drawer.open{transform:none}.dh{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
+.dh .x{margin-left:auto}.db{padding:16px 20px;overflow:auto}.dl{display:grid;grid-template-columns:130px 1fr;gap:8px 12px;font-size:13px}.dl dt{color:var(--muted)}.dl dd{margin:0}
+.tl{border-left:2px solid var(--line);margin:12px 0 0 6px;padding-left:14px}.tl div{position:relative;margin-bottom:12px;font-size:13px}.tl div::before{content:"";position:absolute;left:-20px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--brand)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--line)}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:9px;padding:7px 12px;font:600 13px inherit;cursor:pointer}.btn.p{background:var(--brand);border-color:var(--brand);color:#fff}
+/* command palette */
+.scrim{position:fixed;inset:0;background:rgba(2,6,23,.55);backdrop-filter:blur(3px);display:none;z-index:30;align-items:flex-start;justify-content:center;padding-top:12vh}
+.scrim.open{display:flex}.pal{width:min(640px,94vw);background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:0 30px 60px rgba(0,0,0,.45);overflow:hidden}
+.pal input{width:100%;border:0;border-bottom:1px solid var(--line);background:none;color:var(--text);font:16px inherit;padding:16px 18px;outline:none}
+.grp{padding:8px 10px}.grp h4{margin:6px 8px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.it{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer}.it:hover,.it.sel{background:var(--panel2)}.it .k{margin-left:auto}
+.ft{display:flex;gap:14px;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.note{margin-top:18px;font-size:12px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+<nav class="rail">
+  <div class="logo">H</div>
+  <div class="ri on" data-tip="Home — my work">⌂</div>
+  <div class="ri" data-tip="Assets">▣</div>
+  <div class="ri" data-tip="People">☺</div>
+  <div class="ri" data-tip="Devices (Intune / Entra)">⌨</div>
+  <div class="ri" data-tip="Stocktake (QR)">⌗</div>
+  <div class="ri" data-tip="Maintenance & spare parts">⚒</div>
+  <div class="ri" data-tip="System Health"><span class="dot"></span>♥</div>
+  <div class="ri" data-tip="Licences">◈</div>
+  <div class="ri" data-tip="Refresh plan & budget">₫</div>
+  <div class="ri" data-tip="Reports">▤</div>
+  <div style="flex:1"></div>
+  <div class="ri" data-tip="Settings">⚙</div>
+</nav>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Home</h1><span class="crumb">· My work</span>
+    <div class="search" onclick="openPal()">⌕ <span>Search assets, people, serials, pages, actions…</span><span class="kbd">Ctrl K</span></div>
+    <button class="icon-btn" title="Theme" onclick="toggleTheme()" id="themeBtn">☀</button>
+    <button class="icon-btn" title="Alerts">🔔</button>
+    <div class="avatar" title="Signed in with Microsoft">IT</div>
+  </header>
+
+  <main>
+    <div class="hello">
+      <div><h2>Good morning 👋</h2><p>Synced with Intune & Entra 6 min ago · AD list today 06:00 · 4 things need you</p></div>
+      <div class="seg"><button class="on">All</button><button>Vietnam</button><button>Thailand</button><button>Malaysia</button></div>
+    </div>
+
+    <section class="bento">
+      <!-- My work tiles -->
+      <div class="card c3 work" onclick="openDrawer()"><div class="k-l"><span class="badge b-bad">● Leavers</span></div>
+        <div class="k-v">3</div><div class="muted sm">devices still out after leaving date</div>
+        <div class="chips" style="margin-top:8px"><span class="chip">VN <b>2</b></span><span class="chip">TH <b>1</b></span><span class="chip">MY <b>0</b></span></div></div>
+      <div class="card c3 work"><div class="k-l"><span class="badge b-warn">● Device check</span></div>
+        <div class="k-v">17</div><div class="muted sm">differences Intune ↔ Asset Inventory</div>
+        <div class="chips" style="margin-top:8px"><span class="chip">VN <b>12</b></span><span class="chip">TH <b>3</b></span><span class="chip">MY <b>2</b></span></div></div>
+      <div class="card c3 work"><div class="k-l"><span class="badge b-info">● Stocktake</span></div>
+        <div class="k-v">82%</div><div class="muted sm">Q4 audit · VN Factory · 41 left to scan</div>
+        <div class="mix" style="margin-top:12px"><i style="width:78%;background:var(--ok)"></i><i style="width:4%;background:var(--warn)"></i><i style="width:2%;background:var(--bad)"></i></div></div>
+      <div class="card c3 work"><div class="k-l"><span class="badge b-bad">● System Health</span></div>
+        <div class="k-v">1 down</div><div class="muted sm">WAN 2 (VNPT) · since 08:12 · Teams notified</div>
+        <div class="chips" style="margin-top:8px"><span class="chip">up <b>46</b></span><span class="chip">warn <b>2</b></span><span class="chip">down <b>1</b></span></div></div>
+
+      <!-- Fleet + security -->
+      <div class="card c8">
+        <div class="ch"><h3>Fleet by country</h3><span class="muted sm"><span class="badge b-ok">Active</span> <span class="badge b-warn">Stock</span> <span class="badge b-bad">Broken</span></span></div>
+        <table><thead><tr><th>Country / site</th><th style="text-align:right">Total</th><th style="text-align:right">Active</th><th style="text-align:right">Stock</th><th style="text-align:right">Broken</th><th style="width:34%">Mix</th></tr></thead>
+        <tbody>
+          <tr onclick="openDrawer()"><td><b>Vietnam</b></td><td class="n"><b>601</b></td><td class="n">517</td><td class="n">26</td><td class="n">58</td><td><div class="mix"><i style="width:86%;background:var(--ok)"></i><i style="width:4%;background:var(--warn)"></i><i style="width:10%;background:var(--bad)"></i></div></td></tr>
+          <tr onclick="openDrawer()"><td class="muted">└ Office</td><td class="n">193</td><td class="n">169</td><td class="n">8</td><td class="n">16</td><td><div class="mix"><i style="width:88%;background:var(--ok)"></i><i style="width:4%;background:var(--warn)"></i><i style="width:8%;background:var(--bad)"></i></div></td></tr>
+          <tr onclick="openDrawer()"><td class="muted">└ Factory</td><td class="n">192</td><td class="n">132</td><td class="n">18</td><td class="n">42</td><td><div class="mix"><i style="width:69%;background:var(--ok)"></i><i style="width:9%;background:var(--warn)"></i><i style="width:22%;background:var(--bad)"></i></div></td></tr>
+          <tr onclick="openDrawer()"><td><b>Thailand</b></td><td class="n"><b>56</b></td><td class="n">47</td><td class="n">8</td><td class="n">1</td><td><div class="mix"><i style="width:84%;background:var(--ok)"></i><i style="width:14%;background:var(--warn)"></i><i style="width:2%;background:var(--bad)"></i></div></td></tr>
+          <tr onclick="openDrawer()"><td><b>Malaysia</b></td><td class="n"><b>48</b></td><td class="n">42</td><td class="n">5</td><td class="n">1</td><td><div class="mix"><i style="width:88%;background:var(--ok)"></i><i style="width:10%;background:var(--warn)"></i><i style="width:2%;background:var(--bad)"></i></div></td></tr>
+        </tbody></table>
+      </div>
+      <div class="card c4">
+        <div class="ch"><h3>Security posture</h3><span class="muted sm">from Intune</span></div>
+        <div class="gauge" style="margin-bottom:14px"><div class="ring" style="--p:94;--c:var(--ok)"><span>94%</span></div><div><b>Encrypted (BitLocker)</b><div class="muted sm">23 laptops without encryption</div></div></div>
+        <div class="gauge" style="margin-bottom:14px"><div class="ring" style="--p:89;--c:var(--info)"><span>89%</span></div><div><b>Compliant</b><div class="muted sm">VN 88% · TH 93% · MY 95%</div></div></div>
+        <div class="gauge"><div class="ring" style="--p:12;--c:var(--warn)"><span>41</span></div><div><b>Windows 10 left</b><div class="muted sm">ESU year 2 ≈ $122 / device → replace 29</div></div></div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="card c3"><div class="k-l">Utilisation</div><div class="k-v">87%</div><span class="trend up">▲ 2.1 pts</span> <span class="muted sm">target 85–90%</span>
+        <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><polyline fill="none" stroke="var(--ok)" stroke-width="2" points="0,22 15,20 30,21 45,17 60,15 75,13 100,9"/></svg></div>
+      <div class="card c3"><div class="k-l">Leaver recovery (7 days)</div><div class="k-v">91%</div><span class="trend down">▼ 3 pts</span> <span class="muted sm">target 95%</span>
+        <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><polyline fill="none" stroke="var(--warn)" stroke-width="2" points="0,8 15,9 30,7 45,10 60,12 75,11 100,15"/></svg></div>
+      <div class="card c3"><div class="k-l">Data quality</div><div class="k-v">96.4%</div><span class="trend up">▲ 5 pts</span> <span class="muted sm">mandatory fields filled</span>
+        <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><polyline fill="none" stroke="var(--brand)" stroke-width="2" points="0,26 15,24 30,20 45,18 60,12 75,9 100,6"/></svg></div>
+      <div class="card c3"><div class="k-l">Repair time (MTTR)</div><div class="k-v">4.2 d</div><span class="trend up">▼ 1.1 d</span> <span class="muted sm">from Maintenance log</span>
+        <svg class="spark" viewBox="0 0 100 30" preserveAspectRatio="none"><polyline fill="none" stroke="var(--ok)" stroke-width="2" points="0,6 15,9 30,8 45,13 60,15 75,19 100,22"/></svg></div>
+
+      <!-- Refresh + activity -->
+      <div class="card c7">
+        <div class="ch"><h3>Refresh plan → budget</h3><span class="muted sm">policy: laptop 4 y · desktop 5 y</span></div>
+        <table><thead><tr><th>Year</th><th style="text-align:right">Devices due</th><th style="text-align:right">Est. cost</th><th>Top models</th><th style="width:28%">By country</th></tr></thead><tbody>
+          <tr><td><b>2027</b></td><td class="n">148</td><td class="n">≈ 3.3 bn ₫</td><td class="sm">Lenovo T490 ×54 · IdeaPad5 ×41</td><td><div class="mix"><i style="width:84%;background:#4f8cff"></i><i style="width:10%;background:#a78bfa"></i><i style="width:6%;background:#22d3ee"></i></div></td></tr>
+          <tr><td><b>2028</b></td><td class="n">96</td><td class="n">≈ 2.1 bn ₫</td><td class="sm">E14 Gen 4 ×16 · T14 G2 ×31</td><td><div class="mix"><i style="width:78%;background:#4f8cff"></i><i style="width:14%;background:#a78bfa"></i><i style="width:8%;background:#22d3ee"></i></div></td></tr>
+          <tr><td><b>2029</b></td><td class="n">61</td><td class="n">≈ 1.4 bn ₫</td><td class="sm">E14 Gen 5 ×20 · T14 G1 ×15</td><td><div class="mix"><i style="width:70%;background:#4f8cff"></i><i style="width:20%;background:#a78bfa"></i><i style="width:10%;background:#22d3ee"></i></div></td></tr>
+        </tbody></table>
+        <div style="margin-top:12px;display:flex;gap:8px"><button class="btn p">Send 2027 to Budget Tracking</button><button class="btn">Open plan</button></div>
+      </div>
+      <div class="card c5">
+        <div class="ch"><h3>Today</h3><span class="muted sm">from the audit log</span></div>
+        <div class="list">
+          <div class="li"><span class="badge b-ok">Signed</span><div class="t"><b>Laptop 280130000576 handed over</b><span class="muted sm">e-signed by the user · 09:41</span></div></div>
+          <div class="li"><span class="badge b-info">Sync</span><div class="t"><b>Intune: 3 new devices, 1 serial changed</b><span class="muted sm">nightly Graph sync · 06:00</span></div></div>
+          <div class="li"><span class="badge b-warn">Warranty</span><div class="t"><b>12 laptops leave warranty this month</b><span class="muted sm">Lenovo lookup · monthly</span></div></div>
+          <div class="li"><span class="badge b-bad">Down</span><div class="t"><b>WAN 2 (VNPT) down at VN office</b><span class="muted sm">posted to Teams · 08:12</span></div></div>
+        </div>
+      </div>
+    </section>
+    <p class="note">Design mockup with sample data — Ctrl+K to search, click a table row for the side panel, ☀ to switch theme.</p>
+  </main>
+</div>
+
+<!-- Side panel -->
+<aside class="drawer" id="drawer">
+  <div class="dh"><div><div class="muted sm">Laptop · Vietnam · Factory</div><h3 style="margin:2px 0 6px;font-size:18px">280130000576 · Lenovo T490</h3>
+    <span class="badge b-bad">Broken</span> <span class="badge b-warn">Warranty ended</span> <span class="badge b-ok">Encrypted</span></div>
+    <button class="icon-btn x" onclick="closeDrawer()">✕</button></div>
+  <div class="db">
+    <dl class="dl">
+      <dt>Serial</dt><dd><b>PF25YL4X</b></dd><dt>Computer No</dt><dd>VNHCMC0043</dd><dt>Holder</dt><dd>Sample User · sample.user@…</dd>
+      <dt>Department</dt><dd>HV - Hygiene Factory</dd><dt>Purchased</dt><dd>2021-06-08 · 5.4 years · book value 0 ₫</dd>
+      <dt>Intune</dt><dd>Compliant · last check-in 2 d · Windows 11 23H2</dd><dt>Parts</dt><dd>Screen broken · 6 parts usable</dd>
+    </dl>
+    <h4 style="margin:18px 0 0">History</h4>
+    <div class="tl"><div><b>Set to Broken</b> · parts check by IT · 10 Nov</div><div><b>Handover signed</b> · PDF attached · 03 Mar 2025</div><div><b>Assigned</b> · from stock · 03 Mar 2025</div><div><b>Received</b> · PO 4500123 · 08 Jun 2021</div></div>
+  </div>
+  <div class="actions"><button class="btn p">Edit</button><button class="btn">Parts check</button><button class="btn">Hand over…</button><button class="btn">Print QR label</button><button class="btn">Dispose…</button></div>
+</aside>
+
+<!-- Command palette -->
+<div class="scrim" id="scrim" onclick="if(event.target===this)closePal()">
+  <div class="pal">
+    <input id="palIn" placeholder="Search assets, people, serials, pages, actions…" value="t490">
+    <div class="grp"><h4>Assets</h4>
+      <div class="it sel" onclick="closePal();openDrawer()">▣ <b>280130000576</b> <span class="muted">Lenovo T490 · PF25YL4X · Broken</span><span class="kbd k">↵</span></div>
+      <div class="it" onclick="closePal();openDrawer()">▣ <b>280130000545</b> <span class="muted">Lenovo T490 · PF25YL4X · Active</span></div>
+    </div>
+    <div class="grp"><h4>People</h4><div class="it">☺ <b>Sample User</b> <span class="muted">2 assets · 1 phone · AD logon 1 d</span></div></div>
+    <div class="grp"><h4>Pages & actions</h4>
+      <div class="it">⌗ Start a stocktake…</div><div class="it">＋ Add asset</div><div class="it">⟳ Sync Intune now</div></div>
+    <div class="ft"><span>↑↓ move</span><span>↵ open</span><span>Esc close</span><span style="margin-left:auto">Tip: type a serial, PC name or email</span></div>
+  </div>
+</div>
+
+<script>
+function toggleTheme(){const h=document.documentElement;const d=h.dataset.theme==='dark'?'light':'dark';h.dataset.theme=d;document.getElementById('themeBtn').textContent=d==='dark'?'☀':'☾';}
+function openDrawer(){document.getElementById('drawer').classList.add('open');}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');}
+function openPal(){document.getElementById('scrim').classList.add('open');const i=document.getElementById('palIn');i.focus();i.select();}
+function closePal(){document.getElementById('scrim').classList.remove('open');}
+document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPal();}if(e.key==='Escape'){closePal();closeDrawer();}});
+</script>
+</body>
+</html>
