@@ -7,9 +7,35 @@ const roleBadge = (role) => {
   return `<span class="badge ${map[role] || ''}" style="text-transform:capitalize">${role}</span>`;
 };
 
+const ACTION_STYLE = {
+  LOGIN: ['#0f766e', '🔑 Login'], LOGIN_FAILED: ['#dc2626', '⛔ Login failed'], LOGOUT: ['#6b7280', '↩ Logout'],
+  PASSWORD: ['#7c3aed', '🔒 Password'], USER: ['#7c3aed', '👤 User account'],
+  CREATE: ['#16a34a', '＋ Create'], UPDATE: ['#1a56db', '✎ Update'], DELETE: ['#dc2626', '🗑 Delete'],
+  PERSONNEL: ['#0f766e', '👥 User Inventory'], LICENSE: ['#1a56db', '🪪 License'], IMPORT: ['#9333ea', '⬆ Import'],
+  MAINTENANCE: ['#d97706', '🔧 Maintenance'], HEALTH: ['#0891b2', '📡 System Health'], LOCK: ['#475569', '🔒 Lock'],
+  UNLOCK: ['#475569', '🔓 Unlock'], RESTORE: ['#16a34a', '♻ Restore'], PURGE: ['#dc2626', '🔥 Purge'], PRINT: ['#475569', '🖨 Print'],
+  ACTION: ['#1a56db', '⚙ Action'], REFUSED: ['#d97706', '✋ Refused'], EXPORT: ['#0891b2', '⬇ Export'], VIEW: ['#94a3b8', '👁 View'],
+};
 const actionBadge = (action) => {
-  const colors = { CREATE: '#16a34a', UPDATE: '#1a56db', DELETE: '#dc2626', LOGIN: '#6b7280' };
-  return `<span style="font-weight:600;font-size:12px;color:${colors[action] || '#111'}">${action}</span>`;
+  const [c, label] = ACTION_STYLE[action] || ['#111', action];
+  return `<span class="au-act" style="color:${c}">${htmlEsc(label)}</span>`;
+};
+// audit_log times are UTC ("YYYY-MM-DD HH:MM:SS") → local time, with the UTC time on hover.
+const localTime = (s) => {
+  if (!s) return '—';
+  const d = new Date(String(s).replace(' ', 'T') + 'Z');
+  if (isNaN(d)) return htmlEsc(s);
+  const p = (n) => String(n).padStart(2, '0');
+  return `<span title="${htmlEsc(s)} UTC">${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}</span>`;
+};
+const ago = (s) => {
+  if (!s) return '';
+  const min = Math.floor((Date.now() - new Date(String(s).replace(' ', 'T') + 'Z')) / 60000);
+  if (!Number.isFinite(min)) return '';
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  if (min < 1440) return `${Math.floor(min / 60)} h ago`;
+  return `${Math.floor(min / 1440)} d ago`;
 };
 
 async function loadUsers() {
@@ -41,22 +67,65 @@ async function loadUsers() {
   }
 }
 
+const AU = { page: 1, limit: 100 };
+function auditQuery(extra = {}) {
+  const v = (id) => document.getElementById(id).value.trim();
+  const q = new URLSearchParams();
+  if (v('au-q')) q.set('q', v('au-q'));
+  if (v('au-user')) q.set('user', v('au-user'));
+  if (v('au-action')) q.set('action', v('au-action'));
+  if (v('au-from')) q.set('from', v('au-from'));
+  if (v('au-to')) q.set('to', v('au-to'));
+  if (document.getElementById('au-hide-views').checked) q.set('hideViews', '1');
+  for (const [k, val] of Object.entries(extra)) q.set(k, val);
+  return q;
+}
 async function loadAudit() {
   try {
-    const log = await apiGet('/api/users/audit/log');
+    const r = await apiGet('/api/users/audit/log?' + auditQuery({ page: AU.page, limit: AU.limit }));
     const tbody = document.getElementById('audit-tbody');
-    if (!log.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No activity yet.</td></tr>'; return; }
-    tbody.innerHTML = log.map(e => `
-      <tr>
-        <td class="text-muted text-sm" style="white-space:nowrap">${htmlEsc(e.created_at)}</td>
-        <td>${htmlEsc(e.username) || '—'}</td>
-        <td>${actionBadge(e.action)}</td>
-        <td>${htmlEsc(e.details) || '—'}</td>
-      </tr>
-    `).join('');
+    tbody.innerHTML = r.rows.length ? r.rows.map(e => `
+      <tr class="${e.action === 'LOGIN_FAILED' || e.action === 'REFUSED' ? 'au-bad' : e.action === 'VIEW' ? 'au-view' : ''}">
+        <td class="text-sm" style="white-space:nowrap">${localTime(e.created_at)}</td>
+        <td><a href="#" onclick="filterAuditUser(${jsArg(e.username || '')}); return false">${htmlEsc(e.username) || '—'}</a></td>
+        <td style="white-space:nowrap">${actionBadge(e.action)}</td>
+        <td class="text-sm">${htmlEsc(e.details) || '—'}${e.asset_id ? ` <span class="text-muted">· asset #${e.asset_id}</span>` : ''}</td>
+        <td class="text-muted text-sm" style="white-space:nowrap">${htmlEsc(e.ip || '')}</td>
+      </tr>`).join('') : '<tr><td colspan="5" class="empty-state">No activity matches these filters.</td></tr>';
+    const pages = Math.max(1, Math.ceil(r.total / r.limit));
+    document.getElementById('au-page').textContent = `${r.total.toLocaleString()} entries · page ${r.page} of ${pages}`;
+    document.getElementById('au-prev').disabled = r.page <= 1;
+    document.getElementById('au-next').disabled = r.page >= pages;
+    document.getElementById('au-export').href = '/api/users/audit/export.xlsx?' + auditQuery();
+    // Filter lists (keep the current choice).
+    const us = document.getElementById('au-user'), cur = us.value;
+    us.innerHTML = '<option value="">All users</option>' + r.users.map(u => `<option value="${htmlEsc(u.username || '')}">${htmlEsc(u.username || '—')} (${u.n})</option>`).join('');
+    us.value = cur;
+    const as = document.getElementById('au-action'), curA = as.value;
+    const fixed = [['', 'All actions'], ['LOGIN,LOGIN_FAILED,LOGOUT,PASSWORD', 'Logins, logouts & passwords']];
+    as.innerHTML = fixed.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')
+      + r.actions.map(a => `<option value="${htmlEsc(a.action)}">${htmlEsc((ACTION_STYLE[a.action] || [0, a.action])[1])} (${a.n})</option>`).join('');
+    as.value = curA;
+    renderLogins(r.lastLogins);
   } catch (err) {
     showToast('Failed to load audit log', 'error');
   }
+}
+function renderLogins(list) {
+  document.getElementById('logins-tbody').innerHTML = list.map(u => `
+    <tr class="au-click" onclick="filterAuditUser(${jsArg(u.username)})">
+      <td><b>${htmlEsc(u.username)}</b>${u.full_name ? ` <span class="text-muted text-sm">${htmlEsc(u.full_name)}</span>` : ''}</td>
+      <td class="text-sm">${htmlEsc(u.role || '')}${u.team ? ' · ' + htmlEsc(u.team) : ''}${u.country ? ' · ' + htmlEsc(u.country) : ''}</td>
+      <td class="text-sm">${u.last_login ? `${localTime(u.last_login)} <span class="text-muted">· ${ago(u.last_login)}</span>` : '<span class="text-muted">never recorded</span>'}</td>
+      <td class="text-sm">${u.last_activity ? `${localTime(u.last_activity)} <span class="text-muted">· ${ago(u.last_activity)}</span>` : '—'}</td>
+      <td class="text-sm">${u.failed_7d ? `<b style="color:#dc2626">${u.failed_7d}</b>` : '<span class="text-muted">0</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="empty-state">No users.</td></tr>';
+}
+function filterAuditUser(name) {
+  const us = document.getElementById('au-user');
+  if (![...us.options].some(o => o.value === name)) us.insertAdjacentHTML('beforeend', `<option value="${htmlEsc(name)}">${htmlEsc(name)}</option>`);
+  us.value = name; AU.page = 1; loadAudit();
+  document.getElementById('audit-tbody').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── Modal ──────────────────────────────────────────────────────────────────
@@ -136,6 +205,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadUsers();
   loadAudit();
+  // Audit log filters
+  let auT = null;
+  document.getElementById('au-q').addEventListener('input', () => { clearTimeout(auT); auT = setTimeout(() => { AU.page = 1; loadAudit(); }, 300); });
+  ['au-user', 'au-action', 'au-from', 'au-to', 'au-hide-views'].forEach(id =>
+    document.getElementById(id).addEventListener('change', () => { AU.page = 1; loadAudit(); }));
+  document.getElementById('au-reset').addEventListener('click', () => {
+    ['au-q', 'au-user', 'au-action', 'au-from', 'au-to'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('au-hide-views').checked = false; AU.page = 1; loadAudit();
+  });
+  document.getElementById('au-prev').addEventListener('click', () => { if (AU.page > 1) { AU.page--; loadAudit(); } });
+  document.getElementById('au-next').addEventListener('click', () => { AU.page++; loadAudit(); });
 
   document.getElementById('btn-add-user').addEventListener('click', () => {
     userEditMode = false;

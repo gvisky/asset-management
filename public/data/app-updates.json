@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-11-12",
+    "title": "Audit Log: every login and every action",
+    "items": [
+      "Users & Audit now records logins, failed logins, logouts, password changes, every change, Excel downloads and page visits — each with the user's IP address.",
+      "New \"Logins\" table: last login, last activity and failed logins (7 days) of every account.",
+      "Audit Log: search, filter by user / action / dates, hide page visits, page through all entries, download as Excel."
+    ]
+  },
+  {
     "date": "2026-11-10",
     "title": "Reports: new Excel exports for the new functions",
     "items": [

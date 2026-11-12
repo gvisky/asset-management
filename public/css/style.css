@@ -847,3 +847,13 @@ th.sp-any { color: #6d28d9; }
 .rep-group + .rep-group { margin-top: 18px; }
 .rep-group-title { font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
 .sp-serial { margin-left: 6px; font-size: 12.5px; white-space: nowrap; }
+/* Users & Audit */
+.audit-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.audit-filters .form-control { width: auto; min-width: 140px; }
+.audit-filters #au-q { min-width: 240px; flex: 1; }
+.audit-pager { display: flex; justify-content: center; align-items: center; gap: 14px; padding: 10px; }
+.au-act { font-weight: 600; font-size: 12px; }
+tr.au-bad > td { background: #fef2f2; }
+tr.au-view > td { color: #64748b; }
+tr.au-click { cursor: pointer; }
+tr.au-click:hover > td { background: #f1f5f9; }

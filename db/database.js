@@ -985,6 +985,13 @@ async function migrate() {
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_personnel', datetime('now'))");
   await backend.run("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('baseline_devices', datetime('now'))");
 
+  // Audit log: the user's IP address; indexes for the Users & Audit filters.
+  const aucols = (await backend.all('PRAGMA table_info(audit_log)')).map(c => c.name);
+  if (!aucols.includes('ip')) await backend.run("ALTER TABLE audit_log ADD COLUMN ip TEXT DEFAULT ''");
+  await backend.script(`CREATE INDEX IF NOT EXISTS idx_audit_username ON audit_log(username);
+    CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
+    CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);`);
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");
@@ -1186,15 +1193,23 @@ async function seedAssets() {
 }
 
 // Write an audit entry. Safe to await on every mutation.
+// The request being served (set in server.js): its IP, and whether the route already wrote an audit
+// entry — so the activity log adds a generic "what was called" entry only when nothing else was recorded.
+const { AsyncLocalStorage } = require('async_hooks');
+const auditCtx = new AsyncLocalStorage();
+
 async function audit(user, action, assetId, details) {
+  const ctx = auditCtx.getStore();
+  if (ctx) ctx.audited = true;
   try {
     await run(
-      'INSERT INTO audit_log (user_id, username, action, asset_id, details) VALUES (?, ?, ?, ?, ?)',
-      [user ? user.id : null, user ? user.username : 'system', action, assetId || null, details || '']
+      'INSERT INTO audit_log (user_id, username, action, asset_id, details, ip) VALUES (?, ?, ?, ?, ?, ?)',
+      [user ? user.id || null : null, user ? user.username : 'system', action, assetId || null, String(details || '').slice(0, 2000),
+        (ctx && ctx.ip) || '']
     );
   } catch (e) {
     console.error('audit failed:', e.message);
   }
 }
 
-module.exports = { init, get, all, run, script, batch, splitBatches, errorText, audit, notify, getMeta, setMeta, USE_TURSO };
+module.exports = { init, get, all, run, script, batch, splitBatches, errorText, audit, auditCtx, notify, getMeta, setMeta, USE_TURSO };

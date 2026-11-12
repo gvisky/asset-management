@@ -20,6 +20,10 @@ app.use(async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Activity log (Users & Audit): logins, changes, exports and page visits, with the user's IP.
+// After the body parsers, so the request context reaches the route handlers.
+app.use(require('./lib/activity').activityLog);
+
 // API routes
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/assets',    require('./routes/assets'));

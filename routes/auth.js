@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { get, run, audit } = require('../db/database');
 const { hashPassword, verifyPassword, newToken, hashToken } = require('../db/auth-utils');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, getUserFromRequest } = require('../middleware/auth');
 
 const SESSION_DAYS = 7;
 const isProd = process.env.NODE_ENV === 'production';
@@ -27,6 +27,8 @@ router.post('/login', wrap(async (req, res) => {
 
   const user = await get('SELECT * FROM users WHERE username = ?', [username.trim()]);
   if (!user || !verifyPassword(password, user.password_hash)) {
+    await audit(user ? { id: user.id, username: user.username } : { id: null, username: String(username).trim().slice(0, 60) },
+      'LOGIN_FAILED', null, user ? 'Wrong password' : 'Unknown username');
     return res.status(401).json({ error: 'Invalid username or password' });
   }
 
@@ -36,7 +38,7 @@ router.post('/login', wrap(async (req, res) => {
             [hashToken(token), user.id, expires]);
 
   setSessionCookie(res, token);
-  await audit(user, 'LOGIN', null, 'User logged in');
+  await audit(user, 'LOGIN', null, `Logged in · ${String(req.headers['user-agent'] || '').replace(/\s+/g, ' ').slice(0, 160)}`);
   res.json({ id: user.id, username: user.username, full_name: user.full_name, role: user.role });
 }));
 
@@ -45,6 +47,8 @@ router.post('/logout', wrap(async (req, res) => {
   const cookieHeader = req.headers.cookie || '';
   const match = cookieHeader.match(/(?:^|;\s*)sid=([^;]+)/);
   if (match) {
+    const who = await getUserFromRequest(req).catch(() => null);
+    if (who) await audit(who, 'LOGOUT', null, 'Logged out');
     await run('DELETE FROM sessions WHERE token_hash = ?', [hashToken(decodeURIComponent(match[1]))]);
   }
   res.setHeader('Set-Cookie', 'sid=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax');
@@ -64,9 +68,11 @@ router.post('/change-password', requireAuth, wrap(async (req, res) => {
   }
   const row = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
   if (!verifyPassword(current_password, row.password_hash)) {
+    await audit(req.user, 'PASSWORD', null, 'Password change refused — current password incorrect');
     return res.status(401).json({ error: 'Current password is incorrect' });
   }
   await run('UPDATE users SET password_hash = ? WHERE id = ?', [hashPassword(new_password), req.user.id]);
+  await audit(req.user, 'PASSWORD', null, 'Changed own password');
   res.json({ message: 'Password updated' });
 }));
 
