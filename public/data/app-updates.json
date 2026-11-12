@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-12",
+    "title": "Reports: numbers split by country, like the Dashboard",
+    "items": [
+      "Report dashboards (Excel and PDF) now show each key number with the split per country (VN · TH · MY · …), like the Dashboard tiles.",
+      "Tables have one row per country — Office / Factory under Vietnam — with Total, Active, Broken, Stock (or the right columns for each report), a Total row and a status-mix bar.",
+      "By-type tables show one column per country, so countries are never just added together."
+    ]
+  },
+  {
+    "date": "2026-11-12",
     "title": "Reports: Excel dashboard with charts + PDF",
     "items": [
       "Every Excel report now opens on a Dashboard sheet: key numbers, summary tables and charts (real Excel charts you can edit); the raw data follows on the next sheets, with filters and a frozen header.",
