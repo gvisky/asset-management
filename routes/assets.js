@@ -588,7 +588,9 @@ router.post('/import', requireITAdmin, wrap(async (req, res) => {
   try {
     const buf = Buffer.from(b64, 'base64');
     const wb = XLSX.read(buf, { type: 'buffer' });
-    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+    // The data sheet: "Assets" (report files open with a Dashboard sheet), else the first non-dashboard sheet.
+    const dataSheet = wb.SheetNames.find(n => n.toLowerCase() === 'assets') || wb.SheetNames.find(n => n.toLowerCase() !== 'dashboard') || wb.SheetNames[0];
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[dataSheet], { defval: '' });
   } catch (e) { return res.status(400).json({ error: 'Could not read the Excel file' }); }
 
   let updated = 0, inserted = 0, skipped = 0;

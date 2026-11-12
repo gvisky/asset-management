@@ -16,14 +16,20 @@ const REPORTS = [
   { group: 'IT', id: 'licenses', title: 'Licenses',      desc: 'Licenses with seats used and renewal dates.' },
 ];
 
+// One report: title, description, and a choice of Excel (dashboard + data) or PDF (dashboard).
 function card(r) {
-  return `<a class="stat-card" href="/api/reports/${r.id}.xlsx?t=${Date.now()}" download>
+  const t = Date.now();
+  return `<div class="stat-card rep-card">
     <div class="stat-icon" style="background:#dcfce7">
       <svg width="22" height="22" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
     </div>
-    <div><div class="stat-label" style="font-size:13.5px;color:var(--text);font-weight:600">${r.title}</div>
-    <div class="text-muted text-sm" style="margin-top:2px">${r.desc}</div></div>
-  </a>`;
+    <div style="flex:1;min-width:0"><div class="stat-label" style="font-size:13.5px;color:var(--text);font-weight:600">${r.title}</div>
+    <div class="text-muted text-sm" style="margin-top:2px">${r.desc}</div>
+    <div class="rep-btns">
+      <a class="btn btn-sm rep-xlsx" href="/api/reports/${r.id}.xlsx?t=${t}" download title="Dashboard with charts + raw data sheets">📊 Excel</a>
+      <a class="btn btn-sm rep-pdf" href="/api/reports/${r.id}.pdf?t=${t}" download title="Dashboard with charts">📄 PDF</a>
+    </div></div>
+  </div>`;
 }
 // Reports grouped by area; reports for one team only are shown to that team.
 function renderReports(u) {
