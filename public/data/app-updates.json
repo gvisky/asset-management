@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-12",
+    "title": "Reports: interactive HTML version",
+    "items": [
+      "New 🌐 HTML button on every report: opens an interactive page in a new tab.",
+      "Dashboard: switch country (All / Vietnam / Thailand / …) or click a country chip, sort any table by clicking a column, show % of row, hover the mix bars for numbers, hide a colour from the bars.",
+      "Data tabs: search all columns (matches highlighted), filter by country, sort, 50 / 100 / 500 rows per page, download what you see as CSV.",
+      "Save the page (Ctrl + S) to keep it — it works offline."
+    ]
+  },
+  {
+    "date": "2026-11-12",
     "title": "Reports: numbers split by country, like the Dashboard",
     "items": [
       "Report dashboards (Excel and PDF) now show each key number with the split per country (VN · TH · MY · …), like the Dashboard tiles.",

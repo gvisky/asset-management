@@ -16,7 +16,7 @@ const REPORTS = [
   { group: 'IT', id: 'licenses', title: 'Licenses',      desc: 'Licenses with seats used and renewal dates.' },
 ];
 
-// One report: title, description, and a choice of Excel (dashboard + data) or PDF (dashboard).
+// One report: title, description, and a choice of Excel (dashboard + data), PDF (dashboard) or HTML (interactive).
 function card(r) {
   const t = Date.now();
   return `<div class="stat-card rep-card">
@@ -28,6 +28,7 @@ function card(r) {
     <div class="rep-btns">
       <a class="btn btn-sm rep-xlsx" href="/api/reports/${r.id}.xlsx?t=${t}" download title="Dashboard with charts + raw data sheets">📊 Excel</a>
       <a class="btn btn-sm rep-pdf" href="/api/reports/${r.id}.pdf?t=${t}" download title="Dashboard with charts">📄 PDF</a>
+      <a class="btn btn-sm rep-html" href="/api/reports/${r.id}.html?t=${t}" target="_blank" rel="noopener" title="Interactive page: switch country, sort, hover the bars, search the data, CSV">🌐 HTML</a>
     </div></div>
   </div>`;
 }
