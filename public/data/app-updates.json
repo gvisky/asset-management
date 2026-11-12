@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-12",
+    "title": "Reports: Excel dashboard with charts + PDF",
+    "items": [
+      "Every Excel report now opens on a Dashboard sheet: key numbers, summary tables and charts (real Excel charts you can edit); the raw data follows on the next sheets, with filters and a frozen header.",
+      "New 📄 PDF button on every report: the same dashboard with charts, ready to print or email.",
+      "Asset / User Inventory sync still works with the new files: the Dashboard sheet is ignored on upload."
+    ]
+  },
+  {
+    "date": "2026-11-12",
     "title": "Audit Log: every login and every action",
     "items": [
       "Users & Audit now records logins, failed logins, logouts, password changes, every change, Excel downloads and page visits — each with the user's IP address.",

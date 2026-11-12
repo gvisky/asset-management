@@ -857,3 +857,10 @@ tr.au-bad > td { background: #fef2f2; }
 tr.au-view > td { color: #64748b; }
 tr.au-click { cursor: pointer; }
 tr.au-click:hover > td { background: #f1f5f9; }
+.rep-card { align-items: flex-start; cursor: default; }
+.rep-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.rep-btns .btn { display: inline-flex; flex-direction: row; align-items: center; gap: 3px; white-space: nowrap; padding: 3px 8px; font-size: 12px; font-weight: 600; text-decoration: none; }
+.rep-xlsx { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+.rep-xlsx:hover { background: #bbf7d0; }
+.rep-pdf { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+.rep-pdf:hover { background: #fecaca; }

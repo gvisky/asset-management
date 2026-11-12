@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const XLSX = require('xlsx');
 const { all } = require('../db/database');
+const { buildExcelReport } = require('../lib/report-excel');
+const { buildPdfReport } = require('../lib/report-pdf');
 const { requireAuth } = require('../middleware/auth');
 const { ASSET_COLUMNS } = require('../lib/asset-columns');
 const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
@@ -34,6 +35,49 @@ const issuesOf = (v) => { try { const a = v ? JSON.parse(v) : []; return Array.i
 const isTeam = (req, ...teams) => !!(req.user && teams.includes(req.user.team));
 class Forbidden extends Error {}
 
+// ── Dashboard helpers (each report: { sheets, dashboard }) ────────────────────
+const blank = (v, e = '(not set)') => (v == null || String(v).trim() === '' ? e : String(v).trim());
+/** Count rows by a key → [[label, n]] biggest first; after `top` rows the rest is summed as "Others". */
+function countBy(rows, fn, { top = 12, order, others = true } = {}) {
+  const m = new Map();
+  for (const r of rows) { const k = fn(r); if (k == null) continue; m.set(k, (m.get(k) || 0) + 1); }
+  let list = [...m.entries()];
+  if (order) return order.filter(k => m.has(k)).map(k => [k, m.get(k)]).concat(list.filter(([k]) => !order.includes(k)));
+  list.sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+  if (list.length > top && !others) return list.slice(0, top);
+  if (list.length > top) { const rest = list.slice(top - 1).reduce((t, [, n]) => t + n, 0); list = [...list.slice(0, top - 1), ['Others', rest]]; }
+  return list;
+}
+const tbl = (title, headers, rows, chart = 'bar', extra = {}) => ({ title, headers, rows, chart, ...extra });
+const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 0);
+const yearsSince = (v) => { const t = Date.parse(String(v || '').slice(0, 10)); return Number.isFinite(t) ? (Date.now() - t) / (365.25 * 86400000) : null; };
+const AGE_ORDER = ['< 1 year', '1–3 years', '3–5 years', '5+ years', 'Purchase date not set'];
+const ageBucket = (v) => { const y = yearsSince(v); return y == null ? 'Purchase date not set' : y < 1 ? '< 1 year' : y < 3 ? '1–3 years' : y < 5 ? '3–5 years' : '5+ years'; };
+const DAYS_ORDER = ['≤ 7 days', '8–30 days', '31–90 days', '90+ days', 'never / none'];
+const daysBucket = (d) => (d === '' || d == null ? 'never / none' : d <= 7 ? '≤ 7 days' : d <= 30 ? '8–30 days' : d <= 90 ? '31–90 days' : '90+ days');
+
+// Asset dashboard (Asset Inventory + Asset Summary).
+function assetDashboard(raw, title) {
+  const by = (k) => raw.filter(a => a.status === k).length;
+  const ages = raw.map(a => yearsSince(a.purchase_date)).filter(v => v != null);
+  return {
+    title, subtitle: `${raw.length.toLocaleString('en-US')} assets`,
+    kpis: [{ label: 'Total assets', value: raw.length }, { label: 'Active', value: by('Active'), color: 'green' },
+      { label: 'Stock', value: by('Stock'), color: 'amber' }, { label: 'Broken', value: by('Broken'), color: 'red' },
+      { label: 'Countries', value: new Set(raw.map(a => a.country).filter(Boolean)).size, color: 'purple' },
+      { label: 'Avg. years in use', value: ages.length ? Math.round((ages.reduce((a, b) => a + b, 0) / ages.length) * 10) / 10 : 0, color: 'grey' }],
+    tables: [
+      tbl('Assets by status', ['Status', 'Assets'], countBy(raw, a => blank(a.status)), 'doughnut'),
+      tbl('Assets by country', ['Country', 'Assets'], countBy(raw, a => blank(a.country))),
+      tbl('Assets by type', ['Asset type', 'Assets'], countBy(raw, a => blank(a.asset_type))),
+      tbl('Years in use', ['Age', 'Assets'], countBy(raw, a => ageBucket(a.purchase_date), { order: AGE_ORDER }), 'column'),
+      tbl('Assets by location', ['Location', 'Assets'], countBy(raw, a => blank(a.location)), 'doughnut'),
+      tbl('Top 10 models', ['Brand / model', 'Assets'], countBy(raw, a => blank(a.brand_model), { top: 10, others: false }), 'bar', { total: false }),
+      tbl('Assets by department', ['Department', 'Assets'], countBy(raw, a => blank(a.department), { top: 12 })),
+    ],
+  };
+}
+
 // Each report returns { sheets: [{ name, rows }] }.
 const REPORTS = {
   // Full Asset Inventory — every field we hold, keyed by ID so the file can be
@@ -47,7 +91,7 @@ const REPORTS = {
       for (const c of ASSET_COLUMNS) o[c.header] = r[c.field] == null ? '' : r[c.field];
       return o;
     });
-    return { sheets: [{ name: 'Assets', rows }] };
+    return { sheets: [{ name: 'Assets', rows }], dashboard: assetDashboard(raw, 'Asset Inventory') };
   },
 
   // Locked items — assets locked by a User Name / AD Name change (holder lock,
@@ -60,7 +104,14 @@ const REPORTS = {
               user_name AS "User Name", ad_name AS "AD Name"
          FROM assets WHERE deleted_at IS NULL AND user_locked = 1${sc.clause}
         ORDER BY cost_center, brand_model`, sc.params);
-    return { sheets: [{ name: 'Locked Items', rows }] };
+    return { sheets: [{ name: 'Locked Items', rows }], dashboard: {
+      title: 'Locked Items', subtitle: 'assets locked by a User Name / AD Name change',
+      kpis: [{ label: 'Locked items', value: rows.length, color: 'purple' },
+        { label: 'Cost centers', value: new Set(rows.map(r => r['Cost Center']).filter(Boolean)).size },
+        { label: 'Models', value: new Set(rows.map(r => r['Brand/Model']).filter(Boolean)).size, color: 'grey' }],
+      tables: [tbl('By cost center', ['Cost center', 'Items'], countBy(rows, r => blank(r['Cost Center']))),
+        tbl('By department', ['Department', 'Items'], countBy(rows, r => blank(r['Department']))),
+        tbl('By model', ['Brand / model', 'Items'], countBy(rows, r => blank(r['Brand/Model']), { top: 10, others: false }), 'bar', { total: false })] } };
   },
 
   // Full User Inventory — keyed by ID so it can be edited and re-uploaded
@@ -74,7 +125,17 @@ const REPORTS = {
       for (const c of PERSONNEL_COLUMNS) o[c.header] = r[c.field] == null ? '' : r[c.field];
       return o;
     });
-    return { sheets: [{ name: 'Users', rows }] };
+    const live = raw.filter(p => p.status !== 'deleted');
+    return { sheets: [{ name: 'Users', rows }], dashboard: {
+      title: 'User Inventory', subtitle: `${live.length.toLocaleString('en-US')} people`,
+      kpis: [{ label: 'People', value: live.length }, { label: 'Active', value: live.filter(p => p.status === 'Active').length, color: 'green' },
+        { label: 'Leaving / left', value: live.filter(p => p.leaving_date).length, color: 'amber' },
+        { label: 'In AD list', value: live.filter(p => p.ad_seen_at).length, color: 'teal' },
+        { label: 'Resource accounts', value: live.filter(p => p.ad_resource === 1).length, color: 'grey' }],
+      tables: [tbl('People by country', ['Country', 'People'], countBy(live, p => blank(p.country))),
+        tbl('People by status', ['Status', 'People'], countBy(live, p => blank(p.status)), 'doughnut'),
+        tbl('People by department', ['Department', 'People'], countBy(live, p => blank(p.department))),
+        tbl('People by type', ['User type', 'People'], countBy(live, p => blank(p.user_type)), 'doughnut')] } };
   },
 
   async summary(req) {
@@ -92,7 +153,8 @@ const REPORTS = {
              FROM assets WHERE deleted_at IS NULL AND asset_type <> ''${sc.clause}
             GROUP BY asset_type ORDER BY Count DESC`, sc.params) },
     ];
-    return { sheets };
+    const raw = await all(`SELECT * FROM assets WHERE deleted_at IS NULL${sc.clause}`, sc.params);
+    return { sheets, dashboard: assetDashboard(raw, 'Asset Summary') };
   },
 
   async offboarding(req) {
@@ -109,7 +171,14 @@ const REPORTS = {
          FROM personnel p
          JOIN assets a ON a.user_name = p.display_name COLLATE NOCASE OR a.ad_name = p.display_name COLLATE NOCASE
         WHERE ${cond.join(' AND ')} ORDER BY p.leaving_date, p.display_name`, params);
-    return { sheets: [{ name: 'Offboarding', rows }] };
+    return { sheets: [{ name: 'Offboarding', rows }], dashboard: {
+      title: 'Offboarding Reclaim', subtitle: 'leaving people and the assets they hold',
+      kpis: [{ label: 'Leaving people', value: new Set(rows.map(r => r.Email || r.Person)).size, color: 'amber' },
+        { label: 'Assets to reclaim', value: rows.length, color: 'red' }],
+      tables: [tbl('Assets by leaving month', ['Month', 'Assets'], countBy(rows, r => String(r['Leaving Date'] || '').slice(0, 7) || '(no date)', { top: 24 })
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0]))), 'column'),
+        tbl('By country', ['Country', 'Assets'], countBy(rows, r => blank(r.Country))),
+        tbl('By asset status', ['Status', 'Assets'], countBy(rows, r => blank(r.Status)), 'doughnut')] } };
   },
 
   async licenses(req) {
@@ -123,7 +192,17 @@ const REPORTS = {
       `SELECT name AS "Name", vendor AS "Vendor", type AS "Type", ${used} AS "Seats Used",
               total_seats AS "Total Seats", renewal_date AS "Renewal", cost AS "Cost", country AS "Scope"
          FROM licenses l ${where} ORDER BY name COLLATE NOCASE`, params);
-    return { sheets: [{ name: 'Licenses', rows }] };
+    const seatsUsed = rows.reduce((t, r) => t + (Number(r['Seats Used']) || 0), 0), total = rows.reduce((t, r) => t + (Number(r['Total Seats']) || 0), 0);
+    const soon = rows.filter(r => { const t = Date.parse(r.Renewal); return Number.isFinite(t) && t - Date.now() <= 90 * 86400000; }).length;
+    return { sheets: [{ name: 'Licenses', rows }], dashboard: {
+      title: 'Licenses', subtitle: `${rows.length} licenses`,
+      kpis: [{ label: 'Licenses', value: rows.length }, { label: 'Seats used', value: seatsUsed, color: 'green' }, { label: 'Total seats', value: total, color: 'grey' },
+        { label: 'Seats used %', value: pct(seatsUsed, total), color: 'purple' }, { label: 'Renewal ≤ 90 days', value: soon, color: 'amber' }],
+      tables: [tbl('Seats used vs total', ['License', 'Used', 'Total'],
+          rows.slice().sort((a, b) => (Number(b['Total Seats']) || 0) - (Number(a['Total Seats']) || 0)).slice(0, 12)
+            .map(r => [r.Name, Number(r['Seats Used']) || 0, Number(r['Total Seats']) || 0])),
+        tbl('Licenses by type', ['Type', 'Licenses'], countBy(rows, r => blank(r.Type)), 'doughnut'),
+        tbl('Licenses by vendor', ['Vendor', 'Licenses'], countBy(rows, r => blank(r.Vendor)))] } };
   },
 
   async servers(req) {
@@ -135,7 +214,15 @@ const REPORTS = {
               vendor AS "Vendor", warranty_expiry AS "Warranty Expiry", purchase_date AS "Purchase Date",
               cost AS "Cost", po_number AS "PO Number"
          FROM servers WHERE deleted_at IS NULL${sc.clause} ORDER BY country, id`, sc.params);
-    return { sheets: [{ name: 'Servers', rows }] };
+    const expired = rows.filter(r => { const t = Date.parse(r['Warranty Expiry']); return Number.isFinite(t) && t < Date.now(); }).length;
+    return { sheets: [{ name: 'Servers', rows }], dashboard: {
+      title: 'Server Inventory', subtitle: `${rows.length} servers`,
+      kpis: [{ label: 'Servers', value: rows.length }, { label: 'Active', value: rows.filter(r => r.Status === 'Active').length, color: 'green' },
+        { label: 'Warranty expired', value: expired, color: 'red' }],
+      tables: [tbl('Servers by status', ['Status', 'Servers'], countBy(rows, r => blank(r.Status)), 'doughnut'),
+        tbl('Servers by OS', ['OS', 'Servers'], countBy(rows, r => blank(r.OS))),
+        tbl('Servers by country', ['Country', 'Servers'], countBy(rows, r => blank(r.Country))),
+        tbl('Servers by role', ['Role', 'Servers'], countBy(rows, r => blank(r.Role)))] } };
   },
 
   async maintenance(req) {
@@ -151,7 +238,15 @@ const REPORTS = {
          LEFT JOIN assets  a ON m.asset_type = 'asset'  AND a.id = m.asset_id
          LEFT JOIN servers s ON m.asset_type = 'server' AND s.id = m.asset_id
         WHERE m.status <> 'done'${sc.clause} ORDER BY m.reported_at DESC`, sc.params);
-    return { sheets: [{ name: 'Open Maintenance', rows }] };
+    return { sheets: [{ name: 'Open Maintenance', rows }], dashboard: {
+      title: 'Open Maintenance', subtitle: 'repairs / services not done yet',
+      kpis: [{ label: 'Open items', value: rows.length, color: 'amber' },
+        { label: 'In progress', value: rows.filter(r => r.Status === 'in_progress').length, color: 'blue' },
+        { label: 'Not started', value: rows.filter(r => r.Status === 'open').length, color: 'red' }],
+      tables: [tbl('By type', ['Type', 'Items'], countBy(rows, r => blank(r.Type)), 'doughnut'),
+        tbl('By status', ['Status', 'Items'], countBy(rows, r => blank(r.Status)), 'doughnut'),
+        tbl('By country', ['Country', 'Items'], countBy(rows, r => blank(r.Country))),
+        tbl('Assets or servers', ['Item type', 'Items'], countBy(rows, r => blank(r['Item Type'])))] } };
   },
 
   // Intune + Entra devices of AD users (last Device Check upload) and the differences found with Asset Inventory.
@@ -185,7 +280,20 @@ const REPORTS = {
           'Details': i.text || '' });
       }
     }
-    return { sheets: [{ name: 'Devices', rows: devices }, { name: 'Differences to check', rows: diffs }] };
+    const comp = devices.filter(d => /^compliant$/i.test(d.Compliance)).length;
+    return { sheets: [{ name: 'Devices', rows: devices }, { name: 'Differences to check', rows: diffs }], dashboard: {
+      title: 'Devices (Intune / Entra)', subtitle: 'devices of AD users from the last Device Check upload',
+      kpis: [{ label: 'Devices', value: devices.length }, { label: 'Compliant %', value: pct(comp, devices.length), color: 'green' },
+        { label: 'Not compliant', value: devices.filter(d => d.Compliance && !/^compliant$/i.test(d.Compliance)).length, color: 'red' },
+        { label: 'Not in Asset Inventory', value: devices.filter(d => d['In Asset Inventory'] === 'No').length, color: 'amber' },
+        { label: 'Differences to check', value: diffs.length, color: 'purple' },
+        { label: 'No check-in 30+ days', value: devices.filter(d => d['Days since check-in'] !== '' && d['Days since check-in'] > 30).length, color: 'grey' }],
+      tables: [tbl('Compliance', ['Compliance', 'Devices'], countBy(devices, d => blank(d.Compliance)), 'doughnut'),
+        tbl('Last Intune check-in', ['Last check-in', 'Devices'], countBy(devices, d => daysBucket(d['Days since check-in']), { order: DAYS_ORDER }), 'column'),
+        tbl('Differences to check', ['Check', 'Devices'], countBy(diffs, d => blank(d.Check))),
+        tbl('Devices by OS', ['OS', 'Devices'], countBy(devices, d => blank(d.OS))),
+        tbl('Ownership', ['Ownership', 'Devices'], countBy(devices, d => blank(d.Ownership)), 'doughnut'),
+        tbl('Devices by country', ['Country', 'Devices'], countBy(devices, d => blank(d.Country)))] } };
   },
 
   // People with their AD account, last AD logon, last Intune check-in / Entra sign-in, and why they need a check.
@@ -216,7 +324,20 @@ const REPORTS = {
       };
     });
     const needs = rows.filter(r => r['Needs check']);
-    return { sheets: [{ name: 'Needs check', rows: needs }, { name: 'All people', rows }] };
+    const reasons = needs.flatMap(r => r['Needs check'].split('; ').map(x => ({ x })));
+    const countries = countBy(rows, r => blank(r.Country)).map(([c]) => c);
+    return { sheets: [{ name: 'Needs check', rows: needs }, { name: 'All people', rows }], dashboard: {
+      title: 'User activity (AD / Intune / Entra)', subtitle: 'last sign of each person in AD, Intune and Entra',
+      kpis: [{ label: 'People', value: rows.length }, { label: 'Need a check', value: needs.length, color: 'red' },
+        { label: 'Never logged on', value: needs.filter(r => /Never/.test(r['Needs check'])).length, color: 'amber' },
+        { label: 'No activity 90+ days', value: needs.filter(r => /No AD/.test(r['Needs check'])).length, color: 'purple' },
+        { label: 'Resource accounts', value: rows.filter(r => /^Resource/.test(r['Account type'])).length, color: 'grey' }],
+      tables: [tbl('Why they need a check', ['Reason', 'People'], countBy(reasons, r => r.x)),
+        tbl('Last seen (AD / Intune / Entra)', ['Last seen', 'People'],
+          countBy(rows.filter(r => !/^Resource/.test(r['Account type'])), r => daysBucket(r['Days since last seen']), { order: DAYS_ORDER }), 'column'),
+        tbl('By country', ['Country', 'People', 'Need a check'], countries.map(c => [c, rows.filter(r => blank(r.Country) === c).length,
+          needs.filter(r => blank(r.Country) === c).length])),
+        tbl('Account type', ['Account type', 'People'], countBy(rows, r => r['Account type']), 'doughnut')] } };
   },
 
   // Broken + Stock devices, the parts check of broken laptops, and the spare-part stock.
@@ -249,7 +370,19 @@ const REPORTS = {
       'Confirmed usable': t.shared ? sp.shared[t.part].checked : sp.models.reduce((n, m) => n + m.counts[t.part].checked, 0),
       'Used as spare': t.shared ? sp.shared[t.part].used : sp.models.reduce((n, m) => n + m.counts[t.part].used, 0) }));
     totals.push({ 'Part': `From ${sp.laptops} broken laptops (${sp.totalBroken} total broken not counted)` });
-    return { sheets: [{ name: 'Broken & Stock', rows: devices }, { name: 'Spare parts by model', rows: byModel }, { name: 'Spare parts total', rows: totals }] };
+    const types = countBy(raw, a => blank(a.asset_type)).map(([t]) => t);
+    return { sheets: [{ name: 'Broken & Stock', rows: devices }, { name: 'Spare parts by model', rows: byModel }, { name: 'Spare parts total', rows: totals }], dashboard: {
+      title: 'Broken & Stock + spare parts', subtitle: 'broken and stock devices, parts of broken laptops',
+      kpis: [{ label: 'Broken', value: raw.filter(a => a.status === 'Broken').length, color: 'red' },
+        { label: 'Stock', value: raw.filter(a => a.status === 'Stock').length, color: 'amber' },
+        { label: 'Broken laptops', value: laptops.length, color: 'blue' }, { label: 'Total broken', value: sp.totalBroken, color: 'grey' },
+        { label: 'Parts not checked', value: laptops.filter(a => conditionOf(a) === 'unchecked').length, color: 'purple' }],
+      tables: [tbl('Spare parts in stock', ['Part', 'In stock'], sp.totals.map(t => [t.partName + (t.shared ? ' (any laptop)' : ''), t.stock]), 'bar', { total: false }),
+        tbl('Condition of broken laptops', ['Condition', 'Laptops'], countBy(laptops, a => CONDITION_LABEL[conditionOf(a)] || '(not set)'), 'doughnut'),
+        tbl('Broken / stock by type', ['Asset type', 'Broken', 'Stock'], types.map(t => [t,
+          raw.filter(a => a.status === 'Broken' && blank(a.asset_type) === t).length, raw.filter(a => a.status === 'Stock' && blank(a.asset_type) === t).length])),
+        tbl('Broken laptops by model', ['Model', 'Laptops'], countBy(laptops, a => blank(a.brand_model), { top: 10, others: false }), 'bar', { total: false }),
+        tbl('By country', ['Country', 'Devices'], countBy(raw, a => blank(a.country)))] } };
   },
 
   // System Health: collectors, the latest status of each check, and recent status changes (IT team).
@@ -271,7 +404,16 @@ const REPORTS = {
     const events = (await all('SELECT * FROM health_events ORDER BY id DESC LIMIT 3000')).filter(e => byId.has(e.collector_id))
       .map(e => ({ 'When (UTC)': e.created_at || '', 'Collector': byId.get(e.collector_id).name, 'Check': e.name,
         'From': e.from_status, 'To': e.to_status, 'Summary': e.summary }));
-    return { sheets: [{ name: 'Checks', rows: checks }, { name: 'Collectors', rows: cols }, { name: 'Status changes', rows: events }] };
+    const st = (k) => checks.filter(c => c.Status === k).length;
+    return { sheets: [{ name: 'Checks', rows: checks }, { name: 'Collectors', rows: cols }, { name: 'Status changes', rows: events }], dashboard: {
+      title: 'System Health', subtitle: 'routers, switches, servers and web apps checked by the office collectors',
+      kpis: [{ label: 'Checks', value: checks.length }, { label: 'Up', value: st('up'), color: 'green' }, { label: 'Warning', value: st('warn'), color: 'amber' },
+        { label: 'Down', value: st('down'), color: 'red' }, { label: 'No data', value: st('no data') + st('unknown'), color: 'grey' },
+        { label: 'Collectors online', value: `${cols.filter(c => c.State === 'online').length} / ${cols.filter(c => c.State !== 'revoked').length}`, color: 'teal' }],
+      tables: [tbl('Checks by status', ['Status', 'Checks'], countBy(checks, c => c.Status, { order: ['up', 'warn', 'down', 'no data', 'unknown'] }), 'doughnut'),
+        tbl('Checks by type', ['Type', 'Checks'], countBy(checks, c => blank(c.Type))),
+        tbl('Checks per collector', ['Collector', 'Checks'], countBy(checks, c => blank(c.Collector))),
+        tbl('Status changes (last 3000)', ['Changed to', 'Times'], countBy(events, e => blank(e.To)), 'column')] } };
   },
 
   async warranty(req) {
@@ -291,31 +433,54 @@ const REPORTS = {
         WHERE deleted_at IS NULL AND warranty_expiry <> ''
           AND date(warranty_expiry) <= date('now','+90 days')${sc.clause}
         ORDER BY warranty_expiry`, sc.params);
-    return { sheets: [{ name: 'Assets', rows: assets }, { name: 'Servers', rows: servers }] };
+    const all2 = [...assets, ...servers];
+    const days = (r) => Math.floor((Date.parse(r['Warranty Expiry']) - Date.now()) / 86400000);
+    const W_ORDER = ['Expired', '≤ 30 days', '31–60 days', '61–90 days'];
+    const wb = (r) => { const d = days(r); return !Number.isFinite(d) ? null : d < 0 ? 'Expired' : d <= 30 ? '≤ 30 days' : d <= 60 ? '31–60 days' : '61–90 days'; };
+    return { sheets: [{ name: 'Assets', rows: assets }, { name: 'Servers', rows: servers }], dashboard: {
+      title: 'Warranty Due', subtitle: 'assets and servers with warranty expired or ending within 90 days',
+      kpis: [{ label: 'Expired', value: all2.filter(r => wb(r) === 'Expired').length, color: 'red' },
+        { label: 'Ending ≤ 30 days', value: all2.filter(r => wb(r) === '≤ 30 days').length, color: 'amber' },
+        { label: 'Ending 31–90 days', value: all2.filter(r => wb(r) === '31–60 days' || wb(r) === '61–90 days').length, color: 'blue' },
+        { label: 'Assets', value: assets.length, color: 'grey' }, { label: 'Servers', value: servers.length, color: 'grey' }],
+      tables: [tbl('Warranty', ['When', 'Items'], countBy(all2, wb, { order: W_ORDER }), 'column'),
+        tbl('By vendor', ['Vendor', 'Items'], countBy(all2, r => blank(r.Vendor))),
+        tbl('By country', ['Country', 'Items'], countBy(all2, r => blank(r.Country)))] } };
   },
 };
 
-// ── GET /api/reports/:name — download an .xlsx (region/role scoped) ───────────
+// ── GET /api/reports/:name(.xlsx|.pdf) — download (region/role scoped) ─────────
+// Excel: "Dashboard" sheet (key numbers, summary tables, charts) + the raw data sheets.
+// PDF (?format=pdf or name.pdf): the Dashboard only.
+function reportMeta(req) {
+  const list = scopeList(req);
+  const generated = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 16).replace('T', ' ') + ' (UTC+7)';
+  return { generated, by: req.user && (req.user.full_name || req.user.username), scope: list ? `Countries: ${list.join(', ')}` : 'All countries' };
+}
 router.get('/:name', wrap(async (req, res) => {
-  const name = String(req.params.name).replace(/\.xlsx$/i, '');
+  const raw = String(req.params.name);
+  const pdf = /\.pdf$/i.test(raw) || req.query.format === 'pdf';
+  const name = raw.replace(/\.(xlsx|pdf)$/i, '');
   const builder = REPORTS[name];
   if (!builder) return res.status(404).json({ error: 'Unknown report' });
 
-  let sheets;
-  try { ({ sheets } = await builder(req)); }
+  let rep;
+  try { rep = await builder(req); }
   catch (e) { if (e instanceof Forbidden) return res.status(403).json({ error: e.message }); throw e; }
-  const wb = XLSX.utils.book_new();
-  for (const s of sheets) {
-    const ws = XLSX.utils.json_to_sheet(s.rows.length ? s.rows : [{ '(no data)': '' }]);
-    XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31));
-  }
-  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const meta = reportMeta(req);
   const stamp = new Date().toISOString().slice(0, 10);
-  res.setHeader('Content-Disposition', `attachment; filename="${name}-${stamp}.xlsx"`);
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   // Always serve a fresh export — never a cached copy (re-downloads after a sync).
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
+  if (pdf) {
+    const buf = await buildPdfReport({ dashboard: rep.dashboard, meta });
+    res.setHeader('Content-Disposition', `attachment; filename="${name}-${stamp}.pdf"`);
+    res.setHeader('Content-Type', 'application/pdf');
+    return res.send(buf);
+  }
+  const buf = await buildExcelReport({ dashboard: rep.dashboard, sheets: rep.sheets, meta });
+  res.setHeader('Content-Disposition', `attachment; filename="${name}-${stamp}.xlsx"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.send(buf);
 }));
 
