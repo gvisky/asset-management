@@ -864,3 +864,5 @@ tr.au-click:hover > td { background: #f1f5f9; }
 .rep-xlsx:hover { background: #bbf7d0; }
 .rep-pdf { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 .rep-pdf:hover { background: #fecaca; }
+.rep-html { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
+.rep-html:hover { background: #bfdbfe; }

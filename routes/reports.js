@@ -4,6 +4,7 @@ const { all } = require('../db/database');
 const { buildExcelReport } = require('../lib/report-excel');
 const { buildPdfReport } = require('../lib/report-pdf');
 const D = require('../lib/report-dashboards');
+const { buildHtmlReport } = require('../lib/report-html');
 const { requireAuth } = require('../middleware/auth');
 const { ASSET_COLUMNS } = require('../lib/asset-columns');
 const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
@@ -121,8 +122,9 @@ const REPORTS = {
     const used = `(SELECT COUNT(*) FROM license_assignments la WHERE la.license_id = l.id AND la.released_at IS NULL)`;
     let where = '';
     const params = [];
-    if (list) { where = `WHERE (country = 'Global' OR country IN (${list.map(() => '?').join(', ')}))`; params.push(...list); }
-    else if (req.query.country) { where = 'WHERE country = ?'; params.push(req.query.country); }
+    const want = req.query.country;
+    if (want && (!list || list.includes(want) || want === 'Global')) { where = 'WHERE country = ?'; params.push(want); }
+    else if (list) { where = `WHERE (country = 'Global' OR country IN (${list.map(() => '?').join(', ')}))`; params.push(...list); }
     const rows = await all(
       `SELECT name AS "Name", vendor AS "Vendor", type AS "Type", ${used} AS "Seats Used",
               total_seats AS "Total Seats", renewal_date AS "Renewal", cost AS "Cost", country AS "Scope"
@@ -259,7 +261,8 @@ const REPORTS = {
   // System Health: collectors, the latest status of each check, and recent status changes (IT team).
   async health(req) {
     if (!isTeam(req, 'IT')) throw new Forbidden('System Health is for the IT team');
-    const mine = (country) => (country ? inScope(req, country) : !scopeList(req));
+    const want = req.query.country;
+    const mine = (country) => (want ? country === want && inScope(req, country) : (country ? inScope(req, country) : !scopeList(req)));
     const collectors = (await all(`SELECT *, CAST((julianday('now') - julianday(last_seen_at)) * 86400 AS INTEGER) AS age_s
         FROM health_collectors ORDER BY country, site, name`)).filter(c => mine(c.country));
     const byId = new Map(collectors.map(c => [c.id, c]));
@@ -310,7 +313,8 @@ function reportMeta(req) {
 router.get('/:name', wrap(async (req, res) => {
   const raw = String(req.params.name);
   const pdf = /\.pdf$/i.test(raw) || req.query.format === 'pdf';
-  const name = raw.replace(/\.(xlsx|pdf)$/i, '');
+  const html = /\.html$/i.test(raw) || req.query.format === 'html';
+  const name = raw.replace(/\.(xlsx|pdf|html)$/i, '');
   const builder = REPORTS[name];
   if (!builder) return res.status(404).json({ error: 'Unknown report' });
 
@@ -322,6 +326,22 @@ router.get('/:name', wrap(async (req, res) => {
   // Always serve a fresh export — never a cached copy (re-downloads after a sync).
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
+  if (html) {
+    // Interactive page: the "All" dashboard + one per country (same report, filtered to that country).
+    const dashboards = { All: rep.dashboard };
+    const countries = ((rep.dashboard.kpis || [])[0] || {}).split || [];
+    if (!req.query.country && countries.filter(c => c.n > 0).length > 1) {
+      for (const c of countries.filter(x => x.n > 0 && x.country !== 'Unknown')) {
+        const r2 = Object.create(req);
+        r2.query = { ...req.query, country: c.country };
+        try { dashboards[c.country] = (await builder(r2)).dashboard; } catch { /* skip that country */ }
+      }
+    }
+    const page = buildHtmlReport({ name, dashboards, sheets: rep.sheets, meta });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="${name}-${stamp}.html"`);
+    return res.send(page);
+  }
   if (pdf) {
     const buf = await buildPdfReport({ dashboard: rep.dashboard, meta });
     res.setHeader('Content-Disposition', `attachment; filename="${name}-${stamp}.pdf"`);
