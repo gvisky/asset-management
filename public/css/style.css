@@ -866,3 +866,9 @@ tr.au-click:hover > td { background: #f1f5f9; }
 .rep-pdf:hover { background: #fecaca; }
 .rep-html { background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; }
 .rep-html:hover { background: #bfdbfe; }
+/* Users & Audit — page access per account */
+.acc-cell { min-width: 320px; }
+.acc-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.acc-chip { font-size: 11.5px; border-radius: 5px; padding: 1px 7px; white-space: nowrap; border: 1px solid; }
+.acc-edit { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+.acc-view { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }

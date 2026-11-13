@@ -3,6 +3,7 @@ const router = express.Router();
 const { get, all, run, audit } = require('../db/database');
 const { hashPassword } = require('../db/auth-utils');
 const { requireGlobalAdmin } = require('../middleware/auth');
+const { pagesFor } = require('../lib/access');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const { normCountry: canonCountry } = require('../lib/countries');
@@ -140,11 +141,13 @@ router.get('/audit/log', wrap(async (req, res) => {
   // For the filters: who appears in the log, which kinds of entries, and today's logins.
   const users = (await all('SELECT username, COUNT(*) AS n, MAX(created_at) AS last FROM audit_log GROUP BY username ORDER BY username COLLATE NOCASE'));
   const actions = (await all('SELECT action, COUNT(*) AS n FROM audit_log GROUP BY action ORDER BY n DESC'));
-  const lastLogins = await all(`SELECT u.username, u.full_name, u.role, u.team, u.country,
+  const lastLogins = await all(`SELECT u.username, u.full_name, u.role, u.team, u.country, u.asset_access,
       (SELECT MAX(created_at) FROM audit_log a WHERE a.username = u.username AND a.action = 'LOGIN') AS last_login,
       (SELECT MAX(created_at) FROM audit_log a WHERE a.username = u.username) AS last_activity,
       (SELECT COUNT(*) FROM audit_log a WHERE a.username = u.username AND a.action = 'LOGIN_FAILED' AND a.created_at >= datetime('now', '-7 days')) AS failed_7d
     FROM users u ORDER BY last_activity IS NULL, last_activity DESC`);
+  // Pages each account can open (and where it can change data) — same rules as the server guards.
+  for (const u of lastLogins) u.pages = pagesFor(u);
   res.json({ rows, total, page, limit, users, actions, lastLogins });
 }));
 

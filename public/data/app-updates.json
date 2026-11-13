@@ -1,5 +1,13 @@
 [
   {
+    "date": "2026-11-13",
+    "title": "Users & Audit: page access of every account",
+    "items": [
+      "🔑 Logins has a new column with the pages each account can open — ✎ can change data, 👁 read only — and its countries, next to last login, so access can be reviewed any time.",
+      "Worked out from the same rules the server enforces (role, team, countries, Asset Inventory access)."
+    ]
+  },
+  {
     "date": "2026-11-12",
     "title": "Reports: interactive HTML version",
     "items": [
