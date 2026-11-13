@@ -78,7 +78,7 @@ async function record(req, res, a, { kind, person, holder, status, note, sig }) 
   const norm = (v) => String(v == null ? '' : v).trim();
   const holderChanged = ['user_name', 'ad_name'].filter(k => norm(a[k]) !== '' && norm(a[k]) !== norm(holder[k]));
   if (holderChanged.length && a.user_locked) {
-    return res.status(403).json({ error: 'User Name / AD Name are locked (an earlier holder change waits for the SAP update). An IT admin must unlock this record first via 🕓 History Usage.' });
+    return res.status(403).json({ code: 'holder_locked', error: 'User Name / AD Name are locked (an earlier holder change waits for the SAP update). An IT admin must unlock this record first.' });
   }
   const ts = nowUtc();
   const lines = [];

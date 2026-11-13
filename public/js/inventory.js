@@ -69,6 +69,17 @@ async function loadHistory() {
     box.innerHTML = '<div class="text-muted text-sm">Could not load locked records.</div>';
   }
 }
+// IT admin: unlock User Name / AD Name right in the Edit form (no trip to History Usage).
+async function unlockHolderInForm(id) {
+  try {
+    await apiPost(`/api/assets/${id}/user-unlock`, {});
+    ['user_name', 'ad_name'].forEach((f) => { const el = document.getElementById('f-' + f); if (el) { el.readOnly = false; el.style.background = ''; el.title = ''; } });
+    const banner = document.getElementById('lock-banner');
+    if (banner) banner.innerHTML = banner.innerHTML.replace(/🔒 <span><strong>User Name \/ AD Name are locked<\/strong>[\s\S]*?<\/span>(<br>)?/, '').trim() || '';
+    if (banner && !banner.textContent.trim()) banner.style.display = 'none';
+    showToast('Unlocked — you can change User Name / AD Name');
+  } catch (e) { showToast('Only an IT admin can unlock', 'error'); }
+}
 async function unlockUser(id) {
   try {
     await apiPost(`/api/assets/${id}/user-unlock`, {});
@@ -640,7 +651,7 @@ function applyFieldLock(a) {
   });
   if (banner && userLocked) {
     const note = '🔒 <span><strong>User Name / AD Name are locked</strong> (holder changed). '
-      + (itAdmin ? 'Unlock via the 🕓 History Usage button.' : 'An IT admin can unlock via 🕓 History Usage.') + '</span>';
+      + (itAdmin ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-left:6px" onclick="unlockHolderInForm(${a.id})">🔓 Unlock now</button>` : 'An IT admin can unlock via 🕓 History Usage.') + '</span>';
     if (banner.style.display === 'none') {
       banner.className = 'lock-banner'; banner.style.display = ''; banner.innerHTML = note;
     } else {

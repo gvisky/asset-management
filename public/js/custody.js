@@ -41,15 +41,37 @@
     };
   }
 
-  function open({ title, body, onSave }) {
+  // Holder lock: shown at the top of the window; an IT admin unlocks right here (signature and note are kept).
+  const itAdmin = () => !!(window.CURRENT_USER && window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin');
+  function lockBanner(a) {
+    return `<div class="cus-lock" id="cus-lock" ${a.user_locked ? '' : 'hidden'}>🔒 <span><b>Locked:</b> an earlier holder change waits for the SAP update.
+      ${itAdmin() ? '' : 'An IT admin must unlock it first.'}</span>
+      ${itAdmin() ? `<button type="button" class="btn btn-ghost btn-sm" id="cus-unlock">🔓 Unlock</button>` : ''}</div>`;
+  }
+  function wireUnlock(a) {
+    const b = document.getElementById('cus-unlock');
+    if (!b) return;
+    b.onclick = async () => {
+      b.disabled = true;
+      try {
+        await apiPost(`/api/assets/${a.id}/user-unlock`, {});
+        a.user_locked = 0;
+        document.getElementById('cus-lock').hidden = true;
+        showToast('Unlocked — press Sign & save');
+      } catch (e) { b.disabled = false; showToast(errText(e, 'Could not unlock'), 'error'); }
+    };
+  }
+
+  function open({ title, body, onSave, asset }) {
     const ov = overlay();
     document.getElementById('cus-title').textContent = title;
-    document.getElementById('cus-body').innerHTML = body + `
+    document.getElementById('cus-body').innerHTML = (asset ? lockBanner(asset) : '') + body + `
       <div class="form-group" style="margin-top:12px"><label class="form-label">Signature *  <span class="text-muted text-sm">— sign with finger, pen or mouse</span></label>
         <canvas id="cus-pad" class="sig-pad"></canvas>
         <div style="display:flex;justify-content:space-between;margin-top:4px"><span class="text-muted text-sm" id="cus-terms"></span><button class="btn btn-ghost btn-sm" id="cus-clear" type="button">Clear</button></div></div>`;
     ov.classList.add('open');
     const sp = pad(document.getElementById('cus-pad'));
+    if (asset) wireUnlock(asset);
     document.getElementById('cus-clear').onclick = () => sp.clear();
     const close = () => ov.classList.remove('open');
     document.getElementById('cus-x').onclick = close; document.getElementById('cus-cancel').onclick = close;
@@ -59,7 +81,11 @@
       if (sp.empty()) { showToast('Please sign in the box', 'error'); return; }
       save.disabled = true;
       try { await onSave(sp.png()); close(); }
-      catch (e) { showToast(errText(e, 'Could not save'), 'error'); }
+      catch (e) {
+        let code = ''; try { code = JSON.parse(e.message).code || ''; } catch {}
+        if (code === 'holder_locked' && asset) { asset.user_locked = 1; const l = document.getElementById('cus-lock'); if (l) l.hidden = false; }
+        showToast(errText(e, 'Could not save'), 'error');
+      }
       finally { save.disabled = false; }
     };
   }
@@ -70,6 +96,7 @@
   window.custodyHandover = function (a, onDone) {
     let picked = null;
     open({
+      asset: a,
       title: '✍ Hand over — e-signed',
       body: assetLine(a) + `
         <div class="form-group"><label class="form-label">Person (User Inventory) *</label>
@@ -101,6 +128,7 @@
   window.custodyReturn = function (a, onDone) {
     const laptop = String(a.asset_type || '').toLowerCase() === 'laptop';
     open({
+      asset: a,
       title: '↩ Return — e-signed',
       body: assetLine(a) + `<div class="text-sm" style="margin:6px 0 10px">Returned by <b>${esc(a.user_name || a.ad_name || '—')}</b></div>
         <div class="form-group"><label class="form-label">Condition on return *</label>
