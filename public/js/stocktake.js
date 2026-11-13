@@ -4,7 +4,7 @@ const stEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': 
 const stErr = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
 let stCur = null, stData = null, stStop = null, stTab = 'missing';
 const stSel = new Set();            // assets ticked for label printing
-let stOpen = null;                   // model groups opened (null = default)
+let stOpen = new Set();             // model groups opened (all closed until you open one)
 
 function stSiteLabel(t) { return t.country + (t.site ? ' · ' + t.site : ''); }
 // Filters of a stocktake (status / asset type / department) as text.
@@ -30,36 +30,51 @@ async function loadList() {
 }
 
 async function openTake(id) {
-  if (stCur !== id) { stSel.clear(); stOpen = null; }
+  if (stCur !== id) { stSel.clear(); stOpen = new Set(); }
   stCur = id;
   try { stData = await apiGet('/api/stocktake/' + id); } catch (e) { showToast(stErr(e, 'Could not open'), 'error'); return; }
   renderTake();
 }
 
-// One asset line (click = label preview; checkbox = pick for printing).
+// One asset line (click = label preview; checkbox = pick for printing; ✏️ = quick edit on this page).
+const stReal = (v) => (v && String(v).trim() !== '0' ? String(v).trim() : '');
+function stAge(d) {
+  const t = Date.parse(d); if (!stReal(d) || isNaN(t)) return '';
+  const y = (Date.now() - t) / (365.25 * 864e5);
+  return y < 1 ? `${Math.max(0, Math.round(y * 12))} mo` : `${y.toFixed(1)} y`;
+}
 function assetRow(a, extra = '') {
   const id = a.asset_id || a.id;
+  const holder = a.status === 'Broken' ? '' : stReal(a.user_name) || stReal(a.ad_name);
+  const bought = stReal(a.purchase_date) ? `Bought ${stEsc(String(a.purchase_date).slice(0, 10))} · ${stAge(a.purchase_date)}` : '<span class="sg-miss">no purchase date</span>';
+  const warr = stReal(a.warranty_expiry) ? (Date.parse(a.warranty_expiry) < Date.now() ? '<span class="sg-miss">warranty ended</span>' : `warranty to ${stEsc(String(a.warranty_expiry).slice(0, 10))}`) : '';
   return `<div class="sg-row${stSel.has(id) ? ' sel' : ''}" onclick="LabelPrint.preview(${id}, stPaper())" title="Click to preview its QR label">
     <input type="checkbox" ${stSel.has(id) ? 'checked' : ''} onclick="event.stopPropagation();stPick(${id}, this.checked)">
-    <span><b>${stEsc(a.asset_s4 || a.asset_code || '#' + id)}</b><div class="text-muted text-sm">${stEsc(a.asset_type || '')}</div></span>
-    <span class="text-sm">SN ${stEsc(a.serial_no || '—')}<div class="text-muted">${stEsc(a.computer_no || '')}</div></span>
-    <span class="text-sm">${stEsc(a.country || '')}${a.location ? ' · ' + stEsc(a.location) : ''}<div class="text-muted">${stEsc(a.user_name || '')}</div></span>
+    <span><b>${stEsc(a.asset_s4 || a.asset_code || '#' + id)}</b><div class="text-muted text-sm">${[stEsc(a.asset_type || ''), a.asset_s4 && stReal(a.asset_code) ? 'ECC ' + stEsc(a.asset_code) : ''].filter(Boolean).join(' · ')}</div></span>
+    <span class="text-sm">SN ${stEsc(stReal(a.serial_no) || '—')}<div class="text-muted">${stEsc(stReal(a.computer_no))}</div></span>
+    <span class="text-sm">${stEsc(a.country || '')}${stReal(a.location) ? ' · ' + stEsc(a.location) : ''}<div class="text-muted">${holder ? '👤 ' + stEsc(holder) : ''}${stReal(a.department) ? (holder ? ' · ' : '') + stEsc(a.department) : ''}</div></span>
+    <span class="text-sm sg-more">${bought}${warr ? ' · ' + warr : ''}<div class="text-muted">${a.condition ? '🔩 <b>' + stEsc(a.condition) + '</b>' + (stReal(a.remark) ? ' · ' : '') : ''}${stEsc(stReal(a.remark)).slice(0, 90)}</div></span>
     <span>${statusBadge(a.status)}</span>
-    <span class="sg-x" onclick="event.stopPropagation()">${extra}</span></div>`;
+    <span class="sg-x" onclick="event.stopPropagation()">${extra}${canEdit() ? ` <button class="btn btn-ghost btn-sm" onclick="QuickEdit.open(${id}, stReload)" title="Edit this asset here">✏️ Edit</button>` : ''}</span></div>`;
 }
+// After a quick edit: reload the lists (keeps the tab, open groups and ticks).
+async function stReload() { if (!stCur) return; try { stData = await apiGet('/api/stocktake/' + stCur); renderBody(); } catch {} }
 // A list grouped by model (biggest first), with a select-all box per model.
 function groupedList(items, extraFn) {
   const m = new Map();
   for (const a of items) { const k = a.brand_model || '(model not set)'; if (!m.has(k)) m.set(k, []); m.get(k).push(a); }
   const gs = [...m.entries()].sort((x, y) => (x[0] === '(model not set)') - (y[0] === '(model not set)') || y[1].length - x[1].length || x[0].localeCompare(y[0]));
-  if (stOpen === null) stOpen = new Set(items.length <= 120 ? gs.map(g => g[0]) : gs.slice(0, 3).map(g => g[0]));
   return gs.map(([model, list]) => {
     const ids = list.map(a => a.asset_id || a.id), n = ids.filter(i => stSel.has(i)).length, open = stOpen.has(model);
     return `<div class="sg"><div class="sg-head" onclick="stToggle(${jsArg(model)})">
         <input type="checkbox" ${n === ids.length ? 'checked' : ''} ${n && n < ids.length ? 'data-half="1"' : ''} onclick="event.stopPropagation();stPickGroup(${jsArg(ids.join(','))}, this.checked)" title="Select all of this model">
-        <span class="lg-caret">${open ? '▾' : '▸'}</span><b>${stEsc(model)}</b><span class="lg-n">${n ? `<b>${n}</b> / ` : ''}${list.length}</span></div>
+        <span class="lg-caret">${open ? '▾' : '▸'}</span><b>${stEsc(model)}</b> <span class="text-muted text-sm">${stEsc([...new Set(list.map(a => a.asset_type).filter(Boolean))].join(', '))}</span><span class="lg-n">${n ? `<b>${n}</b> / ` : ''}${list.length}</span></div>
       ${open ? list.map(a => assetRow(a, extraFn ? extraFn(a) : '')).join('') : ''}</div>`;
   }).join('');
+}
+function stExpandAll() {
+  const ms = [...new Set(stTabItems().map(a => a.brand_model || '(model not set)'))];
+  stOpen = ms.every(m => stOpen.has(m)) ? new Set() : new Set(ms); renderBody();
 }
 function stToggle(model) { if (stOpen.has(model)) stOpen.delete(model); else stOpen.add(model); renderBody(); }
 function stPick(id, on) { on ? stSel.add(id) : stSel.delete(id); renderBody(); }
@@ -83,7 +98,7 @@ function renderTake() {
       ${open ? `<div class="st-actions">
         <button class="btn btn-primary" id="st-cam-btn" onclick="toggleCam()">📷 Scan with camera</button>
         <form class="st-manual" onsubmit="manualScan(event)"><input class="form-control" id="st-code" placeholder="…or type asset code / serial / PC name" autocomplete="off"><button class="btn btn-ghost">Add</button></form>
-        <a class="btn btn-ghost" href="/labels.html?country=${encodeURIComponent(t.country)}${t.site ? '&site=' + encodeURIComponent(t.site) : ''}${t.status_filter === 'Broken' ? '&paper=tall' : ''}" target="_blank" rel="noopener">🏷 Print labels</a>
+        <button class="btn btn-ghost" onclick="LabelsPanel.toggle({ country: ${jsArg(t.country)}, site: ${jsArg(t.site || '')}, paper: ${jsArg(t.status_filter === 'Broken' ? 'tall' : 'sheet')} })">🏷 All QR labels</button>
         <button class="btn btn-ghost" onclick="closeTake()">Close stocktake</button></div>` : ''}
       <div id="st-cam" class="st-cam" hidden><video id="st-video" playsinline muted></video><div id="st-flash" class="st-flash"></div></div>
       <div id="st-last" class="st-last"></div>
@@ -106,13 +121,14 @@ function renderBody() {
   if (stTab === 'outside') list = groupedList(d.outside || [], (x) => `<span class="text-muted text-sm">${stEsc(x.department || '')}</span>${photoBtn(x)}`);
   if (stTab === 'elsewhere') list = groupedList(d.elsewhere, (x) => (open ? `<button class="btn btn-ghost btn-sm" onclick="moveHere(${x.asset_id})">Move here (${stEsc(stSiteLabel(t))})</button>` : ''));
   if (stTab === 'unknown') list = d.unknown.map(x => `<div class="sg-row sg-unk"><span></span><span><b>${stEsc(x.code)}</b></span>
-     <span class="text-muted text-sm">${stEsc(String(x.scanned_at).slice(0, 16))} · ${stEsc(x.scanned_by)}${x.note ? ' · ' + stEsc(x.note) : ''}</span><span></span><span></span>
+     <span class="text-muted text-sm">${stEsc(String(x.scanned_at).slice(0, 16))} · ${stEsc(x.scanned_by)}${x.note ? ' · ' + stEsc(x.note) : ''}</span><span></span><span class="sg-more"></span><span></span>
      <span class="sg-x"><a class="btn btn-ghost btn-sm" href="/inventory.html?search=${encodeURIComponent(x.code)}">Look up / add →</a></span></div>`).join('');
   const prevPaper = stPaper(), defPaper = document.getElementById('st-paper') ? prevPaper : (t.status_filter === 'Broken' ? 'tall' : 'sheet');
-  document.getElementById('st-body').innerHTML = `<div class="st-tabs">${tabs.map(([k, l, n]) => `<button class="st-tab${stTab === k ? ' on' : ''}" onclick="stTab='${k}';stOpen=null;renderBody()">${l} <b>${n}</b></button>`).join('')}</div>
+  document.getElementById('st-body').innerHTML = `<div class="st-tabs">${tabs.map(([k, l, n]) => `<button class="st-tab${stTab === k ? ' on' : ''}" onclick="stTab='${k}';stOpen=new Set();renderBody()">${l} <b>${n}</b></button>`).join('')}</div>
       ${stTab !== 'unknown' ? `<div class="sg-bar">
         <button class="btn btn-ghost btn-sm" onclick="stPickAll(true)">Select all in this list</button>
         <button class="btn btn-ghost btn-sm" onclick="stPickAll(false)">Clear</button>
+        <button class="btn btn-ghost btn-sm" onclick="stExpandAll()">Expand / collapse all</button>
         <span class="text-muted text-sm">${stSel.size ? `${stSel.size} selected` : 'Tick assets (or a whole model) to print their QR labels · click an asset to preview'}</span>
         <span style="flex:1"></span>
         <select class="form-control" id="st-paper" style="width:auto">${Object.entries(LabelPrint.PAPERS).map(([k, v]) => `<option value="${k}"${k === defPaper ? ' selected' : ''}>${v}</option>`).join('')}</select>

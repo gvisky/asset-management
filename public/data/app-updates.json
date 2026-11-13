@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Stocktake: more info, ✏️ Edit in place, collapsed models, QR labels panel",
+    "items": [
+      "Each asset line now also shows the ECC code, holder and department, purchase date with age, warranty end, remark, and the 🔩 parts condition of broken laptops.",
+      "✏️ Edit on every line opens the asset right on the Stocktake page (status, site, holder, department, serial, model, purchase date, remark…) — save and print without leaving the page. Same rules as Asset Inventory: parts check when a laptop is set to Broken; IT admins can 🔓 unlock a locked holder there.",
+      "Model groups start closed — open only the model you need (or Expand / collapse all).",
+      "🏷 QR labels (top bar) and 🏷 All QR labels (in a stocktake) open the full labels list as a panel on the same page — no new page. ✏️ Edit is there too, and on the QR labels page."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Stocktake: lists by model, tick & print labels, click to preview",
     "items": [
       "In a stocktake, every list (Not scanned yet, Found, Found elsewhere, outside filter) is grouped by model with a checkbox per asset and per model.",
