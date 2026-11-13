@@ -985,3 +985,15 @@ body.lbl-single .lb-sheet { grid-template-columns: 63.5mm; }
 .k-lg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 3px 0 8px; vertical-align: -1px; }
 .k-why { color: #b91c1c; font-size: 11.5px; margin-top: 3px; white-space: normal; max-width: 220px; }
 .k-sec .card-header { flex-wrap: wrap; gap: 6px; } .k-sec .card-title { white-space: nowrap; }
+/* Reports page: one report per line */
+.rep-list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: #fff; }
+.rep-row { display: flex; align-items: center; gap: 16px; padding: 10px 16px; border-top: 1px solid var(--border); }
+.rep-row:first-child { border-top: 0; }
+.rep-row:hover { background: #f8fafc; }
+.rep-info { flex: 1; min-width: 0; }
+.rep-name { font-weight: 600; font-size: 13.5px; color: var(--text); }
+.rep-desc { color: var(--muted); font-size: 12.5px; margin-top: 1px; }
+.rep-tag { font-size: 10.5px; font-weight: 600; color: #7c3aed; background: #f3e8ff; border-radius: 4px; padding: 1px 6px; margin-left: 4px; vertical-align: 1px; }
+.rep-row .rep-btns { margin-top: 0; flex: none; flex-wrap: nowrap; }
+.rep-group + .rep-group { margin-top: 16px; }
+@media (max-width: 700px) { .rep-row { flex-direction: column; align-items: flex-start; gap: 8px; } }

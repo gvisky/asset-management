@@ -24,19 +24,17 @@ const REPORTS = [
 ];
 
 // One report: title, description, and a choice of Excel (dashboard + data), PDF (dashboard) or HTML (interactive).
+// One report per line: name + description on the left, Excel / PDF / HTML on the right.
 function card(r) {
   const t = Date.now();
-  return `<div class="stat-card rep-card">
-    <div class="stat-icon" style="background:#dcfce7">
-      <svg width="22" height="22" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </div>
-    <div style="flex:1;min-width:0"><div class="stat-label" style="font-size:13.5px;color:var(--text);font-weight:600">${r.title}</div>
-    <div class="text-muted text-sm" style="margin-top:2px">${r.desc}</div>
+  return `<div class="rep-row">
+    <div class="rep-info"><div class="rep-name">${r.title}${r.admin ? ' <span class="rep-tag">admins</span>' : r.teams ? ` <span class="rep-tag">${r.teams.join(' & ')}</span>` : ''}</div>
+      <div class="rep-desc">${r.desc}</div></div>
     <div class="rep-btns">
       <a class="btn btn-sm rep-xlsx" href="/api/reports/${r.id}.xlsx?t=${t}" download title="Dashboard with charts + raw data sheets">📊 Excel</a>
       <a class="btn btn-sm rep-pdf" href="/api/reports/${r.id}.pdf?t=${t}" download title="Dashboard with charts">📄 PDF</a>
       <a class="btn btn-sm rep-html" href="/api/reports/${r.id}.html?t=${t}" target="_blank" rel="noopener" title="Interactive page: switch country, sort, hover the bars, search the data, CSV">🌐 HTML</a>
-    </div></div>
+    </div>
   </div>`;
 }
 // Reports grouped by area; reports for one team only are shown to that team.
@@ -45,7 +43,7 @@ function renderReports(u) {
   const list = REPORTS.filter(r => (!r.teams || r.teams.includes(team)) && (!r.admin || (u && u.role === 'admin')));
   const groups = [...new Set(list.map(r => r.group))];
   document.getElementById('report-grid').innerHTML = groups.map(g =>
-    `<div class="rep-group"><div class="rep-group-title">${g}</div><div class="stat-grid">${list.filter(r => r.group === g).map(card).join('')}</div></div>`).join('');
+    `<div class="rep-group"><div class="rep-group-title">${g}</div><div class="rep-list">${list.filter(r => r.group === g).map(card).join('')}</div></div>`).join('');
 }
 
 // Read a File as base64 (without the data: prefix).
