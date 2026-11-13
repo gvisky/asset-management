@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Stocktake: lists by model, tick & print labels, click to preview",
+    "items": [
+      "In a stocktake, every list (Not scanned yet, Found, Found elsewhere, outside filter) is grouped by model with a checkbox per asset and per model.",
+      "Pick the paper (tall 6.5 × 14 cm is chosen for Broken stocktakes) and press 🖨 Print labels (N) — only the ticked labels print.",
+      "Click an asset to preview its QR label, change the paper there, and 🖨 Print this label."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "QR labels: list, tick & print, preview",
     "items": [
       "The labels page lists every asset straight away, grouped by model (biggest first), with filters for country, site, asset type, status and search.",

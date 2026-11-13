@@ -6,7 +6,6 @@
 const lbEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let lbAll = [], lbAdmin = false, lbOpen = new Set();
 const lbSel = new Set();
-let lbPrintIds = [], lbPreviewId = null;
 
 // ── List ─────────────────────────────────────────────────────────────────────
 async function loadList() {
@@ -76,110 +75,23 @@ function updateSel() {
   document.getElementById('lb-selinfo').textContent = n ? `${n} selected` : 'Tick assets (or a whole model) to print';
 }
 
-// ── Label HTML ───────────────────────────────────────────────────────────────
+// ── Preview / print: shared with Stocktake (public/js/label-print.js) ─────────
 const paper = () => document.getElementById('lb-mode').value;
-function smallLabel(l) {
-  return `<div class="lbl"><div class="lbl-qr">${l.svg}</div>
-    <div class="lbl-t"><div class="lbl-co">HAYAT · IT ASSET</div><div class="lbl-code">${lbEsc(l.code || '#' + l.id)}</div>
-      <div>${lbEsc(l.model)}</div><div>SN ${lbEsc(l.serial || '—')}</div>${l.pc ? `<div>${lbEsc(l.pc)}</div>` : ''}<div class="lbl-id">${lbEsc(l.country)}${l.site && l.site !== '0' ? ' · ' + lbEsc(l.site) : ''} · #${l.id}</div>
-      ${l.printed != null ? `<div class="lbl-adm">printed ${l.printed}× · scanned ${l.scanned}×</div>` : ''}</div></div>`;
-}
-const PART_MARK = { ok: ['✓', 'usable', 'pt-ok'], bad: ['✗', 'broken', 'pt-bad'], used: ['↪', 'used', 'pt-used'], '': ['?', 'not checked', 'pt-unk'] };
-function tallLabel(l) {
-  const real = (v) => (v && String(v).trim() !== '0' ? String(v).trim() : '');   // some records hold "0" for empty
-  const row = (k, v) => (real(v) ? `<div class="tl-r"><span>${k}</span><b>${lbEsc(real(v))}</b></div>` : '');
-  const parts = l.parts ? `<div class="tl-parts"><div class="tl-ph">🔩 Spare parts · <b>${lbEsc(l.condition || '')}</b></div>
-      ${l.parts.map(p => { const m = PART_MARK[p.state] || PART_MARK['']; return `<div class="tl-p ${m[2]}"><span>${lbEsc(p.part)}</span><b>${m[0]} ${m[1]}</b></div>`; }).join('')}
-      ${l.partsNote ? `<div class="tl-note">${lbEsc(l.partsNote)}</div>` : ''}
-      ${l.partsChecked ? `<div class="tl-small">checked ${lbEsc(l.partsChecked)}</div>` : '<div class="tl-small">parts not checked yet</div>'}</div>` : '';
-  return `<div class="tl">
-    <div class="tl-co">HAYAT · IT ASSET</div>
-    <div class="tl-qr">${l.svg}</div>
-    <div class="tl-code">${lbEsc(l.code || '#' + l.id)}</div>
-    <div class="tl-model">${lbEsc([l.type, l.model].filter(Boolean).join(' · '))}</div>
-    <div class="tl-st tl-st-${lbEsc(String(l.status).toLowerCase())}">${lbEsc(l.status || '')}</div>
-    <div class="tl-info">${row('Serial', l.serial)}${row('PC No', l.pc)}${row('Place', [l.country, real(l.site)].filter(Boolean).join(' · '))}
-      ${row('Dept', l.department)}${l.status !== 'Broken' ? row('Holder', l.holder) : ''}${row('Bought', l.purchase)}</div>
-    ${parts}
-    <div class="tl-foot">Scan to open in Hayat IT tools · #${l.id}${l.printed != null ? `<span class="lbl-adm"> · printed ${l.printed}× · scanned ${l.scanned}×</span>` : ''}</div>
-  </div>`;
-}
-const labelHtml = (l) => (paper() === 'tall' ? tallLabel(l) : smallLabel(l));
-
-// Paper size for printing: A4 sheet · label printer 63.5 × 38.1 mm · tall 65 × 140 mm.
-function setPaper(mode) {
-  document.body.classList.toggle('lbl-single', mode === 'single');
-  document.body.classList.toggle('lbl-tallmode', mode === 'tall');
-  let st = document.getElementById('lb-page');
-  if (!st) { st = document.createElement('style'); st.id = 'lb-page'; document.head.appendChild(st); }
-  st.textContent = mode === 'tall' ? '@media print { @page { size: 65mm 140mm; margin: 0; } }'
-    : mode === 'single' ? '@media print { @page { size: 63.5mm 38.1mm; margin: 0; } }' : '';
-}
-
-// ── Preview (click an asset) ─────────────────────────────────────────────────
-async function preview(id) {
-  lbPreviewId = id;
-  const a = lbAll.find(x => x.id === id) || {};
-  document.getElementById('pv-title').textContent = `Label — ${a.code || '#' + id}`;
-  document.getElementById('pv-body').innerHTML = '<p class="text-muted">Loading…</p>';
-  document.getElementById('pv-overlay').classList.add('open');
-  try {
-    const [l] = await apiGet('/api/stocktake/labels?ids=' + id);
-    document.getElementById('pv-body').innerHTML = l ? `<div class="pv-wrap ${paper() === 'tall' ? 'pv-tall' : ''}">${labelHtml(l)}</div>
-      <p class="text-muted text-sm" style="margin:10px 0 0;text-align:center">Paper: ${lbEsc(document.getElementById('lb-mode').selectedOptions[0].textContent)}</p>` : 'Not found';
-  } catch { document.getElementById('pv-body').innerHTML = '<p class="text-muted">Could not load.</p>'; }
-}
-
-// ── Print (selected or the previewed one) ────────────────────────────────────
-async function askPurpose(ids) {
-  if (!ids.length) { showToast('Tick at least one asset', 'error'); return; }
-  if (!canEdit()) { showToast('Only admins / editors can print labels', 'error'); return; }
-  lbPrintIds = ids;
-  let open = [];
-  try { open = (await apiGet('/api/stocktake')).filter(t => t.status === 'open'); } catch { open = []; }
-  const opts = ['First label (new asset / never labelled)', 'Replacement — label damaged or lost', ...open.map(t => 'For stocktake: ' + t.name), 'Other'];
-  document.getElementById('pp-n').textContent = `${ids.length} label${ids.length === 1 ? '' : 's'}`;
-  document.getElementById('pp-list').innerHTML = opts.map((o, i) => `<label class="pp-opt"><input type="radio" name="pp" value="${lbEsc(o)}"${i === 0 ? ' checked' : ''}> ${lbEsc(o)}</label>`).join('');
-  document.getElementById('pp-other').value = '';
-  document.getElementById('pp-overlay').classList.add('open');
-}
-async function printNow() {
-  let purpose = (document.querySelector('input[name="pp"]:checked') || {}).value || '';
-  const note = document.getElementById('pp-other').value.trim();
-  if (purpose === 'Other') { purpose = note; if (!purpose) { showToast('Write what the labels are for', 'error'); return; } }
-  else if (note) purpose += ' — ' + note;
-  const btn = document.getElementById('pp-ok'); btn.disabled = true;
-  try {
-    const labels = await apiGet('/api/stocktake/labels?ids=' + lbPrintIds.join(','));
-    await apiPost('/api/stocktake/labels/printed', { ids: lbPrintIds, purpose });
-    document.getElementById('lb-sheet').innerHTML = labels.map(labelHtml).join('');
-    document.getElementById('pp-overlay').classList.remove('open');
-    document.getElementById('pv-overlay').classList.remove('open');
-    setTimeout(() => { window.print(); loadList(); }, 250);
-  } catch (e) { let m = 'Could not print'; try { m = JSON.parse(e.message).error || m; } catch {} showToast(m, 'error'); }
-  finally { btn.disabled = false; }
-}
+function preview(id) { LabelPrint.preview(id, paper()); }
 
 document.addEventListener('DOMContentLoaded', () => {
   const p = new URLSearchParams(location.search);
   if (['sheet', 'single', 'tall'].includes(p.get('paper'))) document.getElementById('lb-mode').value = p.get('paper');
-  setPaper(document.getElementById('lb-mode').value);
   if (p.get('ids')) p.get('ids').split(',').map(Number).filter(Boolean).forEach(id => lbSel.add(id));
   if (p.get('site')) document.getElementById('lb-site').value = p.get('site');
   if (p.get('status')) document.getElementById('lb-status').value = p.get('status');
   let tmr;
   document.getElementById('lb-q').addEventListener('input', () => { clearTimeout(tmr); tmr = setTimeout(loadList, 300); });
   ['lb-country', 'lb-site', 'lb-type', 'lb-status'].forEach(id => document.getElementById(id).addEventListener('change', loadList));
-  document.getElementById('lb-mode').addEventListener('change', (e) => { setPaper(e.target.value); if (document.getElementById('pv-overlay').classList.contains('open') && lbPreviewId) preview(lbPreviewId); });
-  document.getElementById('lb-print').addEventListener('click', () => askPurpose([...lbSel]));
+  document.getElementById('lb-print').addEventListener('click', () => LabelPrint.print([...lbSel], paper(), loadList));
   document.getElementById('lb-all').addEventListener('click', () => selectShown(true));
   document.getElementById('lb-none').addEventListener('click', () => selectShown(false));
   document.getElementById('lb-expand').addEventListener('click', () => { const g = groups(); const allOpen = g.every(([m]) => lbOpen.has(m)); lbOpen = allOpen ? new Set() : new Set(g.map(([m]) => m)); renderList(); });
-  document.getElementById('pv-print').addEventListener('click', () => { if (lbPreviewId) askPurpose([lbPreviewId]); });
-  ['pv-close', 'pv-x'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('pv-overlay').classList.remove('open')));
-  ['pp-cancel', 'pp-close'].forEach(id => document.getElementById(id).addEventListener('click', () => document.getElementById('pp-overlay').classList.remove('open')));
-  document.getElementById('pp-ok').addEventListener('click', printNow);
-  // Country list fills after login (data-countries); then load.
   if (p.get('country')) { const cs = document.getElementById('lb-country'); cs.innerHTML += `<option selected>${lbEsc(p.get('country'))}</option>`; cs.value = p.get('country'); }
   loadList();
 });
