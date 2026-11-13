@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Reports page: one line per report",
+    "items": [
+      "Reports are listed one per line — name and description on the left, Excel / PDF / HTML on the right — grouped as before; team-only reports are tagged (IT & HR, IT, admins)."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "KPIs: data quality by asset type · 7 new reports",
     "items": [
       "KPIs → Data quality is now a table by asset type × country, with what is missing (no serial / asset code / PC No – AD Name / duplicate serial).",
