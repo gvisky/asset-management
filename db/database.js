@@ -1096,6 +1096,39 @@ async function migrate() {
       data     TEXT NOT NULL,
       PRIMARY KEY (month, country));`);
 
+  // "My devices": a personal link IT sends to a staff member, who checks (by their work email) and confirms
+  // the assets registered to them (routes/confirm.js). Only a hash of the link's secret is stored.
+  await backend.script(`CREATE TABLE IF NOT EXISTS confirm_links (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      person_id     INTEGER NOT NULL,
+      email         TEXT    NOT NULL,
+      token_hash    TEXT    NOT NULL UNIQUE,
+      created_by    TEXT    DEFAULT '',
+      created_at    TEXT    DEFAULT (datetime('now')),
+      expires_at    TEXT    NOT NULL,
+      opened_at     TEXT    DEFAULT NULL,
+      verified_at   TEXT    DEFAULT NULL,
+      confirmed_at  TEXT    DEFAULT NULL,
+      attempts      INTEGER NOT NULL DEFAULT 0,
+      revoked       INTEGER NOT NULL DEFAULT 0,
+      ip            TEXT    DEFAULT '');
+    CREATE INDEX IF NOT EXISTS idx_confirm_links_person ON confirm_links(person_id);
+    CREATE TABLE IF NOT EXISTS asset_confirmations (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      link_id       INTEGER NOT NULL,
+      person_id     INTEGER NOT NULL,
+      email         TEXT    DEFAULT '',
+      asset_id      INTEGER NOT NULL,
+      asset_label   TEXT    DEFAULT '',
+      result        TEXT    NOT NULL,                -- 'have' | 'not_have'
+      note          TEXT    DEFAULT '',
+      signed_name   TEXT    DEFAULT '',
+      confirmed_at  TEXT    DEFAULT (datetime('now')),
+      ip            TEXT    DEFAULT '',
+      user_agent    TEXT    DEFAULT '');
+    CREATE INDEX IF NOT EXISTS idx_asset_conf_person ON asset_confirmations(person_id);
+    CREATE INDEX IF NOT EXISTS idx_asset_conf_asset ON asset_confirmations(asset_id);`);
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");

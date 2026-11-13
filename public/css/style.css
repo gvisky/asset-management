@@ -1137,3 +1137,29 @@ body.lbl-sqmode .lb-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
   body.lp-printing.lbl-sqmode #lp-sheet, body.lbl-sqmode #lb-sheet { display: block; }
   body.lbl-sqmode .sq { border: 0; page-break-after: always; }
 }
+/* My devices (public confirmation page) */
+.md-body { background: #f1f5f9; min-height: 100vh; display: block; }
+.md-wrap { max-width: 640px; margin: 0 auto; padding: 28px 16px 40px; }
+.md-brand { font-size: 15px; color: #1e293b; margin-bottom: 14px; }
+.md-card { border: none; box-shadow: 0 4px 20px rgba(15,23,42,.08); }
+.md-h { font-size: 20px; margin: 0 0 4px; }
+.md-h3 { font-size: 14px; margin: 18px 0 8px; color: #334155; }
+.md-form { display: grid; gap: 8px; margin-top: 14px; }
+.md-btn { justify-content: center; width: 100%; padding: 11px; font-size: 15px; margin-top: 6px; }
+.md-err { color: #dc2626; font-size: 13px; min-height: 1px; margin: 6px 0; }
+.md-dev { border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: grid; gap: 8px; background: #fff; }
+.md-dev-ok { border-color: #86efac; background: #f0fdf4; } .md-dev-no { border-color: #fca5a5; background: #fef2f2; }
+.md-ch { display: flex; gap: 8px; flex-wrap: wrap; }
+.md-opt { flex: 1 1 140px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 10px; cursor: pointer; font-weight: 600; font-size: 14px; display: flex; gap: 6px; align-items: center; background: #fff; }
+.md-opt.ok:has(input:checked) { border-color: #16a34a; background: #dcfce7; } .md-opt.no:has(input:checked) { border-color: #dc2626; background: #fee2e2; }
+.md-res { font-weight: 700; font-size: 13px; } .md-res.ok { color: #15803d; } .md-res.no { color: #b91c1c; }
+.md-agree { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin: 6px 0; line-height: 1.4; }
+.md-agree input { margin-top: 3px; }
+.md-done { background: #dcfce7; border-radius: 8px; padding: 10px 12px; margin: 12px 0; font-size: 14px; }
+.md-stop { text-align: center; padding: 18px 6px; }
+.md-big { font-size: 44px; margin-bottom: 8px; }
+.md-foot { font-size: 12px; color: #64748b; text-align: center; margin-top: 14px; line-height: 1.5; }
+.mdc-msg { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; background: #fff; font-size: 13.5px; max-height: 280px; overflow: auto; }
+.mdc-st { font-size: 12.5px; margin: 0; padding-left: 18px; }
+.mdc-st li { margin: 2px 0; }
+.mdc-msg table { width: auto; border: 0; margin: 8px 0; } .mdc-msg td { padding: 0; border: 0; } .mdc-msg tr:hover td { background: #1a56db; }
