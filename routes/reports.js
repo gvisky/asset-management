@@ -5,6 +5,7 @@ const { buildExcelReport } = require('../lib/report-excel');
 const { buildPdfReport } = require('../lib/report-pdf');
 const D = require('../lib/report-dashboards');
 const { buildHtmlReport } = require('../lib/report-html');
+const { extraReports, ReportForbidden } = require('../lib/report-extra');
 const { requireAuth } = require('../middleware/auth');
 const { ASSET_COLUMNS } = require('../lib/asset-columns');
 const { PERSONNEL_COLUMNS } = require('../lib/personnel-columns');
@@ -315,12 +316,12 @@ router.get('/:name', wrap(async (req, res) => {
   const pdf = /\.pdf$/i.test(raw) || req.query.format === 'pdf';
   const html = /\.html$/i.test(raw) || req.query.format === 'html';
   const name = raw.replace(/\.(xlsx|pdf|html)$/i, '');
-  const builder = REPORTS[name];
+  const builder = REPORTS[name] || extraReports[name];
   if (!builder) return res.status(404).json({ error: 'Unknown report' });
 
   let rep;
   try { rep = await builder(req); }
-  catch (e) { if (e instanceof Forbidden) return res.status(403).json({ error: e.message }); throw e; }
+  catch (e) { if (e instanceof Forbidden || e instanceof ReportForbidden) return res.status(403).json({ error: e.message }); throw e; }
   const meta = reportMeta(req);
   const stamp = new Date().toISOString().slice(0, 10);
   // Always serve a fresh export — never a cached copy (re-downloads after a sync).

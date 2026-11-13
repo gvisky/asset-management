@@ -1,6 +1,7 @@
 /* Reports & Export page logic */
 
 const REPORTS = [
+  { group: 'Overview', id: 'kpi', title: 'KPIs', desc: 'Utilisation and data quality by asset type × country; ghost assets, repair time, leaver recovery and depreciation per country.' },
   { group: 'Inventory', id: 'assets',   title: 'Asset Inventory',  desc: 'Every field we hold, keyed by ID — edit & re-upload below to sync.' },
   { group: 'Inventory', id: 'users',    title: 'User Inventory',   desc: 'All people, keyed by ID — edit & re-upload below to sync.' },
   { group: 'Inventory', id: 'servers',  title: 'Server Inventory', desc: 'All servers with hostname, IP, OS, specs.' },
@@ -9,8 +10,14 @@ const REPORTS = [
   { group: 'Devices & users', id: 'devices',  title: 'Devices (Intune / Entra)', desc: 'Every device of AD users: compliance, last check-in / sign-in, linked asset — plus a sheet of differences to check.' },
   { group: 'Devices & users', id: 'activity', title: 'User activity (AD / Intune / Entra)', desc: 'AD account, last AD logon, Intune check-in, Entra sign-in, days since last seen — and who needs a check.', teams: ['IT', 'HR'] },
   { group: 'Devices & users', id: 'offboarding', title: 'Offboarding Reclaim', desc: 'Leaving personnel and the assets they hold.' },
+  { group: 'Devices & users', id: 'leavers', title: 'Leavers — return checklist', desc: 'Every leaver\'s assets, Intune devices, M365 licence and AD account — done / late / open — and the 7-day recovery per country.', teams: ['IT', 'HR'] },
+  { group: 'Devices & users', id: 'm365', title: 'Microsoft 365 licence reclaim', desc: 'Leavers still licensed, users with no activity for 60+ days and never-active accounts, per country and licence.' },
   { group: 'Maintenance', id: 'broken',      title: 'Broken & Stock + spare parts', desc: 'Broken and stock devices with the parts check of each broken laptop, spare parts per model and in total.' },
   { group: 'Maintenance', id: 'maintenance', title: 'Open Maintenance', desc: 'Open repairs/services across assets and servers.' },
+  { group: 'Lifecycle & audit', id: 'stocktakes', title: 'Stocktakes (QR audit)', desc: 'Every stocktake with found / elsewhere / outside filter / unknown / missing, all scans, and the assets missing in closed stocktakes.' },
+  { group: 'Lifecycle & audit', id: 'custody', title: 'Handover & return (e-signed)', desc: 'All signed handover / return records with person, asset, IT member, link to the PDF and its SHA-256.' },
+  { group: 'Lifecycle & audit', id: 'depreciation', title: 'Depreciation & book value', desc: 'Book value of every asset (straight-line, 5 years), fully depreciated but still Active, ending in 12 months.' },
+  { group: 'Lifecycle & audit', id: 'qrlog', title: 'QR labels & scans log', desc: 'Every label print with its purpose, every QR scan (who, when, where) and every photo.', admin: true },
   { group: 'Maintenance', id: 'warranty',    title: 'Warranty Due',     desc: 'Assets & servers expiring/expired within 90 days.' },
   { group: 'IT', id: 'health',   title: 'System Health', desc: 'Collectors, the latest status of every check, and the history of status changes.', teams: ['IT'] },
   { group: 'IT', id: 'licenses', title: 'Licenses',      desc: 'Licenses with seats used and renewal dates.' },
@@ -35,7 +42,7 @@ function card(r) {
 // Reports grouped by area; reports for one team only are shown to that team.
 function renderReports(u) {
   const team = u && u.team;
-  const list = REPORTS.filter(r => !r.teams || r.teams.includes(team));
+  const list = REPORTS.filter(r => (!r.teams || r.teams.includes(team)) && (!r.admin || (u && u.role === 'admin')));
   const groups = [...new Set(list.map(r => r.group))];
   document.getElementById('report-grid').innerHTML = groups.map(g =>
     `<div class="rep-group"><div class="rep-group-title">${g}</div><div class="stat-grid">${list.filter(r => r.group === g).map(card).join('')}</div></div>`).join('');
