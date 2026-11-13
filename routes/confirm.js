@@ -15,6 +15,12 @@
    Assets of a person = Asset Inventory rows whose AD Name equals the local part of their email (same rule
    as the Assets column in User Inventory).
 
+   Open link ("ask everyone", easier): one link for all staff (or one country), e.g. in a mass email / Teams
+   post. The person types their work email (main or second); when it is in User Inventory their devices are
+   shown and they confirm. A confirm_links row (campaign_id) is made per person, so status, report and the
+   signed forms work the same. Weaker than the personal link: anyone who knows a colleague's email could
+   open their list — every answer keeps IP / browser, and wrong emails are limited per IP.
+
    IT admin (logged in):
      GET  /api/confirm/person/:id        status: links, last confirmation per asset, current assets
      POST /api/confirm/person/:id/link   new link → { url, expires_at, … }   (old links stop working)
@@ -112,6 +118,36 @@ admin.post('/person/:id/policy', wrap(async (req, res) => {
   res.json({ ok: true, mode: mobileMode({ ...p, mobile_policy: v }) });
 }));
 
+// ── Open links ("ask everyone") ──
+const { scopeList } = require('../lib/scope');
+admin.get('/campaigns', wrap(async (req, res) => {
+  const sc = scopeList(req);
+  const rows = await all(`SELECT c.*, (SELECT COUNT(*) FROM confirm_links l WHERE l.campaign_id = c.id) AS opened,
+      (SELECT COUNT(*) FROM confirm_links l WHERE l.campaign_id = c.id AND l.confirmed_at IS NOT NULL) AS confirmed
+      FROM confirm_campaigns c ORDER BY c.id DESC LIMIT 30`);
+  res.json({ now: nowSql(), list: rows.filter(c => !sc || (c.country && sc.includes(c.country))).map(c => ({ ...c, url: `${origin(req)}/my-devices.html#t=${c.token}` })) });
+}));
+admin.post('/campaigns', wrap(async (req, res) => {
+  const sc = scopeList(req);
+  let country = String(req.body.country || '').trim();
+  if (sc && !sc.includes(country)) country = sc[0];          // regional admins: their country only
+  const days = Math.min(90, Math.max(1, Number(req.body.days) || 14));
+  const name = String(req.body.name || '').trim().slice(0, 80) || `Device check ${new Date().toISOString().slice(0, 10)}${country ? ' — ' + country : ''}`;
+  const token = crypto.randomBytes(18).toString('base64url');
+  const expires = new Date(Date.now() + days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+  await run('INSERT INTO confirm_campaigns (name, country, token, created_by, expires_at) VALUES (?, ?, ?, ?, ?)', [name, country, token, req.user.username, expires]);
+  await audit(req.user, 'CONFIRM_LINK', null, `My devices: open link "${name}" made (${country || 'all countries'}), valid until ${expires} UTC`);
+  res.json({ name, country, expires_at: expires, url: `${origin(req)}/my-devices.html#t=${token}`, sender: req.user.full_name || req.user.username });
+}));
+admin.post('/campaigns/:id/stop', wrap(async (req, res) => {
+  const c = await get('SELECT * FROM confirm_campaigns WHERE id = ?', [Number(req.params.id)]);
+  const sc = scopeList(req);
+  if (!c || (sc && !sc.includes(c.country))) return res.status(404).json({ error: 'Not found' });
+  await run('UPDATE confirm_campaigns SET revoked = 1 WHERE id = ?', [c.id]);
+  await audit(req.user, 'CONFIRM_LINK', null, `My devices: open link "${c.name}" stopped`);
+  res.json({ ok: true });
+}));
+
 admin.post('/person/:id/link', wrap(async (req, res) => {
   const p = await personFor(req, res); if (!p) return;
   if (!normEmail(p.email).includes('@')) return res.status(400).json({ error: 'This person has no work email in User Inventory' });
@@ -140,9 +176,37 @@ pub.use((req, res, next) => {
   next();
 });
 
+const campaignOf = async (token) => (token.length >= 20 ? get('SELECT * FROM confirm_campaigns WHERE token = ?', [token]) : null);
+const campaignOk = (c) => c && !c.revoked && c.expires_at >= nowSql();
+// Open link: wrong / unknown emails per IP — 10 per hour.
+const misses = new Map();
+const missCount = (ip) => (misses.get(ip) || []).filter(t => Date.now() - t < 3600000).length;
 async function linkFor(req, res) {
   const token = String((req.body && req.body.token) || '');
-  const l = token.length >= 20 ? await get('SELECT * FROM confirm_links WHERE token_hash = ?', [hash(token)]) : null;
+  let l = token.length >= 20 ? await get('SELECT * FROM confirm_links WHERE token_hash = ?', [hash(token)]) : null;
+  if (!l) {
+    const c = await campaignOf(token);
+    if (c) {
+      if (!campaignOk(c)) { res.status(410).json({ state: 'expired', error: 'This link has ended. Please ask IT.' }); return null; }
+      const ip = clientIp(req);
+      if (missCount(ip) >= 10) { res.status(429).json({ state: 'locked', error: 'Too many emails that are not in our list — please wait an hour or ask IT.' }); return null; }
+      const typed = normEmail(req.body.email);
+      const p = typed ? await get(`SELECT id, email FROM personnel WHERE (LOWER(TRIM(email)) = ? OR LOWER(TRIM(COALESCE(ad_email, ''))) = ?)
+          AND status <> 'deleted' AND COALESCE(ad_resource, 0) = 0${c.country ? ' AND country = ?' : ''} ORDER BY id LIMIT 1`, c.country ? [typed, typed, c.country] : [typed, typed]) : null;
+      if (!p) {
+        misses.set(ip, [...(misses.get(ip) || []).filter(t => Date.now() - t < 3600000), Date.now()]);
+        await audit(null, 'CONFIRM_REFUSED', null, `My devices (open link #${c.id}): email "${String(req.body.email || '').slice(0, 80)}" not found`);
+        res.status(403).json({ state: 'verify', error: 'This email is not in our list. Please type your company email, or ask IT.' }); return null;
+      }
+      l = await get('SELECT * FROM confirm_links WHERE campaign_id = ? AND person_id = ? ORDER BY id DESC LIMIT 1', [c.id, p.id]);
+      if (!l) {
+        await run(`INSERT INTO confirm_links (person_id, email, token_hash, created_by, expires_at, campaign_id, opened_at, ip) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [p.id, normEmail(p.email), hash(crypto.randomBytes(24).toString('base64url')), `open link: ${c.name || '#' + c.id}`, c.expires_at, c.id, nowSql(), ip]);
+        l = await get('SELECT * FROM confirm_links WHERE campaign_id = ? AND person_id = ? ORDER BY id DESC LIMIT 1', [c.id, p.id]);
+      }
+      return l;
+    }
+  }
   if (!l || l.revoked) { res.status(404).json({ state: 'invalid', error: 'This link is not valid any more. Please ask IT for a new one.' }); return null; }
   if (l.expires_at < nowSql() && !l.confirmed_at) { res.status(410).json({ state: 'expired', error: 'This link has expired. Please ask IT for a new one.' }); return null; }
   if (l.attempts >= MAX_ATTEMPTS && !l.verified_at) { res.status(423).json({ state: 'locked', error: 'This link is locked after too many wrong emails. Please ask IT for a new one.' }); return null; }
@@ -163,6 +227,11 @@ async function checkEmail(req, res, l) {
 }
 
 pub.post('/open', wrap(async (req, res) => {
+  const c = await campaignOf(String((req.body && req.body.token) || ''));
+  if (c) {
+    if (!campaignOk(c)) return res.status(410).json({ state: 'expired', error: 'This link has ended. Please ask IT.' });
+    return res.json({ state: 'verify', open: true, campaign: c.name || '', first_name: '' });
+  }
   const l = await linkFor(req, res); if (!l) return;
   if (!l.opened_at) await run('UPDATE confirm_links SET opened_at = ?, ip = ? WHERE id = ?', [nowSql(), clientIp(req), l.id]);
   const p = await get('SELECT display_name FROM personnel WHERE id = ?', [l.person_id]);

@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-13",
+    "title": "My devices: one open link for everyone",
+    "items": [
+      "User Inventory → ✉ Ask everyone to confirm (IT admin): make one link for all staff or one country, with a ready message — 📋 Copy it into one email or a Teams post.",
+      "Each person opens it, types their company email (…@hayat.com.tr or their second email), sees their devices and presses Confirm — no personal link needed.",
+      "Answers appear like the personal links: ✅ confirmed in User Inventory, the My devices report and the signed forms. The list shows how many confirmed per link; Stop ends a link.",
+      "Note: easier but weaker than the personal 📨 link — anyone who knows a colleague's email could open that colleague's list. Each answer keeps IP / browser; emails not in the list are limited to 10 per hour per network address."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "My devices: signed Delivery form & Custody Agreement",
     "items": [
       "User Inventory → click \"✅ confirmed … 📄\" (admins and editors) to open the signed forms of that confirmation.",

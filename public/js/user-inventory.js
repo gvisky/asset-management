@@ -189,6 +189,7 @@ async function loadPeople(page = 1) {
     lastAdImport = result.ad_last_import || null;
     adCountries = result.ad_countries || [];
     document.getElementById('btn-dirsync-upload').style.display = result.can && result.can.adUpload ? '' : 'none';
+    document.getElementById('btn-askall').style.display = canEditUsers ? '' : 'none';
     peopleBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
@@ -782,4 +783,68 @@ async function openSignedForms(id) {
     ${d.not_with.length ? `<p class="text-sm" style="color:#b91c1c;margin-top:10px">Not on the forms (answered "Not with me"): ${d.not_with.map(n => esc(n.label) + (n.note ? ` — “${esc(n.note)}”` : '')).join('; ')}</p>` : ''}
     <p class="text-muted text-sm" style="margin-top:10px">To send to the user: open the form → Print → <b>Save as PDF</b>, then attach the PDF to an email to ${esc([d.person.email, d.person.ad_email].filter(Boolean).join(' / '))}.</p>`;
   f.innerHTML = '<button class="btn btn-ghost" onclick="document.getElementById(\'mdc-ov\').classList.remove(\'open\')">Close</button>';
+}
+
+// ── My devices: open link for everyone (they type their email) ──
+async function openCampaigns(made) {
+  const ov = mdcOverlay(); ov.classList.add('open');
+  const b = document.getElementById('mdc-b'), f = document.getElementById('mdc-f');
+  document.getElementById('mdc-t').textContent = '✉️ My devices — ask everyone to confirm';
+  b.innerHTML = '<p class="text-muted">Loading…</p>';
+  let d = { list: [], now: '' };
+  try { d = await apiGet('/api/confirm/campaigns'); } catch {}
+  const countries = [...new Set([...document.querySelectorAll('#filter-country option')].map(o => o.value).filter(Boolean))];
+  const st = (c) => (c.revoked ? 'stopped' : c.expires_at < d.now ? 'ended' : `open until ${esc(String(c.expires_at).slice(0, 10))}`);
+  b.innerHTML = `<p class="text-sm" style="margin-top:0">One link for everyone: send it in one email / Teams post. Each person opens it, <b>types their company email</b>
+      (…@hayat.com.tr or their second email), sees the devices registered to them and presses <b>Confirm</b>. Answers show in this list, the report and the signed forms like the personal links.</p>
+    <p class="text-sm" style="color:#b45309">⚠ Easier but weaker than the personal 📨 link: anyone who knows a colleague's email could open that colleague's list. Each answer keeps the IP / browser, and wrong emails are limited.</p>
+    <div class="qe-grid" style="align-items:end">
+      <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="cp-name" placeholder="e.g. Q4 2026 device check"></div>
+      <div class="form-group"><label class="form-label">Who</label><select class="form-control" id="cp-country"><option value="">All countries</option>${countries.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
+      <div class="form-group"><label class="form-label">Open for (days)</label><input class="form-control" id="cp-days" type="number" min="1" max="90" value="14"></div>
+      <div class="form-group"><button class="btn btn-primary" id="cp-make" style="width:100%">✉ Make open link &amp; message</button></div>
+    </div>
+    <div id="cp-msg"></div>
+    <h4 style="margin:14px 0 6px">Open links</h4>
+    ${d.list.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Who</th><th>State</th><th>Confirmed</th><th></th></tr></thead><tbody>${d.list.map(c => `<tr>
+      <td><b>${esc(c.name)}</b><div class="text-muted text-sm">${esc(String(c.created_at).slice(0, 16))} UTC by ${esc(c.created_by)}</div></td><td>${esc(c.country || 'All countries')}</td>
+      <td class="text-sm">${st(c)}</td><td><b>${c.confirmed}</b> <span class="text-muted text-sm">/ ${c.opened} opened</span></td>
+      <td style="white-space:nowrap">${!c.revoked && c.expires_at >= d.now ? `<button class="btn btn-ghost btn-sm" onclick="campaignMessage(${jsArg(c.url)}, ${jsArg(c.name)}, ${jsArg(c.expires_at)}, ${jsArg(c.country)})">✉ Message</button>
+        <button class="btn btn-ghost btn-sm" onclick="stopCampaign(${c.id})">Stop</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<p class="text-muted text-sm">None yet.</p>'}`;
+  f.innerHTML = '<button class="btn btn-ghost" onclick="document.getElementById(\'mdc-ov\').classList.remove(\'open\')">Close</button>';
+  document.getElementById('cp-make').onclick = async () => {
+    try {
+      const r = await apiPost('/api/confirm/campaigns', { name: document.getElementById('cp-name').value, country: document.getElementById('cp-country').value, days: document.getElementById('cp-days').value });
+      await openCampaigns(); campaignMessage(r.url, r.name, r.expires_at, r.country);
+    } catch (e) { showToast('Could not make the link', 'error'); }
+  };
+  if (made) campaignMessage(...made);
+}
+function campaignMessage(url, name, expires, country) {
+  const until = String(expires).slice(0, 10), sender = (window.CURRENT_USER && (window.CURRENT_USER.full_name || window.CURRENT_USER.username)) || 'IT';
+  const subject = 'Please confirm your company devices';
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.5">
+<p>Dear colleagues,</p>
+<p>IT keeps a record of the company devices (laptops, phones, tablets …) registered to each of us. Please take one minute to check yours and confirm.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="border-radius:6px;background:#1a56db">
+<a href="${esc(url)}" style="display:inline-block;padding:11px 22px;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;background:#1a56db">✅ Check &amp; confirm my devices</a></td></tr></table>
+<p style="font-size:13px;color:#475569">Type your company email, check the list and press Confirm. Open until <b>${esc(until)}</b>.</p>
+<p>Thank you,<br>${esc(sender)} — IT</p></div>`;
+  const text = `Dear colleagues,\n\nIT keeps a record of the company devices registered to each of us. Please take one minute to check yours and confirm:\n\n${url}\n\nType your company email, check the list and press Confirm. Open until ${until}.\n\nThank you,\n${sender} — IT`;
+  document.getElementById('cp-msg').innerHTML = `<h4 style="margin:12px 0 6px">Message — ${esc(name)} <span class="text-muted text-sm">· subject: ${esc(subject)}</span></h4>
+    <div class="mdc-msg">${html}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-primary btn-sm" id="cp-copy">📋 Copy message</button>
+      <a class="btn btn-ghost btn-sm" href="mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}">✉️ Open in Outlook (plain text)</a>
+      <button class="btn btn-ghost btn-sm" id="cp-link">🔗 Copy link only</button></div>`;
+  document.getElementById('cp-copy').onclick = async () => {
+    try { await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]); showToast('Message copied — paste it into the email / Teams post'); }
+    catch { try { await navigator.clipboard.writeText(text); showToast('Copied as plain text'); } catch { showToast('Copy failed', 'error'); } }
+  };
+  document.getElementById('cp-link').onclick = async () => { try { await navigator.clipboard.writeText(url); showToast('Link copied'); } catch { showToast('Copy failed', 'error'); } };
+  document.getElementById('cp-msg').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function stopCampaign(id) {
+  if (!confirm('Stop this open link? People who did not confirm yet cannot use it any more.')) return;
+  try { await apiPost(`/api/confirm/campaigns/${id}/stop`, {}); showToast('Stopped'); openCampaigns(); } catch { showToast('Could not stop', 'error'); }
 }
