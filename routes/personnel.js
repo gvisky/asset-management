@@ -91,6 +91,7 @@ router.get('/', wrap(async (req, res) => {
         AND LOWER(a.ad_name) = LOWER(substr(p.email, 1, instr(p.email,'@') - 1))`;
   const data = await all(
     `SELECT p.*, (SELECT COUNT(*) FROM assets a WHERE ${adMatch}) AS asset_count,
+            (SELECT COUNT(*) FROM assets a WHERE ${adMatch} AND a.status = 'Active') AS active_count,
             (SELECT COUNT(*) FROM devices d WHERE d.person_id = p.id) AS device_count,
             ${INTUNE_LAST_SQL} AS intune_last, ${ENTRA_LAST_SQL} AS entra_last,
             (SELECT MAX(c.confirmed_at) FROM confirm_links c WHERE c.person_id = p.id) AS devices_confirmed_at,

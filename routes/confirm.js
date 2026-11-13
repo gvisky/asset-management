@@ -74,10 +74,11 @@ async function mobilesOf(person) {
 }
 const mobileLabel = (m) => `${m.kind} ${m.model || m.name}${m.serial ? ' · SN ' + m.serial : ''}${m.name && m.model ? ' · ' + m.name : ''}`.replace(/\s+/g, ' ').trim();
 
+// Only Active devices: Broken / Stock ones are kept by IT, the person does not hold them.
 async function assetsOf(person) {
   if (!localPart(person.email)) return [];
   return all(`SELECT id, asset_s4, asset_code, asset_type, brand_model, serial_no, computer_no, country, location, status
-      FROM assets WHERE deleted_at IS NULL AND TRIM(COALESCE(ad_name, '')) <> '' AND LOWER(TRIM(ad_name)) = ?
+      FROM assets WHERE deleted_at IS NULL AND status = 'Active' AND TRIM(COALESCE(ad_name, '')) <> '' AND LOWER(TRIM(ad_name)) = ?
       ORDER BY asset_type, brand_model, id`, [localPart(person.email)]);
 }
 const label = (a) => `${a.asset_type || 'Asset'} ${a.brand_model || ''} · ${a.asset_s4 || a.asset_code || '#' + a.id} · SN ${a.serial_no || '—'}`.replace(/\s+/g, ' ').trim();
