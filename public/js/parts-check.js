@@ -16,13 +16,14 @@ function pcxOverlay() {
     <div class="modal-header"><span class="modal-title" id="pcx-title">Parts check</span>
       <button class="modal-close" id="pcx-close" aria-label="Close">✕</button></div>
     <div class="modal-body" id="pcx-body"></div>
-    <div class="modal-footer"><button class="btn btn-ghost" id="pcx-cancel">Cancel</button>
+    <div class="modal-footer"><button class="btn btn-ghost" id="pcx-alt" style="margin-right:auto;display:none"></button><button class="btn btn-ghost" id="pcx-cancel">Cancel</button>
       <button class="btn btn-primary" id="pcx-save">Save</button></div></div>`;
   document.body.appendChild(ov);
   return ov;
 }
 
-function partsCheck({ title, parts, required }) {
+// alt: optional label of an extra button (e.g. "Edit asset info") — the promise then resolves with 'alt'.
+function partsCheck({ title, parts, required, alt }) {
   const p = parsePartsJson(parts);
   const ov = pcxOverlay();
   document.getElementById('pcx-title').textContent = title || 'Parts check';
@@ -39,15 +40,18 @@ function partsCheck({ title, parts, required }) {
   const tot = document.getElementById('pcx-total');
   const sync = () => { document.getElementById('pcx-parts').style.opacity = tot.checked ? .4 : 1; document.querySelectorAll('#pcx-parts input').forEach(i => { i.disabled = tot.checked; }); };
   tot.addEventListener('change', sync); sync();
+  const altBtn = document.getElementById('pcx-alt');
+  altBtn.style.display = alt ? '' : 'none'; altBtn.textContent = alt || '';
   ov.classList.add('open');
 
   return new Promise((resolve) => {
     const done = (val) => {
       ov.classList.remove('open');
-      ['pcx-save', 'pcx-cancel', 'pcx-close'].forEach(id => { document.getElementById(id).onclick = null; });
+      ['pcx-save', 'pcx-cancel', 'pcx-close', 'pcx-alt'].forEach(id => { document.getElementById(id).onclick = null; });
       resolve(val);
     };
     document.getElementById('pcx-cancel').onclick = () => done(null);
+    document.getElementById('pcx-alt').onclick = () => done('alt');
     document.getElementById('pcx-close').onclick = () => done(null);
     document.getElementById('pcx-save').onclick = () => {
       const body = { total: tot.checked, note: document.getElementById('pcx-note').value, parts: {} };

@@ -43,6 +43,7 @@ function stAge(d) {
   const y = (Date.now() - t) / (365.25 * 864e5);
   return y < 1 ? `${Math.max(0, Math.round(y * 12))} mo` : `${y.toFixed(1)} y`;
 }
+const stBrokenLaptop = (a) => a.status === 'Broken' && String(a.asset_type || '').trim().toLowerCase() === 'laptop';
 function assetRow(a, extra = '') {
   const id = a.asset_id || a.id;
   const holder = a.status === 'Broken' ? '' : stReal(a.user_name) || stReal(a.ad_name);
@@ -55,7 +56,7 @@ function assetRow(a, extra = '') {
     <span class="text-sm">${stEsc(a.country || '')}${stReal(a.location) ? ' · ' + stEsc(a.location) : ''}<div class="text-muted">${holder ? '👤 ' + stEsc(holder) : ''}${stReal(a.department) ? (holder ? ' · ' : '') + stEsc(a.department) : ''}</div></span>
     <span class="text-sm sg-more">${bought}${warr ? ' · ' + warr : ''}<div class="text-muted">${a.condition ? '🔩 <b>' + stEsc(a.condition) + '</b>' + (stReal(a.remark) ? ' · ' : '') : ''}${stEsc(stReal(a.remark)).slice(0, 90)}</div></span>
     <span>${statusBadge(a.status)}</span>
-    <span class="sg-x" onclick="event.stopPropagation()">${extra}${canEdit() ? ` <button class="btn btn-ghost btn-sm" onclick="QuickEdit.open(${id}, stReload)" title="Edit this asset here">✏️ Edit</button>` : ''}</span></div>`;
+    <span class="sg-x" onclick="event.stopPropagation()">${extra}${canEdit() ? ` <button class="btn btn-ghost btn-sm" onclick="QuickEdit.open(${id}, stReload)" title="${stBrokenLaptop(a) ? 'Update its spare parts' : 'Edit this asset here'}">${stBrokenLaptop(a) ? '🔩 Parts' : '✏️ Edit'}</button>` : ''}</span></div>`;
 }
 // After a quick edit: reload the lists (keeps the tab, open groups and ticks).
 async function stReload() { if (!stCur) return; try { stData = await apiGet('/api/stocktake/' + stCur); renderBody(); } catch {} }
