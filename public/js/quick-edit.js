@@ -3,7 +3,7 @@
    Loads the full asset, lets you change the common fields, and saves the whole record back with
    PUT /api/assets/:id (same rules as Asset Inventory: Serial / Brand-Model / Asset Code are IT-only and
    follow the record lock; a holder change locks the record; IT admins can unlock here).
-   Setting a laptop to Broken asks for the parts check (parts-check.js). */
+   Setting a laptop to Broken asks for the parts check (parts-check.js); a broken laptop opens its spare parts first. */
 
 (function () {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -26,12 +26,21 @@
     document.getElementById('qe-s').onclick = save;
   }
 
-  async function open(id, onSaved) {
+  // A broken laptop is kept for its spare parts: Edit opens its parts check (usable / broken / used as spare);
+  // "Edit asset info" in that window opens the normal form.
+  async function open(id, onSaved, force) {
     ui(); done = onSaved || null;
-    document.getElementById('qe-b').innerHTML = '<p class="text-muted">Loading…</p>';
-    document.getElementById('qe-ov').classList.add('open');
     let a;
-    try { a = await apiGet('/api/assets/' + id); } catch (e) { document.getElementById('qe-b').innerHTML = `<p class="text-muted">${esc(errText(e, 'Could not load'))}</p>`; return; }
+    try { a = await apiGet('/api/assets/' + id); } catch (e) { showToast(errText(e, 'Could not load'), 'error'); return; }
+    if (!force && a.status === 'Broken' && String(a.asset_type || '').trim().toLowerCase() === 'laptop' && typeof partsCheck === 'function') {
+      const r = await partsCheck({ title: `🔩 Spare parts — ${a.asset_s4 || a.asset_code || '#' + a.id} · ${a.brand_model || ''}`, parts: a.parts, alt: '✏️ Edit asset info' });
+      if (r === 'alt') return open(id, onSaved, true);
+      if (!r) return;
+      try { await savePartsCheckFor(a.id, r); showToast('Spare parts saved'); if (done) done(a.id); }
+      catch (e) { showToast(errText(e, 'Could not save the parts check'), 'error'); }
+      return;
+    }
+    document.getElementById('qe-ov').classList.add('open');
     cur = a;
     const it = me().team === 'IT', itAdmin = it && me().role === 'admin';
     const protRO = !it || !!a.fields_locked, holdRO = !!a.user_locked;

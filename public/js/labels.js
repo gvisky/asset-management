@@ -85,7 +85,7 @@
             <span class="lg-c">${lbEsc(a.country)}${a.site && a.site !== '0' ? ' · ' + lbEsc(a.site) : ''}</span>
             <span class="lg-c lg-h">${lbEsc(a.holder || '')}</span>
             <span>${st(a.status)}</span>
-            <span class="lg-x" onclick="event.stopPropagation()">${lbAdmin ? `<span class="lg-adm" title="label printed · QR scanned">🏷 ${a.printed} · 📷 ${a.scanned}</span>` : ''}${edit ? ` <button class="btn btn-ghost btn-sm" onclick="QuickEdit.open(${a.id}, LabelsPanel.reload)" title="Edit this asset here">✏️</button>` : ''}</span>
+            <span class="lg-x" onclick="event.stopPropagation()">${lbAdmin ? `<span class="lg-adm" title="label printed · QR scanned">🏷 ${a.printed} · 📷 ${a.scanned}</span>` : ''}${edit ? ` <button class="btn btn-ghost btn-sm" onclick="QuickEdit.open(${a.id}, LabelsPanel.reload)" title="${a.status === 'Broken' && /^laptop$/i.test(String(a.type).trim()) ? 'Update its spare parts">🔩' : 'Edit this asset here">✏️'}</button>` : ''}</span>
           </div>`).join('')}</div>` : ''}</div>`;
     }).join('') : '<p class="text-muted" style="padding:14px">No assets match.</p>';
     document.querySelectorAll('.lg-head input[data-half]').forEach(i => { i.indeterminate = true; });

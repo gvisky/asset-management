@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Broken laptops: Edit opens the spare parts",
+    "items": [
+      "On Stocktake and QR labels, a broken laptop's button is now 🔩 Parts: it opens its spare-parts check (each part usable / broken / used as spare, Total broken, note) instead of the asset form.",
+      "Need to change the asset itself? Press ✏️ Edit asset info in that window."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Stocktake: more info, ✏️ Edit in place, collapsed models, QR labels panel",
     "items": [
       "Each asset line now also shows the ECC code, holder and department, purchase date with age, warranty end, remark, and the 🔩 parts condition of broken laptops.",
