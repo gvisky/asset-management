@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Stocktake: parts column for broken laptops",
+    "items": [
+      "Each broken laptop line has a Parts column: one tag per part — Scr, MB, RAM, KB, Bat, SSD, Chg — green ✓ usable, red ✗ broken, blue ↪ used as spare, grey ? not checked (or ✗ Total broken). Hover a tag for the full name.",
+      "A legend shows above the list when it holds broken laptops; the column updates right after you save 🔩 Parts."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Broken laptops: Edit opens the spare parts",
     "items": [
       "On Stocktake and QR labels, a broken laptop's button is now 🔩 Parts: it opens its spare-parts check (each part usable / broken / used as spare, Total broken, note) instead of the asset form.",
