@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-13",
+    "title": "KPIs: utilisation by asset type",
+    "items": [
+      "Utilisation is now a table: one row per asset type, one column per country — each cell is Active ÷ assets of that type, with counts and an Active / Stock / Broken bar. Types are never added together."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Stocktake: filters, print & scan log, photos",
     "items": [
       "New stocktake: choose Status (Active / Broken / Stock), Asset type and Department as well as country / site; assets scanned at the place but outside the filter are listed separately.",

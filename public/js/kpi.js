@@ -4,9 +4,6 @@ const kEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '
 let kData = null;
 
 const KPIS = [
-  { key: 'utilisation', title: 'Utilisation', unit: '%', good: (v) => v >= 85, warn: (v) => v >= 75,
-    target: 'target 85–90 %', help: 'Active assets ÷ all assets (stock and broken count as not in use).',
-    detail: (x) => `${x.active} active · ${x.stock} stock · ${x.broken} broken · ${x.total} total` },
   { key: 'ghost', title: 'Ghost assets', unit: '%', lowerBetter: true, good: (v) => v <= 1, warn: (v) => v <= 5,
     target: 'target 0 %', help: 'Registered but not found in the latest closed stocktake (and still on the register). Typical first audits find 15–30 %.',
     detail: (x) => x.value == null ? kEsc(x.note || 'no stocktake yet') + ' · <a href="/stocktake.html">start one →</a>'
@@ -35,7 +32,7 @@ const money = (n, cur) => { const v = Number(n) || 0; const s = v >= 1e9 ? (v / 
 function render() {
   const d = kData;
   if (!d.countries.length) { document.getElementById('kpi-main').innerHTML = '<p class="text-muted">No assets in your countries.</p>'; return; }
-  let h = '';
+  let h = utilisationHtml(d);
   for (const k of KPIS) {
     h += `<section class="card k-sec"><div class="card-header"><span class="card-title">${k.title} <span class="text-muted text-sm" style="font-weight:400">· ${k.target}</span></span>
       <span class="text-muted text-sm" title="${kEsc(k.help)}">ⓘ ${kEsc(k.help)}</span></div><div class="k-grid">`;
@@ -60,6 +57,24 @@ function render() {
         <td style="text-align:right">${x.ending12}</td><td style="text-align:right" class="text-muted">${x.without}</td></tr>`; }).join('')}
     </tbody></table></div><p class="text-muted text-sm" style="padding:0 18px 12px">"Fully depreciated but still Active" = book value 0, still in use → refresh candidates. Each asset's book value is in its detail view (Asset Inventory).</p></section>`;
   document.getElementById('kpi-main').innerHTML = h;
+}
+
+// Utilisation per asset type × country — each type has its own purpose, so no combined figure.
+function utilisationHtml(d) {
+  const uColor = (v) => (v == null ? '#94a3b8' : v >= 85 ? '#16a34a' : v >= 75 ? '#d97706' : '#dc2626');
+  const cell = (x) => {
+    if (!x) return '<td class="k-u k-u-none">—</td>';
+    const w = (n) => (x.total ? (n / x.total) * 100 : 0);
+    return `<td class="k-u" title="${x.active} active · ${x.stock} stock · ${x.broken} broken${x.other ? ' · ' + x.other + ' other' : ''} · ${x.total} total">
+      <b style="color:${uColor(x.value)}">${x.value}%</b> <span class="text-muted text-sm">${x.active}/${x.total}</span>
+      <div class="k-mix"><i style="width:${w(x.active)}%;background:#16a34a"></i><i style="width:${w(x.stock)}%;background:#d97706"></i><i style="width:${w(x.broken)}%;background:#dc2626"></i><i style="width:${w(x.other)}%;background:#94a3b8"></i></div></td>`;
+  };
+  return `<section class="card k-sec"><div class="card-header"><span class="card-title">Utilisation by asset type <span class="text-muted text-sm" style="font-weight:400">· target 85–90 %</span></span>
+    <span class="text-muted text-sm">ⓘ Active ÷ assets of that type, per country — types have different purposes, so they are not added together.
+      <span class="k-lg"><i style="background:#16a34a"></i>Active <i style="background:#d97706"></i>Stock <i style="background:#dc2626"></i>Broken</span></span></div>
+    <div class="table-wrap"><table class="k-ut"><thead><tr><th>Asset type</th>${d.countries.map(c => `<th>${kEsc(c)}</th>`).join('')}</tr></thead><tbody>
+    ${d.utilisation.map(r => `<tr><td><b>${kEsc(r.type)}</b> <span class="text-muted text-sm">${r.total}</span></td>${d.countries.map(c => cell(r.byCountry[c])).join('')}</tr>`).join('')}
+    </tbody></table></div></section>`;
 }
 
 async function load() {

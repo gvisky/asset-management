@@ -1,6 +1,7 @@
 /* KPI page — split by country (your countries only).
 
-   utilisation   Active ÷ all assets                                   target 85–90 %
+   utilisation   per ASSET TYPE and country: Active ÷ assets of that type (types serve different purposes, so
+                 they are never added together)                       target 85–90 %
    ghost assets  missing in the latest closed stocktake (per country / site), still on the register
    data quality  assets without missing info (same rule as Needs Attention) ÷ assets checked   target 98 %
    repair time   average days reported → done (Maintenance log, last 12 months), open repairs
@@ -42,11 +43,23 @@ router.get('/', wrap(async (req, res) => {
   const per = Object.fromEntries(countries.map(c => [c, { country: c }]));
   const ofC = (c) => assets.filter(a => (a.country || 'Unknown') === c);
 
-  // Utilisation
-  for (const c of countries) {
-    const l = ofC(c); const act = l.filter(a => a.status === 'Active').length;
-    per[c].utilisation = { value: pct(act, l.length), active: act, stock: l.filter(a => a.status === 'Stock').length, broken: l.filter(a => a.status === 'Broken').length, total: l.length };
-  }
+  // Utilisation — per asset type × country (a laptop fleet and a printer fleet are not comparable).
+  const typeOf = (a) => (String(a.asset_type || '').trim() || 'Type not set');
+  const typeTotals = new Map();
+  for (const a of assets) typeTotals.set(typeOf(a), (typeTotals.get(typeOf(a)) || 0) + 1);
+  const types = [...typeTotals.keys()].sort((x, y) => (x === 'Type not set') - (y === 'Type not set') || typeTotals.get(y) - typeTotals.get(x));
+  const utilisation = types.map(t => {
+    const row = { type: t, total: typeTotals.get(t), byCountry: {} };
+    for (const c of countries) {
+      const l = ofC(c).filter(a => typeOf(a) === t);
+      if (!l.length) continue;
+      const act = l.filter(a => a.status === 'Active').length;
+      row.byCountry[c] = { value: pct(act, l.length), active: act, stock: l.filter(a => a.status === 'Stock').length,
+        broken: l.filter(a => a.status === 'Broken').length, other: l.filter(a => !['Active', 'Stock', 'Broken'].includes(a.status)).length, total: l.length };
+    }
+    return row;
+  });
+  for (const c of countries) per[c].utilisation = Object.fromEntries(utilisation.filter(r => r.byCountry[c]).map(r => [r.type, r.byCountry[c].value]));
 
   // Data quality (same rule as Needs Attention)
   const { MISSING_PC_AD_SQL, NOT_FLAGGED_SQL, NO_FLAG_TYPES } = require('./assets').quality;
@@ -115,14 +128,14 @@ router.get('/', wrap(async (req, res) => {
   const month = new Date().toISOString().slice(0, 7);
   for (const c of countries) {
     const p = per[c];
-    const snap = { utilisation: p.utilisation.value, dataQuality: p.dataQuality.value, ghost: p.ghost.value, repair: p.repair.value, recovery: p.recovery.value, at: new Date().toISOString().slice(0, 10) };
+    const snap = { utilisationByType: p.utilisation, dataQuality: p.dataQuality.value, ghost: p.ghost.value, repair: p.repair.value, recovery: p.recovery.value, at: new Date().toISOString().slice(0, 10) };
     await run('INSERT INTO kpi_snapshots (month, country, data) VALUES (?, ?, ?) ON CONFLICT (month, country) DO UPDATE SET data = excluded.data', [month, c, JSON.stringify(snap)]);
   }
   const hist = countries.length ? await all(`SELECT * FROM kpi_snapshots WHERE month >= ? AND country IN (${countries.map(() => '?').join(',')}) ORDER BY month`,
     [new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 7), ...countries]) : [];
   for (const c of countries) per[c].trend = hist.filter(h => h.country === c).map(h => { let d = {}; try { d = JSON.parse(h.data); } catch { d = {}; } return { month: h.month, ...d }; });
 
-  res.json({ countries, per, targets: { utilisation: [85, 90], dataQuality: 98, ghost: 0, recovery: 95 },
+  res.json({ countries, per, utilisation, targets: { utilisation: [85, 90], dataQuality: 98, ghost: 0, recovery: 95 },
     depreciationYears: years, canEditYears: isITAdmin(req.user) && !scopeList(req) });
 }));
 
