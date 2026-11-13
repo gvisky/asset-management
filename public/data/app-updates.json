@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Small QR labels show the spare parts of broken laptops",
+    "items": [
+      "On the A4 sheet and label-printer labels (63.5 × 38.1 mm), a broken laptop now has a parts strip under the QR: ✓ usable · ✗ broken (struck through) · ↪ used as spare · ? not checked, for Scr, MB, RAM, KB, Bat, SSD, Chg.",
+      "A Total broken laptop shows \"✗ TOTAL BROKEN — no usable part\". Marks print clearly in black & white too."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Stocktake: parts column for broken laptops",
     "items": [
       "Each broken laptop line has a Parts column: one tag per part — Scr, MB, RAM, KB, Bat, SSD, Chg — green ✓ usable, red ✗ broken, blue ↪ used as spare, grey ? not checked (or ✗ Total broken). Hover a tag for the full name.",

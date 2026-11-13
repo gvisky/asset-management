@@ -10,11 +10,19 @@
   const real = (v) => (v && String(v).trim() !== '0' ? String(v).trim() : '');   // some records hold "0" for empty
   const PAPERS = { sheet: 'A4 sheet · 3 × 7 (63.5 × 38.1 mm)', single: 'Label printer · 63.5 × 38.1 mm', tall: 'Tall label · 6.5 × 14 cm' };
 
+  // Small label (63.5 × 38.1 mm): a broken laptop gets a parts strip under the QR — ✓ usable · ✗ broken · ↪ used · ? not checked.
+  const SHORT = { 'Screen': 'Scr', 'Mainboard': 'MB', 'RAM': 'RAM', 'Keyboard': 'KB', 'Battery': 'Bat', 'SSD / Storage': 'SSD', 'Charger': 'Chg' };
+  const MARK = { ok: '✓', bad: '✗', used: '↪', '': '?' };
+  function partsStrip(l) {
+    if (!l.parts) return '';
+    if (l.condition === 'Total broken') return '<div class="lbl-parts"><span class="lp-bad lp-tot">✗ TOTAL BROKEN — no usable part</span></div>';
+    return `<div class="lbl-parts">${l.parts.map(p => `<span class="lp-${p.state || 'unk'}">${MARK[p.state] || '?'}${esc(SHORT[p.part] || p.part)}</span>`).join('')}</div>`;
+  }
   function small(l) {
-    return `<div class="lbl"><div class="lbl-qr">${l.svg}</div>
+    return `<div class="lbl${l.parts ? ' lbl-wp' : ''}"><div class="lbl-top"><div class="lbl-qr">${l.svg}</div>
       <div class="lbl-t"><div class="lbl-co">HAYAT · IT ASSET</div><div class="lbl-code">${esc(l.code || '#' + l.id)}</div>
         <div>${esc(l.model)}</div><div>SN ${esc(l.serial || '—')}</div>${l.pc ? `<div>${esc(l.pc)}</div>` : ''}<div class="lbl-id">${esc(l.country)}${real(l.site) ? ' · ' + esc(real(l.site)) : ''} · #${l.id}</div>
-        ${l.printed != null ? `<div class="lbl-adm">printed ${l.printed}× · scanned ${l.scanned}×</div>` : ''}</div></div>`;
+        ${l.printed != null ? `<div class="lbl-adm">printed ${l.printed}× · scanned ${l.scanned}×</div>` : ''}</div></div>${partsStrip(l)}</div>`;
   }
   const PART_MARK = { ok: ['✓', 'usable', 'pt-ok'], bad: ['✗', 'broken', 'pt-bad'], used: ['↪', 'used', 'pt-used'], '': ['?', 'not checked', 'pt-unk'] };
   function tall(l) {
