@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-13",
+    "title": "User Inventory: My devices status only",
+    "items": [
+      "The Confirm button on each row is gone — use ✉ Ask everyone to confirm at the top.",
+      "Each person with devices shows a status: ✅ confirmed (click → signed forms), ⚠ N not with them, ⏳ waiting since … (link opened / sent, not confirmed), or ○ not confirmed.",
+      "IT admins can still click a not-confirmed status to see the details or make a personal link."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "My devices open link: new link each time, old ones stop after 2 days",
     "items": [
       "Every click on ✉ Make open link & message creates a new, different link.",

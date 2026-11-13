@@ -259,12 +259,11 @@ function renderTable(rows) {
         ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets(${jsArg(adName)}, ${jsArg(p.display_name)})">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
         : `<span class="badge badge-active">${cnt}</span>`;
     }
-    // My devices: status of the confirmation, and 📨 for IT admins to make the message.
+    // My devices: status only (confirmed → signed forms; not confirmed → IT admins can open the details / a personal link).
     const canForms = window.CURRENT_USER && ['admin', 'editor'].includes(window.CURRENT_USER.role);
     const conf = p.devices_confirmed_at
       ? `<div class="text-sm${canForms ? ' md-conf-link' : ''}" style="color:${p.devices_not_have ? '#b91c1c' : '#15803d'}" ${canForms ? `onclick="openSignedForms(${p.id})" title="Open the signed forms (Delivery form, Custody Agreement)"` : 'title="Confirmed by the user on My devices"'}>${p.devices_not_have ? `⚠ ${p.devices_not_have} not with them` : '✅ confirmed'} ${esc(String(p.devices_confirmed_at).slice(0, 10))}${canForms ? ' 📄' : ''}</div>`
-      : p.confirm_sent_at ? `<div class="text-sm text-muted" title="Link made, not confirmed yet">📨 sent ${esc(String(p.confirm_sent_at).slice(0, 10))}</div>` : '';
-    if (canEditUsers && p.email) assetsCell += ` <button class="md-send" title="My devices: message for ${esc(p.display_name)} to check and confirm their devices" onclick="openConfirm(${p.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Confirm</button>`;
+      : (p.confirm_sent_at || cnt > 0) ? `<div class="text-sm text-muted${canEditUsers ? ' md-conf-link' : ''}" ${canEditUsers ? `onclick="openConfirm(${p.id})" ` : ''}title="${p.confirm_sent_at ? 'Link sent / opened, not confirmed yet' : 'Not confirmed yet (My devices)'}${canEditUsers ? ' — click for details or a personal link' : ''}">${p.confirm_sent_at ? `⏳ waiting since ${esc(String(p.confirm_sent_at).slice(0, 10))}` : '○ not confirmed'}</div>` : '';
     assetsCell += conf;
     // In User Inventory but missing from the latest Azure user export → left / disabled / renamed?
     const notInAzure = lastAzureImport && p.azure_seen_at && p.azure_seen_at < lastAzureImport
