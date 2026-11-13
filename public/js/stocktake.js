@@ -54,7 +54,7 @@ function renderTake() {
       ${open ? `<div class="st-actions">
         <button class="btn btn-primary" id="st-cam-btn" onclick="toggleCam()">📷 Scan with camera</button>
         <form class="st-manual" onsubmit="manualScan(event)"><input class="form-control" id="st-code" placeholder="…or type asset code / serial / PC name" autocomplete="off"><button class="btn btn-ghost">Add</button></form>
-        <a class="btn btn-ghost" href="/labels.html?country=${encodeURIComponent(t.country)}${t.site ? '&site=' + encodeURIComponent(t.site) : ''}" target="_blank" rel="noopener">🏷 Print labels</a>
+        <a class="btn btn-ghost" href="/labels.html?country=${encodeURIComponent(t.country)}${t.site ? '&site=' + encodeURIComponent(t.site) : ''}${t.status_filter === 'Broken' ? '&paper=tall' : ''}" target="_blank" rel="noopener">🏷 Print labels</a>
         <button class="btn btn-ghost" onclick="closeTake()">Close stocktake</button></div>` : ''}
       <div id="st-cam" class="st-cam" hidden><video id="st-video" playsinline muted></video><div id="st-flash" class="st-flash"></div></div>
       <div id="st-last" class="st-last"></div>

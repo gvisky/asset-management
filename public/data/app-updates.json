@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Tall QR label 6.5 × 14 cm with spare parts",
+    "items": [
+      "QR labels → Paper: \"Tall label · 6.5 × 14 cm\" — one label per page with a big QR, code, type / model, status, serial, PC No, place, department, holder and purchase date.",
+      "A broken laptop's label also shows its 🔩 spare parts: condition and each part (✓ usable, ✗ broken, ↪ used as spare, ? not checked) with the parts note.",
+      "A stocktake of Broken assets opens its labels in this size."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Reports page: one line per report",
     "items": [
       "Reports are listed one per line — name and description on the left, Excel / PDF / HTML on the right — grouped as before; team-only reports are tagged (IT & HR, IT, admins)."
