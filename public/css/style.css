@@ -959,3 +959,6 @@ body.lbl-single .lb-sheet { grid-template-columns: 63.5mm; }
 .k-v { font-size: 30px; font-weight: 800; color: var(--c); line-height: 1.15; margin: 2px 0; }
 .k-spark { width: 100%; height: 30px; display: block; margin: 2px 0 4px; }
 .k-d { color: #475569; }
+.cus-lock { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
+.cus-lock[hidden] { display: none; }
+.cus-lock .btn { margin-left: auto; }

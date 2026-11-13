@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Unlock in place (IT admin)",
+    "items": [
+      "Return / Hand over window: a locked asset shows the lock at the top with a 🔓 Unlock button for IT admins — signature and note are kept, then Sign & save.",
+      "Edit Asset: \"🔓 Unlock now\" in the lock message makes User Name / AD Name editable right away (no trip to History Usage)."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "KPIs, Leavers, Stocktake with QR, e-signed handover, M365 reclaim, depreciation",
     "items": [
       "📈 KPIs: utilisation, ghost assets, data quality, repair time, leaver recovery and depreciation — split by country, with a monthly trend.",
