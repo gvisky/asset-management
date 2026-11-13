@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Delivery-Acceptance form</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Calibri, "Segoe UI", Arial, sans-serif; font-size: 9pt; color: #111; background: #e5e7eb; }
+    .toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 16px;
+      background: #1e2433; color: #fff; font-family: system-ui, sans-serif; font-size: 13px; }
+    .toolbar button, .toolbar a { border: 0; border-radius: 6px; padding: 7px 14px; font: inherit; cursor: pointer; background: #1a56db; color: #fff; text-decoration: none; }
+    .toolbar .ghost { background: transparent; border: 1px solid #4b5563; }
+    .toolbar .hint { opacity: .75; }
+    .page { position: relative; width: 210mm; height: 297mm; overflow: hidden; margin: 16px auto; padding: 10mm 12mm; background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,.15); }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #111; padding: 1.5mm 2mm; vertical-align: middle; }
+    .head td { height: 16mm; }
+    .head img { height: 11mm; }
+    .title { text-align: center; font-weight: 700; font-size: 13pt; }
+    .items th { background: #d9e1f2; font-size: 8.5pt; }
+    .items td { height: 8.6mm; text-align: center; }
+    .items td.l { text-align: left; }
+    .terms { border: 1px solid #111; border-top: 0; padding: 3mm 4mm; white-space: pre-wrap; line-height: 1.32; font-size: 8.4pt; text-align: justify; }
+    .sig th { background: #d9e1f2; }
+    .sig td { height: 11mm; }
+    .sig td.k { width: 22%; font-weight: 700; }
+    .sig td.sg { height: 22mm; }
+    .stamp { border: 2px solid #15803d; color: #14532d; border-radius: 2mm; padding: 1.5mm 2.5mm; font-size: 7.6pt; line-height: 1.35; background: #f0fdf4; }
+    .stamp b { color: #15803d; font-size: 8.6pt; letter-spacing: .04em; }
+    .doc { text-align: right; font-size: 7.5pt; margin-top: 2mm; color: #333; }
+    @media print { body { background: #fff; } .toolbar { display: none; } .page { margin: 0; box-shadow: none; } }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" onclick="window.print()">🖨️ Print / Save as PDF</button>
+    <a id="xlsx" class="ghost" href="#">⬇ Excel form</a>
+    <button type="button" class="ghost" onclick="window.close()">Close</button>
+    <span class="hint" id="hint">Loading…</span>
+  </div>
+  <div class="page" id="form" hidden>
+    <table class="head"><tr><td style="width:22%;text-align:center"><img src="/img/hayat-logo.png" alt="HAYAT"></td><td class="title">FIXED ASSET DELIVERY-ACCEPTANCE FORM</td></tr></table>
+    <table class="items">
+      <thead><tr><th style="width:7%">NO</th><th>DESCRIPTION OF THE INVENTORY</th><th style="width:17%">INVENTORY NO</th><th style="width:19%">S/N</th><th style="width:13%">TURN-IN DATE</th><th style="width:12%">REBATE DATE</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="terms" id="terms"></div>
+    <table class="sig">
+      <tr><th colspan="2">DELIVERED BY</th><th colspan="2">RECEIPT BY</th></tr>
+      <tr><td class="k">Location/Expense Center</td><td>IT</td><td class="k">Location/Expense Center</td><td id="dept"></td></tr>
+      <tr><td class="k">Full Name</td><td id="it"></td><td class="k">Full Name</td><td id="user"></td></tr>
+      <tr><td class="k">Signature/Date</td><td class="sg"></td><td class="k">Signature/Date</td><td class="sg" id="stamp"></td></tr>
+    </table>
+    <div class="doc">Doc.No:VN.FR.07.01, Published On: 3.11.2021, Rev.No: 1</div>
+  </div>
+  <script src="/js/delivery-form.js?v=20261113a"></script>
+</body>
+</html>

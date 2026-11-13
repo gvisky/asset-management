@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-13",
+    "title": "My devices: signed Delivery form & Custody Agreement",
+    "items": [
+      "User Inventory → click \"✅ confirmed … 📄\" (admins and editors) to open the signed forms of that confirmation.",
+      "🧾 Delivery-Acceptance form (VN.FR.07.01): every device the person answered \"I have it\" on one form, with the ✔ E-SIGNED stamp (email, time, IP, reference) in RECEIPT BY · Signature/Date — 👁 Preview / print / Save as PDF, or ⬇ the company Excel form filled in and signed.",
+      "📄 Custody Agreement (HQ) per device, with the same e-signature stamp under Received Party — preview, print or save as PDF.",
+      "Devices answered \"Not with me\" are listed apart and are not put on the forms. To send to the user: Save as PDF and attach it to an email."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "AD list: second email (Email Address) · My devices accepts it",
     "items": [
       "Upload AD list now reads the new \"Email Address\" column — each person's market email (…@hayat.vn, @molfix.co.th, @molped.com.my …) — and keeps it as a second email. It shows under the name in User Inventory (✉ …).",

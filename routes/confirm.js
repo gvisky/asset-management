@@ -225,4 +225,56 @@ pub.post('/confirm', wrap(async (req, res) => {
   res.json({ ok: true, confirmed_at: at, count: assets.length + mobiles.length, not_with_me: notHave.length, signed_with: signed });
 }));
 
-module.exports = { admin, pub };
+// ── Signed forms (admins / editors): Delivery-Acceptance form + Custody Agreement with the e-signature ──
+//   GET /api/confirm-forms/person/:id      latest confirmed link of a person → forms data
+//   GET /api/confirm-forms/:linkId         forms data: person, signature, devices answered "I have it"
+//   GET /api/confirm-forms/:linkId/delivery.xlsx   the company Excel form, filled + signed
+const forms = express.Router();
+forms.use(requireAuth);
+forms.use((req, res, next) => (req.user && ['admin', 'editor'].includes(req.user.role) ? next() : res.status(403).json({ error: 'Admins and editors only' })));
+const dmy = (d) => { const m = String(d || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}.${m[2]}.${m[1]}` : ''; };
+async function formsData(req, res, linkId) {
+  const l = await get('SELECT * FROM confirm_links WHERE id = ? AND confirmed_at IS NOT NULL', [linkId]);
+  const p = l && await get('SELECT id, display_name, email, ad_email, country, department FROM personnel WHERE id = ?', [l.person_id]);
+  if (!l || !p || !inScope(req, p.country)) { res.status(404).json({ error: 'No signed confirmation found' }); return null; }
+  const rows = await all(`SELECT c.*, a.asset_s4, a.asset_code, a.asset_type, a.brand_model, a.serial_no, a.department AS a_dept
+      FROM asset_confirmations c LEFT JOIN assets a ON a.id = c.asset_id WHERE c.link_id = ? ORDER BY c.asset_id = 0, c.id`, [l.id]);
+  const devs = new Map((await all('SELECT device_key, os, model, manufacturer, serial_no, name FROM devices WHERE person_id = ?', [p.id]).catch(() => [])).map(d => [d.device_key, d]));
+  const it = await get('SELECT full_name FROM users WHERE username = ?', [l.created_by]);
+  const first = rows[0] || {};
+  const items = rows.filter(r => r.result === 'have').map(r => {
+    if (r.asset_id) return { key: 'a' + r.asset_id, kind: 'asset', id: r.asset_id, type: r.asset_type || '', code: r.asset_code || '', s4: r.asset_s4 || '',
+      brand_model: r.brand_model || '', serial: r.serial_no || '', label: r.asset_label };
+    const d = devs.get(r.device_key) || {};
+    const kind = /tablet/i.test(r.asset_label) ? 'Tablet' : 'Phone';
+    return { key: 'd' + r.id, kind: 'device', id: 0, type: kind, code: '', s4: '', brand_model: [d.manufacturer, d.model].filter(Boolean).join(' ') || r.asset_label.replace(/^(Phone|Tablet)\s+/, '').split(' · ')[0],
+      serial: d.serial_no || ((r.asset_label.match(/SN ([^ ·]+)/) || [])[1] || ''), label: r.asset_label };
+  });
+  return { link_id: l.id, person: { name: p.display_name, email: p.email, ad_email: p.ad_email || '', country: p.country, department: p.department || (rows.find(r => r.a_dept) || {}).a_dept || '' },
+    signed: { with: first.signed_name || l.email, at: l.confirmed_at, ip: first.ip || '', browser: String(first.user_agent || '').replace(/^Mozilla\/5\.0 \(([^)]*)\).*$/, '$1').slice(0, 80), ref: `MD-${l.id}` },
+    it_member: (it && it.full_name) || l.created_by || '', sent_at: l.created_at,
+    not_with: rows.filter(r => r.result === 'not_have').map(r => ({ label: r.asset_label, note: r.note })), items,
+    commitments: require('../lib/delivery-form').commitmentsText() };
+}
+const signatureText = (d) => `E-signed (My devices) by ${d.signed.with} · ${d.signed.at} UTC · IP ${d.signed.ip} · ref ${d.signed.ref}`;
+forms.get('/person/:id', wrap(async (req, res) => {
+  const l = await get('SELECT id FROM confirm_links WHERE person_id = ? AND confirmed_at IS NOT NULL ORDER BY id DESC LIMIT 1', [Number(req.params.id)]);
+  if (!l) return res.status(404).json({ error: 'Not confirmed yet' });
+  const d = await formsData(req, res, l.id); if (d) res.json(d);
+}));
+forms.get('/:linkId/delivery.xlsx', wrap(async (req, res) => {
+  const d = await formsData(req, res, Number(req.params.linkId)); if (!d) return;
+  const { buildSignedDeliveryForm } = require('../lib/delivery-form');
+  const buf = buildSignedDeliveryForm({ department: d.person.department, it_member: d.it_member, user_name: d.person.name, signature: signatureText(d),
+    items: d.items.slice(0, 7).map(i => ({ description: [i.type, i.brand_model].filter(Boolean).join(' · '), code: i.s4 || i.code, serial: i.serial, date: String(d.signed.at).slice(0, 10) })) });
+  await audit(req.user, 'PRINT', null, `My devices: signed delivery form of ${d.person.name} (${d.signed.ref}) downloaded`);
+  const safe = String(d.person.name || d.link_id).replace(/[^\w.-]+/g, '_').slice(0, 40);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="Delivery-Form-signed-${safe}.xlsx"`);
+  res.send(buf);
+}));
+forms.get('/:linkId', wrap(async (req, res) => {
+  const d = await formsData(req, res, Number(req.params.linkId)); if (d) res.json({ ...d, signature: signatureText(d), date_dmy: dmy(d.signed.at) });
+}));
+
+module.exports = { admin, pub, forms };

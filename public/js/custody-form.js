@@ -46,7 +46,10 @@ window.addEventListener('beforeprint', fitOnePage);
 
 document.addEventListener('DOMContentLoaded', async () => {
   const hint = document.getElementById('hint');
-  const id = new URLSearchParams(window.location.search).get('id');
+  const qs = new URLSearchParams(window.location.search);
+  const id = qs.get('id');
+  // Signed on My devices: /custody-form.html?c=<confirmation link id>&k=<device key> → e-signature stamp.
+  if (qs.get('c')) return signedForm(qs.get('c'), qs.get('k'), hint);
   if (!id) { hint.textContent = 'No asset selected.'; return; }
   try {
     const [a, me] = await Promise.all([getJson(`/api/assets/${encodeURIComponent(id)}`), getJson('/api/auth/me')]);
@@ -77,3 +80,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error(e);
   }
 });
+
+async function signedForm(c, k, hint) {
+  try {
+    const d = await getJson(`/api/confirm-forms/${encodeURIComponent(c)}`);
+    const it = d.items.find(i => i.key === k) || d.items[0];
+    if (!it) { hint.textContent = 'No device in this confirmation.'; return; }
+    const { brand, model } = splitBrandModel(it.brand_model);
+    const values = { date: d.date_dmy, registry: '', request: d.signed.ref, type: it.type, assetNo: it.code, assetS4: it.s4, model, serial: it.serial, brand,
+      deliveredBy: d.it_member, receivedBy: d.person.name };
+    document.querySelectorAll('[data-f]').forEach(el => { el.textContent = values[el.dataset.f] || ''; });
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    const recv = document.querySelector('[data-f="receivedBy"]');
+    recv.insertAdjacentHTML('afterend', `<div style="margin-top:1.5mm;border:2px solid #15803d;color:#14532d;background:#f0fdf4;border-radius:2mm;padding:1.2mm 2mm;font-size:7.4pt;line-height:1.35">
+      <b style="color:#15803d">✔ E-SIGNED</b> · My devices<br>${esc(d.signed.with)}<br>${esc(d.signed.at)} UTC · IP ${esc(d.signed.ip)}<br>Ref ${esc(d.signed.ref)}</div>`);
+    document.title = `Custody Agreement — ${it.s4 || it.code || it.serial} — ${d.person.name} — signed`;
+    document.getElementById('form').hidden = false;
+    fitOnePage();
+    if (document.fonts) document.fonts.ready.then(fitOnePage);
+    hint.textContent = `Signed by ${d.signed.with} on ${d.signed.at} UTC — use Print / Save as PDF.`;
+  } catch (e) { hint.textContent = 'Could not load the signed confirmation.'; console.error(e); }
+}
