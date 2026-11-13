@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-13",
+    "title": "My devices open link: new link each time, old ones stop after 2 days",
+    "items": [
+      "Every click on ✉ Make open link & message creates a new, different link.",
+      "Older open links of the same country (or all countries) stop 2 days later, so a link that was forwarded or posted somewhere cannot be used for long.",
+      "New links are open 2 days by default (max 14).",
+      "Admins and editors can now make open links (the personal 📨 link stays IT admin only)."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "My devices: one open link for everyone",
     "items": [
       "User Inventory → ✉ Ask everyone to confirm (IT admin): make one link for all staff or one country, with a ready message — 📋 Copy it into one email or a Teams post.",

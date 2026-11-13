@@ -189,7 +189,7 @@ async function loadPeople(page = 1) {
     lastAdImport = result.ad_last_import || null;
     adCountries = result.ad_countries || [];
     document.getElementById('btn-dirsync-upload').style.display = result.can && result.can.adUpload ? '' : 'none';
-    document.getElementById('btn-askall').style.display = canEditUsers ? '' : 'none';
+    document.getElementById('btn-askall').style.display = window.CURRENT_USER && ['admin', 'editor'].includes(window.CURRENT_USER.role) ? '' : 'none';
     peopleBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
@@ -797,11 +797,12 @@ async function openCampaigns(made) {
   const st = (c) => (c.revoked ? 'stopped' : c.expires_at < d.now ? 'ended' : `open until ${esc(String(c.expires_at).slice(0, 10))}`);
   b.innerHTML = `<p class="text-sm" style="margin-top:0">One link for everyone: send it in one email / Teams post. Each person opens it, <b>types their company email</b>
       (…@hayat.com.tr or their second email), sees the devices registered to them and presses <b>Confirm</b>. Answers show in this list, the report and the signed forms like the personal links.</p>
+    <p class="text-sm" style="margin:0 0 6px">🔁 Each click makes a <b>new link</b>; older open links for the same country stop <b>2 days</b> later — send the newest message.</p>
     <p class="text-sm" style="color:#b45309">⚠ Easier but weaker than the personal 📨 link: anyone who knows a colleague's email could open that colleague's list. Each answer keeps the IP / browser, and wrong emails are limited.</p>
     <div class="qe-grid" style="align-items:end">
       <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="cp-name" placeholder="e.g. Q4 2026 device check"></div>
       <div class="form-group"><label class="form-label">Who</label><select class="form-control" id="cp-country"><option value="">All countries</option>${countries.map(c => `<option>${esc(c)}</option>`).join('')}</select></div>
-      <div class="form-group"><label class="form-label">Open for (days)</label><input class="form-control" id="cp-days" type="number" min="1" max="90" value="14"></div>
+      <div class="form-group"><label class="form-label">Open for (days, max 14)</label><input class="form-control" id="cp-days" type="number" min="1" max="14" value="2"></div>
       <div class="form-group"><button class="btn btn-primary" id="cp-make" style="width:100%">✉ Make open link &amp; message</button></div>
     </div>
     <div id="cp-msg"></div>
@@ -816,6 +817,7 @@ async function openCampaigns(made) {
     try {
       const r = await apiPost('/api/confirm/campaigns', { name: document.getElementById('cp-name').value, country: document.getElementById('cp-country').value, days: document.getElementById('cp-days').value });
       await openCampaigns(); campaignMessage(r.url, r.name, r.expires_at, r.country);
+      if (r.shortened) showToast(`New link made — ${r.shortened} older link${r.shortened > 1 ? 's' : ''} will stop within 2 days`);
     } catch (e) { showToast('Could not make the link', 'error'); }
   };
   if (made) campaignMessage(...made);

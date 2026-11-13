@@ -40,6 +40,7 @@ const { clientIp } = require('../lib/activity');
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const LINK_DAYS = 14;
 const MAX_ATTEMPTS = 5;
+const OPEN_DAYS = 2;              // open links: valid 2 days; a new one cuts older ones to 2 days
 const hash = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const nowSql = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
 const normEmail = (e) => String(e || '').trim().toLowerCase();
@@ -86,7 +87,9 @@ const publicAsset = (a) => ({ id: a.id, code: a.asset_s4 || a.asset_code || '', 
 // ── IT admin ─────────────────────────────────────────────────────────────────
 const admin = express.Router();
 admin.use(requireAuth);
-admin.use((req, res, next) => (isITAdmin(req.user) ? next() : res.status(403).json({ error: 'IT administrator only' })));
+// Open links ("ask everyone"): admins and editors; everything else here: IT admins.
+admin.use((req, res, next) => (isITAdmin(req.user) || (req.path.startsWith('/campaigns') && req.user && ['admin', 'editor'].includes(req.user.role))
+  ? next() : res.status(403).json({ error: 'IT administrator only' })));
 
 async function personFor(req, res) {
   const p = await get('SELECT id, display_name, email, ad_email, country, status, mobile_policy FROM personnel WHERE id = ?', [Number(req.params.id)]);
@@ -131,13 +134,20 @@ admin.post('/campaigns', wrap(async (req, res) => {
   const sc = scopeList(req);
   let country = String(req.body.country || '').trim();
   if (sc && !sc.includes(country)) country = sc[0];          // regional admins: their country only
-  const days = Math.min(90, Math.max(1, Number(req.body.days) || 14));
+  // Short-lived on purpose: a shared link that keeps working is easy to misuse. Default 2 days, max 14.
+  const days = Math.min(14, Math.max(1, Number(req.body.days) || OPEN_DAYS));
   const name = String(req.body.name || '').trim().slice(0, 80) || `Device check ${new Date().toISOString().slice(0, 10)}${country ? ' — ' + country : ''}`;
   const token = crypto.randomBytes(18).toString('base64url');
   const expires = new Date(Date.now() + days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
-  await run('INSERT INTO confirm_campaigns (name, country, token, created_by, expires_at) VALUES (?, ?, ?, ?, ?)', [name, country, token, req.user.username, expires]);
+  // Every click makes a new link; the older open links (same country, or all) end within 2 days.
+  const cut = new Date(Date.now() + OPEN_DAYS * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+  const older = await all(`SELECT id FROM confirm_campaigns WHERE revoked = 0 AND expires_at > ?${country ? ' AND (country = ? OR country = \'\')' : ''}`, country ? [cut, country] : [cut]);
+  await batch([
+    ...older.map(o => ({ sql: 'UPDATE confirm_campaigns SET expires_at = ? WHERE id = ?', args: [cut, o.id] })),
+    { sql: 'INSERT INTO confirm_campaigns (name, country, token, created_by, expires_at) VALUES (?, ?, ?, ?, ?)', args: [name, country, token, req.user.username, expires] },
+  ]);
   await audit(req.user, 'CONFIRM_LINK', null, `My devices: open link "${name}" made (${country || 'all countries'}), valid until ${expires} UTC`);
-  res.json({ name, country, expires_at: expires, url: `${origin(req)}/my-devices.html#t=${token}`, sender: req.user.full_name || req.user.username });
+  res.json({ name, country, expires_at: expires, shortened: older.length, url: `${origin(req)}/my-devices.html#t=${token}`, sender: req.user.full_name || req.user.username });
 }));
 admin.post('/campaigns/:id/stop', wrap(async (req, res) => {
   const c = await get('SELECT * FROM confirm_campaigns WHERE id = ?', [Number(req.params.id)]);
