@@ -260,7 +260,7 @@ function renderTable(rows) {
     const conf = p.devices_confirmed_at
       ? `<div class="text-sm" style="color:${p.devices_not_have ? '#b91c1c' : '#15803d'}" title="Confirmed by the user on My devices">${p.devices_not_have ? `⚠ ${p.devices_not_have} not with them` : '✅ confirmed'} ${esc(String(p.devices_confirmed_at).slice(0, 10))}</div>`
       : p.confirm_sent_at ? `<div class="text-sm text-muted" title="Link made, not confirmed yet">📨 sent ${esc(String(p.confirm_sent_at).slice(0, 10))}</div>` : '';
-    if (canEditUsers && p.email) assetsCell += ` <button class="btn btn-ghost btn-sm" title="My devices: message for ${esc(p.display_name)} to check and confirm their devices" onclick="openConfirm(${p.id})">📨</button>`;
+    if (canEditUsers && p.email) assetsCell += ` <button class="md-send" title="My devices: message for ${esc(p.display_name)} to check and confirm their devices" onclick="openConfirm(${p.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Confirm</button>`;
     assetsCell += conf;
     // In User Inventory but missing from the latest Azure user export → left / disabled / renamed?
     const notInAzure = lastAzureImport && p.azure_seen_at && p.azure_seen_at < lastAzureImport
@@ -682,7 +682,7 @@ async function openConfirm(id) {
   b.innerHTML = '<p class="text-muted">Loading…</p>'; f.innerHTML = '';
   let d;
   try { d = await apiGet('/api/confirm/person/' + id); } catch (e) { b.innerHTML = '<p class="text-muted">Could not load.</p>'; return; }
-  document.getElementById('mdc-t').textContent = `📨 My devices — ${d.person.display_name}`;
+  document.getElementById('mdc-t').textContent = `✉️ My devices — ${d.person.display_name}`;
   const st = (l) => {
     if (l.confirmed_at) return `✅ confirmed ${mdcDate(l.confirmed_at)}`;
     if (l.revoked) return 'replaced by a newer link';
@@ -699,6 +699,15 @@ async function openConfirm(id) {
     ${d.assets.length ? `<div class="table-wrap"><table><thead><tr><th>Asset</th><th>Device</th><th>Serial</th><th>Last answer</th></tr></thead><tbody>${d.assets.map(a => `<tr>
       <td><b>${esc(a.code || '#' + a.id)}</b></td><td>${esc([a.type, a.model].filter(Boolean).join(' · '))}</td><td class="text-sm">${esc(a.serial || '—')}</td><td>${res(a.confirmation)}</td></tr>`).join('')}</tbody></table></div>`
       : '<p class="text-muted text-sm">No asset has this AD Name — the person will be asked to confirm they hold no company device.</p>'}
+    <h4 style="margin:12px 0 4px">Phones &amp; tablets (Intune): ${d.mobiles.length}
+      <select class="form-control" id="mdc-pol" style="display:inline-block;width:auto;margin-left:8px;padding:3px 6px;font-size:12.5px">
+        <option value="">Automatic — ${d.turkish ? 'Turkish name → company devices' : 'not Turkish → personal'}</option>
+        <option value="company"${d.policy === 'company' ? ' selected' : ''}>Company phone / tablet — must confirm</option>
+        <option value="personal"${d.policy === 'personal' ? ' selected' : ''}>Personal — shown only ("also signed in on")</option></select></h4>
+    <p class="text-sm text-muted" style="margin:0 0 6px">${d.mode === 'company' ? '📱 They confirm these like their other devices.' : 'ℹ️ Shown to them as "you are also signed in on these devices" — nothing to confirm.'}</p>
+    ${d.mobiles.length ? `<div class="table-wrap"><table><thead><tr><th>Device</th><th>OS</th><th>Serial</th><th>Last answer</th></tr></thead><tbody>${d.mobiles.map(m => `<tr>
+      <td><b>${esc(m.kind)}</b> ${esc(m.model || m.name)}<div class="text-muted text-sm">${esc(m.name)}</div></td><td class="text-sm">${esc(m.os)}</td><td class="text-sm">${esc(m.serial || '—')}</td>
+      <td>${d.mode === 'company' ? res(m.confirmation) : '<span class="text-muted text-sm">info only</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="text-muted text-sm">None in the latest Intune / Entra upload.</p>'}
     ${d.gone.length ? `<p class="text-sm text-muted">Confirmed earlier, no longer registered to them: ${d.gone.map(g => esc(g.asset_label)).join('; ')}</p>` : ''}
     <h4 style="margin:12px 0 4px">Links sent</h4>
     ${d.links.length ? `<ul class="mdc-st">${d.links.map(l => `<li>${mdcDate(l.created_at)} by ${esc(l.created_by)} — ${st(l)}</li>`).join('')}</ul>` : '<p class="text-muted text-sm">None yet.</p>'}
@@ -706,6 +715,10 @@ async function openConfirm(id) {
   f.innerHTML = `<span class="text-muted text-sm" style="margin-right:auto">A new link replaces the old one · valid 14 days</span>
     <button class="btn btn-primary" id="mdc-new">📨 Make link &amp; message</button>`;
   document.getElementById('mdc-new').onclick = () => makeConfirmLink(id);
+  document.getElementById('mdc-pol').onchange = async (e) => {
+    try { await apiPost(`/api/confirm/person/${id}/policy`, { policy: e.target.value }); showToast('Saved'); openConfirm(id); }
+    catch { showToast('Could not save', 'error'); }
+  };
 }
 
 async function makeConfirmLink(id) {

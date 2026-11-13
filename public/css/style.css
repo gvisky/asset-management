@@ -1165,3 +1165,9 @@ body.lbl-sqmode .lb-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
 .mdc-msg table { width: auto; border: 0; margin: 8px 0; } .mdc-msg td { padding: 0; border: 0; } .mdc-msg tr:hover td { background: #1a56db; }
 .assets-cell { white-space: nowrap; min-width: 118px; }
 .assets-cell > div { white-space: nowrap; margin-top: 3px; }
+.md-signwith { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 9px 12px; font-size: 13.5px; margin: 6px 0; }
+.md-info .md-dev { background: #f8fafc; border-style: dashed; }
+/* User Inventory: My devices button */
+.md-send { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid #1a56db; color: #1a56db; background: #eff6ff; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1.2; }
+.md-send:hover { background: #1a56db; color: #fff; }
+.md-send svg { width: 14px; height: 14px; }

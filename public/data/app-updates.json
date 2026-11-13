@@ -1,6 +1,17 @@
 [
   {
     "date": "2026-11-13",
+    "title": "My devices: email = signature, phones & tablets",
+    "items": [
+      "No more typing your name: the work email you checked on the page is the signature (\"✍️ You sign with your work email …\").",
+      "Phones & tablets from Intune now show on the page. Turkish staff (company phone / tablet) confirm them like their laptop (✓ I have it / ✗ Not with me).",
+      "Vietnam, Thailand and Malaysia staff see them as \"You are also signed in on these devices\" — personal, nothing to confirm.",
+      "Turkish staff are recognised by name; IT can change it per person in the window (Automatic / Company phone-tablet / Personal).",
+      "User Inventory: the My devices button is now a clear blue ✉ Confirm button."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "My devices report · User Inventory columns fixed",
     "items": [
       "Reports → Lifecycle & audit → \"My devices — confirmations\" (HR & IT): Excel / PDF / HTML. Dashboard: people with devices, confirmed, waiting, not sent yet, devices \"not with me\" — per country and department, answers by month.",

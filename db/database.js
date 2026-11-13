@@ -1128,6 +1128,13 @@ async function migrate() {
       user_agent    TEXT    DEFAULT '');
     CREATE INDEX IF NOT EXISTS idx_asset_conf_person ON asset_confirmations(person_id);
     CREATE INDEX IF NOT EXISTS idx_asset_conf_asset ON asset_confirmations(asset_id);`);
+  // Phones / tablets (Intune) answered on My devices: asset_id 0 + the device's stable key.
+  const accols = (await backend.all('PRAGMA table_info(asset_confirmations)')).map(c => c.name);
+  if (!accols.includes('device_key')) await backend.run("ALTER TABLE asset_confirmations ADD COLUMN device_key TEXT DEFAULT ''");
+  // Phones / tablets on My devices: '' = decide by name (Turkish staff have company phones / tablets),
+  // 'company' = they must confirm them, 'personal' = shown as "also signed in on" only.
+  const pcolsM = (await backend.all('PRAGMA table_info(personnel)')).map(c => c.name);
+  if (!pcolsM.includes('mobile_policy')) await backend.run("ALTER TABLE personnel ADD COLUMN mobile_policy TEXT DEFAULT ''");
 
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
