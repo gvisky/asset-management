@@ -3,7 +3,8 @@
    utilisation   per ASSET TYPE and country: Active ÷ assets of that type (types serve different purposes, so
                  they are never added together)                       target 85–90 %
    ghost assets  missing in the latest closed stocktake (per country / site), still on the register
-   data quality  assets without missing info (same rule as Needs Attention) ÷ assets checked   target 98 %
+   data quality  per ASSET TYPE and country: assets without missing info (same rule as Needs Attention) ÷ assets
+                 checked                                               target 98 %
    repair time   average days reported → done (Maintenance log, last 12 months), open repairs
    recovery      leaver assets back within 7 days of the leaving date   target 95 %
    depreciation  cost, book value (straight-line, 5 years by default), fully depreciated still Active
@@ -34,7 +35,8 @@ router.put('/depreciation-years', wrap(async (req, res) => {
   res.json({ years });
 }));
 
-router.get('/', wrap(async (req, res) => {
+/** All KPIs for the signed-in user's countries (used by the page and by Reports → KPIs). */
+async function computeKpi(req) {
   const cs = countrySql(req, 'country', '');
   const W = cs.clause ? ` AND ${cs.clause}` : '';
   const assets = await all(`SELECT id, country, location, status, asset_type, cost, purchase_date FROM assets WHERE deleted_at IS NULL${W}`, cs.params);
@@ -61,17 +63,35 @@ router.get('/', wrap(async (req, res) => {
   });
   for (const c of countries) per[c].utilisation = Object.fromEntries(utilisation.filter(r => r.byCountry[c]).map(r => [r.type, r.byCountry[c].value]));
 
-  // Data quality (same rule as Needs Attention)
+  // Data quality — per asset type × country (same rule as Needs Attention; exempt types such as Screen /
+  // IP phone / Camera are not checked).
   const { MISSING_PC_AD_SQL, NOT_FLAGGED_SQL, NO_FLAG_TYPES } = require('./assets').quality;
-  const dupScope = W;
-  const checked = await all(`SELECT country, COUNT(*) AS n FROM assets WHERE deleted_at IS NULL${W} AND ${NOT_FLAGGED_SQL} GROUP BY country`, [...cs.params, ...NO_FLAG_TYPES]);
-  const incomplete = await all(`SELECT country, COUNT(*) AS n FROM assets WHERE deleted_at IS NULL${W} AND ${NOT_FLAGGED_SQL} AND (
-      serial_no IS NULL OR serial_no = '' OR asset_code IS NULL OR asset_code = '' OR ${MISSING_PC_AD_SQL} OR
-      serial_no IN (SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${dupScope} GROUP BY serial_no HAVING COUNT(*) > 1)) GROUP BY country`,
-    [...cs.params, ...NO_FLAG_TYPES, ...cs.params]);
+  const dqRows = await all(`SELECT country, COALESCE(NULLIF(TRIM(asset_type), ''), 'Type not set') AS t, COUNT(*) AS n,
+        SUM(CASE WHEN serial_no IS NULL OR serial_no = '' THEN 1 ELSE 0 END) AS no_serial,
+        SUM(CASE WHEN asset_code IS NULL OR asset_code = '' THEN 1 ELSE 0 END) AS no_code,
+        SUM(CASE WHEN ${MISSING_PC_AD_SQL} THEN 1 ELSE 0 END) AS no_pc_ad,
+        SUM(CASE WHEN serial_no IN (SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${W} GROUP BY serial_no HAVING COUNT(*) > 1) THEN 1 ELSE 0 END) AS dup,
+        SUM(CASE WHEN serial_no IS NULL OR serial_no = '' OR asset_code IS NULL OR asset_code = '' OR ${MISSING_PC_AD_SQL} OR
+          serial_no IN (SELECT serial_no FROM assets WHERE deleted_at IS NULL AND serial_no <> ''${W} GROUP BY serial_no HAVING COUNT(*) > 1) THEN 1 ELSE 0 END) AS bad
+      FROM assets WHERE deleted_at IS NULL${W} AND ${NOT_FLAGGED_SQL} GROUP BY country, t`,
+    [...cs.params, ...cs.params, ...cs.params, ...NO_FLAG_TYPES]);
+  const dqTypes = [...new Set(dqRows.map(r => r.t))];
+  const dqTotal = (t) => dqRows.filter(r => r.t === t).reduce((x, r) => x + Number(r.n), 0);
+  dqTypes.sort((x, y) => (x === 'Type not set') - (y === 'Type not set') || dqTotal(y) - dqTotal(x));
+  const dataQuality = dqTypes.map(t => {
+    const row = { type: t, total: dqTotal(t), byCountry: {} };
+    for (const r of dqRows.filter(r => r.t === t)) {
+      const c = r.country || 'Unknown', n = Number(r.n), bad = Number(r.bad);
+      row.byCountry[c] = { value: pct(n - bad, n), complete: n - bad, missing: bad, checked: n,
+        noSerial: Number(r.no_serial), noCode: Number(r.no_code), noPcAd: Number(r.no_pc_ad), dup: Number(r.dup) };
+    }
+    return row;
+  });
   for (const c of countries) {
-    const n = Number((checked.find(r => (r.country || 'Unknown') === c) || {}).n || 0), bad = Number((incomplete.find(r => (r.country || 'Unknown') === c) || {}).n || 0);
-    per[c].dataQuality = { value: pct(n - bad, n), complete: n - bad, missing: bad, checked: n };
+    const l = dataQuality.filter(r => r.byCountry[c]);
+    const n = l.reduce((x, r) => x + r.byCountry[c].checked, 0), bad = l.reduce((x, r) => x + r.byCountry[c].missing, 0);
+    per[c].dataQuality = { value: pct(n - bad, n), complete: n - bad, missing: bad, checked: n,
+      byType: Object.fromEntries(l.map(r => [r.type, r.byCountry[c].value])) };
   }
 
   // Ghost assets — latest closed stocktake per country / site; missing ones still on the register.
@@ -128,15 +148,18 @@ router.get('/', wrap(async (req, res) => {
   const month = new Date().toISOString().slice(0, 7);
   for (const c of countries) {
     const p = per[c];
-    const snap = { utilisationByType: p.utilisation, dataQuality: p.dataQuality.value, ghost: p.ghost.value, repair: p.repair.value, recovery: p.recovery.value, at: new Date().toISOString().slice(0, 10) };
+    const snap = { utilisationByType: p.utilisation, dataQualityByType: p.dataQuality.byType, ghost: p.ghost.value, repair: p.repair.value, recovery: p.recovery.value, at: new Date().toISOString().slice(0, 10) };
     await run('INSERT INTO kpi_snapshots (month, country, data) VALUES (?, ?, ?) ON CONFLICT (month, country) DO UPDATE SET data = excluded.data', [month, c, JSON.stringify(snap)]);
   }
   const hist = countries.length ? await all(`SELECT * FROM kpi_snapshots WHERE month >= ? AND country IN (${countries.map(() => '?').join(',')}) ORDER BY month`,
     [new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 7), ...countries]) : [];
   for (const c of countries) per[c].trend = hist.filter(h => h.country === c).map(h => { let d = {}; try { d = JSON.parse(h.data); } catch { d = {}; } return { month: h.month, ...d }; });
 
-  res.json({ countries, per, utilisation, targets: { utilisation: [85, 90], dataQuality: 98, ghost: 0, recovery: 95 },
-    depreciationYears: years, canEditYears: isITAdmin(req.user) && !scopeList(req) });
-}));
+  return { countries, per, utilisation, dataQuality, exemptTypes: NO_FLAG_TYPES, targets: { utilisation: [85, 90], dataQuality: 98, ghost: 0, recovery: 95 },
+    depreciationYears: years, canEditYears: isITAdmin(req.user) && !scopeList(req) };
+}
+router.get('/', wrap(async (req, res) => res.json(await computeKpi(req))));
+
 
 module.exports = router;
+module.exports.computeKpi = computeKpi;

@@ -8,9 +8,6 @@ const KPIS = [
     target: 'target 0 %', help: 'Registered but not found in the latest closed stocktake (and still on the register). Typical first audits find 15–30 %.',
     detail: (x) => x.value == null ? kEsc(x.note || 'no stocktake yet') + ' · <a href="/stocktake.html">start one →</a>'
       : `${x.missing} of ${x.expected} not found · ${x.audits.map(a => `<a href="/stocktake.html#${a.id}">${kEsc(a.site || 'whole country')} ${kEsc(String(a.closed_at).slice(0, 10))}</a>`).join(' · ')}` },
-  { key: 'dataQuality', title: 'Data quality', unit: '%', good: (v) => v >= 98, warn: (v) => v >= 90,
-    target: 'target 98 %', help: 'Assets with no missing info (serial, asset code, PC No / AD Name for computers, no duplicate serial) — same rule as Needs Attention.',
-    detail: (x) => `${x.complete} complete · <a href="/alerts.html">${x.missing} need info →</a>` },
   { key: 'repair', title: 'Repair time', unit: ' days', lowerBetter: true, good: (v) => v <= 5, warn: (v) => v <= 10,
     target: 'average · last 12 months', help: 'Days from "repair reported" to "done" in the Maintenance log (assets).',
     detail: (x) => `${x.done} repairs done · <a href="/maintenance.html">${x.open} open →</a>` },
@@ -32,7 +29,7 @@ const money = (n, cur) => { const v = Number(n) || 0; const s = v >= 1e9 ? (v / 
 function render() {
   const d = kData;
   if (!d.countries.length) { document.getElementById('kpi-main').innerHTML = '<p class="text-muted">No assets in your countries.</p>'; return; }
-  let h = utilisationHtml(d);
+  let h = utilisationHtml(d) + dataQualityHtml(d);
   for (const k of KPIS) {
     h += `<section class="card k-sec"><div class="card-header"><span class="card-title">${k.title} <span class="text-muted text-sm" style="font-weight:400">· ${k.target}</span></span>
       <span class="text-muted text-sm" title="${kEsc(k.help)}">ⓘ ${kEsc(k.help)}</span></div><div class="k-grid">`;
@@ -74,6 +71,25 @@ function utilisationHtml(d) {
       <span class="k-lg"><i style="background:#16a34a"></i>Active <i style="background:#d97706"></i>Stock <i style="background:#dc2626"></i>Broken</span></span></div>
     <div class="table-wrap"><table class="k-ut"><thead><tr><th>Asset type</th>${d.countries.map(c => `<th>${kEsc(c)}</th>`).join('')}</tr></thead><tbody>
     ${d.utilisation.map(r => `<tr><td><b>${kEsc(r.type)}</b> <span class="text-muted text-sm">${r.total}</span></td>${d.countries.map(c => cell(r.byCountry[c])).join('')}</tr>`).join('')}
+    </tbody></table></div></section>`;
+}
+
+// Data quality per asset type × country (same rule as Needs Attention).
+function dataQualityHtml(d) {
+  const qColor = (v) => (v == null ? '#94a3b8' : v >= 98 ? '#16a34a' : v >= 90 ? '#d97706' : '#dc2626');
+  const cell = (x) => {
+    if (!x) return '<td class="k-u k-u-none">—</td>';
+    const why = [x.noSerial && `${x.noSerial} no serial`, x.noCode && `${x.noCode} no asset code`, x.noPcAd && `${x.noPcAd} no PC No / AD Name`, x.dup && `${x.dup} duplicate serial`].filter(Boolean).join(' · ');
+    return `<td class="k-u" title="${kEsc(why || 'all complete')}"><b style="color:${qColor(x.value)}">${x.value}%</b> <span class="text-muted text-sm">${x.complete}/${x.checked}</span>
+      <div class="k-mix"><i style="width:${x.checked ? x.complete / x.checked * 100 : 0}%;background:#16a34a"></i><i style="width:${x.checked ? x.missing / x.checked * 100 : 0}%;background:#dc2626"></i></div>
+      ${x.missing ? `<div class="text-sm k-why">${kEsc(why)}</div>` : ''}</td>`;
+  };
+  return `<section class="card k-sec"><div class="card-header"><span class="card-title">Data quality by asset type <span class="text-muted text-sm" style="font-weight:400">· target 98 %</span></span>
+    <span class="text-muted text-sm">ⓘ Assets with no missing info — serial, asset code, PC No / AD Name for laptops &amp; desktops, no duplicate serial (same rule as <a href="/alerts.html">Needs Attention</a>).
+      Not checked: ${kEsc((d.exemptTypes || []).join(', '))}.
+      <span class="k-lg"><i style="background:#16a34a"></i>Complete <i style="background:#dc2626"></i>Needs info</span></span></div>
+    <div class="table-wrap"><table class="k-ut"><thead><tr><th>Asset type</th>${d.countries.map(c => `<th>${kEsc(c)}</th>`).join('')}</tr></thead><tbody>
+    ${d.dataQuality.map(r => `<tr><td><b>${kEsc(r.type)}</b> <span class="text-muted text-sm">${r.total}</span></td>${d.countries.map(c => cell(r.byCountry[c])).join('')}</tr>`).join('')}
     </tbody></table></div></section>`;
 }
 

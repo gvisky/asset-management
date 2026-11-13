@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-13",
+    "title": "KPIs: data quality by asset type · 7 new reports",
+    "items": [
+      "KPIs → Data quality is now a table by asset type × country, with what is missing (no serial / asset code / PC No – AD Name / duplicate serial).",
+      "New reports (Excel / PDF / HTML): KPIs, Depreciation & book value, Stocktakes (QR audit), Handover & return (e-signed), Leavers checklist, Microsoft 365 licence reclaim, and QR labels & scans log (admins).",
+      "Reports page: new groups Overview and Lifecycle & audit."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "KPIs: utilisation by asset type",
     "items": [
       "Utilisation is now a table: one row per asset type, one column per country — each cell is Active ÷ assets of that type, with counts and an Active / Stock / Broken bar. Types are never added together."

@@ -75,10 +75,11 @@ router.post('/upload', wrap(async (req, res) => {
   res.json({ ok: true, users: out.length, licensed: out.filter(v => v[3]).length, services: actCols.map(c => c.svc) });
 }));
 
-router.get('/reclaim', wrap(async (req, res) => {
-  const days = Math.min(365, Math.max(7, Number(req.query.days) || 60));
+/** Reclaim list for the user's countries (page and Reports → Licence reclaim). */
+async function computeReclaim(req, daysIn) {
+  const days = Math.min(365, Math.max(7, Number(daysIn) || 60));
   const meta = await get('SELECT COUNT(*) AS n, MAX(report_date) AS report_date, MAX(uploaded_at) AS uploaded_at, SUM(licensed) AS licensed FROM m365_users');
-  if (!Number(meta.n)) return res.json({ empty: true, days, canUpload: isITAdmin(req.user) && !scopeList(req) });
+  if (!Number(meta.n)) return { empty: true, days, list: [], byProduct: {}, canUpload: isITAdmin(req.user) && !scopeList(req) };
   const asOf = meta.report_date || String(meta.uploaded_at || '').slice(0, 10);
   const cutoff = new Date(Date.parse(asOf) - days * 86400000).toISOString().slice(0, 10);
   const rows = await all(`SELECT m.*, p.id AS person_id, p.display_name AS person_name, p.country, p.department, p.status AS person_status,
@@ -104,8 +105,10 @@ router.get('/reclaim', wrap(async (req, res) => {
   // Licences that could be freed, per product (a user can hold several).
   const byProduct = {};
   for (const r of list) for (const p of String(r.products || '').split(/\s*\+\s*|\s*,\s*/).filter(Boolean)) byProduct[p] = (byProduct[p] || 0) + 1;
-  res.json({ days, asOf, uploaded_at: meta.uploaded_at, licensed: Number(meta.licensed || 0), users: Number(meta.n),
-    list, byProduct, canUpload: isITAdmin(req.user) && !scopeList(req) });
-}));
+  return { days, asOf, uploaded_at: meta.uploaded_at, licensed: Number(meta.licensed || 0), users: Number(meta.n),
+    list, byProduct, canUpload: isITAdmin(req.user) && !scopeList(req) };
+}
+router.get('/reclaim', wrap(async (req, res) => res.json(await computeReclaim(req, req.query.days))));
 
 module.exports = router;
+module.exports.computeReclaim = computeReclaim;

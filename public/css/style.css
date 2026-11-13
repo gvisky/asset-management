@@ -983,3 +983,5 @@ body.lbl-single .lb-sheet { grid-template-columns: 63.5mm; }
 .k-mix i { display: block; height: 100%; }
 .k-lg { margin-left: 10px; white-space: nowrap; }
 .k-lg i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin: 0 3px 0 8px; vertical-align: -1px; }
+.k-why { color: #b91c1c; font-size: 11.5px; margin-top: 3px; white-space: normal; max-width: 220px; }
+.k-sec .card-header { flex-wrap: wrap; gap: 6px; } .k-sec .card-title { white-space: nowrap; }
