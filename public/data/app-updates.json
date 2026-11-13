@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-13",
+    "title": "New label size: Big label 15 × 15 cm",
+    "items": [
+      "Paper → \"Big label · 15 × 15 cm\" on the Stocktake page, the QR labels panel / page and the label preview — one label per page.",
+      "Large QR with the asset code, type · model, status, serial, PC No, place, department, holder and purchase date.",
+      "A broken laptop also gets a 🔩 spare-parts grid (each part ✓ usable / ✗ broken / ↪ used as spare / ? not checked), its condition, note and who checked it."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Small QR labels show the spare parts of broken laptops",
     "items": [
       "On the A4 sheet and label-printer labels (63.5 × 38.1 mm), a broken laptop now has a parts strip under the QR: ✓ usable · ✗ broken (struck through) · ↪ used as spare · ? not checked, for Scr, MB, RAM, KB, Bat, SSD, Chg.",

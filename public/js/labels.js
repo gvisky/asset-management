@@ -7,7 +7,7 @@
 
 (function () {
   const lbEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const PAPERS = { sheet: 'A4 sheet · 3 × 7 (63.5 × 38.1 mm)', single: 'Label printer · 63.5 × 38.1 mm', tall: 'Tall label · 6.5 × 14 cm' };
+  const PAPERS = { sheet: 'A4 sheet · 3 × 7 (63.5 × 38.1 mm)', single: 'Label printer · 63.5 × 38.1 mm', tall: 'Tall label · 6.5 × 14 cm', square: 'Big label · 15 × 15 cm' };
   let lbAll = [], lbAdmin = false, lbOpen = new Set(), ready = false;
   const lbSel = new Set();
   const $ = (id) => document.getElementById(id);

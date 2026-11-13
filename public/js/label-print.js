@@ -3,12 +3,12 @@
    LabelPrint.print(ids, paper)           asks the purpose (recorded), then prints only these labels
    LabelPrint.html(label, paper)          label HTML ('sheet' | 'single' = 63.5 × 38.1 mm, 'tall' = 65 × 140 mm)
    LabelPrint.setPaper(paper)             @page size for printing
-   Papers: A4 sheet 3 × 7 · label printer 63.5 × 38.1 mm · tall label 6.5 × 14 cm (spare parts of broken laptops). */
+   Papers: A4 sheet 3 × 7 · label printer 63.5 × 38.1 mm · tall label 6.5 × 14 cm · big label 15 × 15 cm (tall / big: more info + spare parts). */
 
 (function () {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const real = (v) => (v && String(v).trim() !== '0' ? String(v).trim() : '');   // some records hold "0" for empty
-  const PAPERS = { sheet: 'A4 sheet · 3 × 7 (63.5 × 38.1 mm)', single: 'Label printer · 63.5 × 38.1 mm', tall: 'Tall label · 6.5 × 14 cm' };
+  const PAPERS = { sheet: 'A4 sheet · 3 × 7 (63.5 × 38.1 mm)', single: 'Label printer · 63.5 × 38.1 mm', tall: 'Tall label · 6.5 × 14 cm', square: 'Big label · 15 × 15 cm' };
 
   // Small label (63.5 × 38.1 mm): a broken laptop gets a parts strip under the QR — ✓ usable · ✗ broken · ↪ used · ? not checked.
   const SHORT = { 'Screen': 'Scr', 'Mainboard': 'MB', 'RAM': 'RAM', 'Keyboard': 'KB', 'Battery': 'Bat', 'SSD / Storage': 'SSD', 'Charger': 'Chg' };
@@ -43,14 +43,35 @@
       <div class="tl-foot">Scan to open in Hayat IT tools · #${l.id}${l.printed != null ? `<span class="lbl-adm"> · printed ${l.printed}× · scanned ${l.scanned}×</span>` : ''}</div>
     </div>`;
   }
-  const html = (l, paper) => (paper === 'tall' ? tall(l) : small(l));
+  // Big square label 15 × 15 cm: large QR + asset info side by side, spare parts of a broken laptop as a grid below.
+  function square(l) {
+    const row = (k, v) => (real(v) ? `<div class="sq-r"><span>${k}</span><b>${esc(real(v))}</b></div>` : '');
+    const parts = l.parts ? `<div class="sq-parts"><div class="sq-ph">🔩 Spare parts · <b>${esc(l.condition || '')}</b>
+        <span class="sq-legend">✓ usable · ✗ broken · ↪ used as spare · ? not checked</span></div>
+        <div class="sq-pg">${l.parts.map(p => { const m = PART_MARK[p.state] || PART_MARK['']; return `<div class="sq-p ${m[2]}"><i>${m[0]}</i><span>${esc(p.part)}</span><b>${m[1]}</b></div>`; }).join('')}</div>
+        ${l.partsNote ? `<div class="sq-note">${esc(l.partsNote)}</div>` : ''}
+        <div class="sq-small">${l.partsChecked ? 'checked ' + esc(l.partsChecked) : 'parts not checked yet'}</div></div>` : '';
+    return `<div class="sq${l.parts ? ' sq-wp' : ''}">
+      <div class="sq-top"><span class="sq-co">HAYAT · IT ASSET</span><span class="tl-st tl-st-${esc(String(l.status).toLowerCase())}">${esc(l.status || '')}</span></div>
+      <div class="sq-main"><div class="sq-qr">${l.svg}</div>
+        <div class="sq-t"><div class="sq-code">${esc(l.code || '#' + l.id)}</div>
+          <div class="sq-model">${esc([l.type, l.model].filter(Boolean).join(' · '))}</div>
+          <div class="sq-info">${row('Serial', l.serial)}${row('PC No', l.pc)}${row('Place', [l.country, real(l.site)].filter(Boolean).join(' · '))}
+            ${row('Dept', l.department)}${l.status !== 'Broken' ? row('Holder', l.holder) : ''}${row('Bought', l.purchase)}</div></div></div>
+      ${parts}
+      <div class="sq-foot">Scan to open in Hayat IT tools · #${l.id}${l.printed != null ? `<span class="lbl-adm"> · printed ${l.printed}× · scanned ${l.scanned}×</span>` : ''}</div>
+    </div>`;
+  }
+  const html = (l, paper) => (paper === 'tall' ? tall(l) : paper === 'square' ? square(l) : small(l));
 
   function setPaper(mode) {
     document.body.classList.toggle('lbl-single', mode === 'single');
     document.body.classList.toggle('lbl-tallmode', mode === 'tall');
+    document.body.classList.toggle('lbl-sqmode', mode === 'square');
     let st = document.getElementById('lp-page');
     if (!st) { st = document.createElement('style'); st.id = 'lp-page'; document.head.appendChild(st); }
     st.textContent = mode === 'tall' ? '@media print { @page { size: 65mm 140mm; margin: 0; } }'
+      : mode === 'square' ? '@media print { @page { size: 150mm 150mm; margin: 0; } }'
       : mode === 'single' ? '@media print { @page { size: 63.5mm 38.1mm; margin: 0; } }' : '@media print { @page { size: A4; margin: 15mm 7mm; } }';
   }
 
@@ -85,7 +106,7 @@
     try {
       const [l] = await apiGet('/api/stocktake/labels?ids=' + id);
       document.getElementById('lp-pv-t').textContent = `Label — ${l ? (l.code || '#' + l.id) : id}`;
-      document.getElementById('lp-pv-b').innerHTML = l ? `<div class="pv-wrap ${paper === 'tall' ? 'pv-tall' : ''}">${html(l, paper)}</div>` : 'Not found';
+      document.getElementById('lp-pv-b').innerHTML = l ? `<div class="pv-wrap ${paper === 'tall' ? 'pv-tall' : paper === 'square' ? 'pv-sq' : ''}">${html(l, paper)}</div>` : 'Not found';
     } catch { document.getElementById('lp-pv-b').innerHTML = '<p class="text-muted">Could not load.</p>'; }
   }
 
