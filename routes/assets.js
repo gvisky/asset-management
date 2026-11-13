@@ -524,6 +524,9 @@ router.get('/:id', wrap(async (req, res) => {
   // Flag if this asset's model is delete/edit-locked (freezes Asset Type / Brand-Model / Serial).
   const lockedModels = await getLockedModels();
   row.model_locked = row.brand_model && lockedModels.some(m => m.toLowerCase() === String(row.brand_model).toLowerCase()) ? 1 : 0;
+  // Book value (straight-line, years per country — lib/finance.js).
+  const fin = require('../lib/finance');
+  row.depreciation = fin.depreciation(row, await fin.getYearsMap());
   res.json(row);
 }));
 
@@ -837,3 +840,5 @@ router.delete('/:id/purge', requireGlobalAdmin, wrap(async (req, res) => {
 }));
 
 module.exports = router;
+// Same "missing info" rule as Needs Attention — used by the KPI page (data quality).
+module.exports.quality = { MISSING_PC_AD_SQL, NOT_FLAGGED_SQL, NO_FLAG_TYPES };

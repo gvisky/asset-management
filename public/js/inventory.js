@@ -5,6 +5,14 @@ const PAGE_SIZE = 25;
 let deleteTargetId = null;
 let viewAsset = null;
 let editMode = false;
+// Book value line for the asset view: "13,705,984 VND · 52.6 % left · fully depreciated on 2029-06-30 (5 years)".
+function bookValueHtml(d) {
+  if (!d) return '<span class="text-muted">— (needs Cost and Purchase Date)</span>';
+  const n = (v) => Number(v).toLocaleString('en-US');
+  return d.fully
+    ? `<b>0 ${hEsc(d.currency)}</b> <span class="badge badge-retired" style="font-size:10px">fully depreciated</span> <span class="text-muted text-sm">since ${hEsc(d.endDate)} (${d.years} years)</span>`
+    : `<b>${n(d.bookValue)} ${hEsc(d.currency)}</b> <span class="text-muted text-sm">· ${d.pctLeft}% left · fully depreciated on ${hEsc(d.endDate)} (${d.years} years)</span>`;
+}
 let editOrig = { status: '', parts: {}, checked: false };   // the asset as it was when the Edit form opened
 
 // Broken laptop: short parts summary under the status, and a click opens the parts check.
@@ -429,6 +437,7 @@ async function onView(id) {
       ['Warranty',      warrantyBadge(a.warranty_expiry) || esc(a.warranty_expiry)],
       ['Vendor',        a.vendor],
       ['Cost',          a.cost],
+      ['Book value',    bookValueHtml(a.depreciation)],
       ['PO Number',     a.po_number],
       ['History Usage', a.history_usage],
       ['Remark',        a.remark],
@@ -439,9 +448,20 @@ async function onView(id) {
         ${fields.map(([label, val]) => `
           <div>
             <div class="form-label" style="margin-bottom:3px">${label}</div>
-            <div style="font-size:13.5px;white-space:pre-line">${val ? (label === 'Status' || label === 'Warranty' || label === 'Location' ? val : esc(val)) : '<span class="text-muted">—</span>'}</div>
+            <div style="font-size:13.5px;white-space:pre-line">${val ? (label === 'Status' || label === 'Warranty' || label === 'Location' || label === 'Book value' ? val : esc(val)) : '<span class="text-muted">—</span>'}</div>
           </div>
         `).join('')}
+      </div>
+      <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <strong style="font-size:13.5px">✍ Handover &amp; return</strong>
+          <span class="text-muted text-sm">signed records (PDF) kept on the asset</span>
+          <span style="flex:1"></span>
+          ${canEdit() ? `${a.user_name || a.ad_name ? `<button class="btn btn-ghost btn-sm" onclick="custodyReturn(window._viewAsset, () => onView(${a.id}))">↩ Return</button>` : ''}
+          ${a.status !== 'Broken' ? `<button class="btn btn-ghost btn-sm" onclick="custodyHandover(window._viewAsset, () => onView(${a.id}))">✍ Hand over</button>` : ''}` : ''}
+          <a class="btn btn-ghost btn-sm" href="/labels.html?ids=${a.id}" target="_blank" rel="noopener">🏷 QR label</a>
+        </div>
+        <div id="cus-docs" class="text-muted text-sm">Loading…</div>
       </div>
       <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
@@ -465,6 +485,8 @@ async function onView(id) {
       </div>
     `;
     document.getElementById('view-overlay').classList.add('open');
+    window._viewAsset = a;
+    custodyDocsHtml(a.id).then(h => { const el = document.getElementById('cus-docs'); if (el) el.innerHTML = h; });
     loadMaintenance(id);
   } catch (err) {
     showToast('Failed to load asset', 'error');
