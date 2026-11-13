@@ -5,7 +5,11 @@
      found      registered here and scanned
      elsewhere  scanned here but registered at another country / site → "Move here" fixes the record
      missing    registered here but not scanned (when the campaign is closed: possible ghost assets)
+     outside    at this place but not in this stocktake's filter (status / department / type)
      unknown    a code that matches no asset → add it to Asset Inventory
+   Optional filters when starting: status (Active / Broken / Stock), department, asset type.
+   Every scan is logged (qr_scans: who, when, where from, result) and every label print (qr_prints: purpose,
+   who, when). Admins see the counts / history, and are asked for a photo after a scan (asset_photos).
    A QR label holds only the asset's link (…/scan.html?a=<id>) — no personal data.
 
    GET  /api/stocktake                      campaigns (your countries)
@@ -32,10 +36,27 @@ const SITES = ['Office', 'Factory'];
 const str = (v, n = 120) => String(v == null ? '' : v).trim().slice(0, n);
 const origin = (req) => `${req.headers['x-forwarded-proto'] || req.protocol}://${req.headers['x-forwarded-host'] || req.get('host')}`;
 const scanUrl = (req, id) => `${origin(req)}/scan.html?a=${id}`;
-const COLS = 'id, asset_code, asset_s4, asset_type, brand_model, serial_no, computer_no, country, location, status, user_name, ad_name';
-// Assets a campaign expects: its country, and its site when it has one (Vietnam Office / Factory).
-const expectedSql = (t) => ({ sql: `deleted_at IS NULL AND country = ?${t.site ? ' AND location = ?' : ''}`, params: t.site ? [t.country, t.site] : [t.country] });
+const COLS = 'id, asset_code, asset_s4, asset_type, brand_model, serial_no, computer_no, country, location, status, user_name, ad_name, department';
+const STATUSES = ['Active', 'Broken', 'Stock'];
+// Assets a campaign expects: its country, its site (Vietnam Office / Factory), and the optional filters
+// status / department / asset type.
+function expectedSql(t) {
+  const cond = ['deleted_at IS NULL', 'country = ?'], params = [t.country];
+  if (t.site) { cond.push('location = ?'); params.push(t.site); }
+  if (t.status_filter) { cond.push('status = ?'); params.push(t.status_filter); }
+  if (t.department) { cond.push("COALESCE(department, '') = ?"); params.push(t.department === '(not set)' ? '' : t.department); }
+  if (t.asset_type) { cond.push("LOWER(COALESCE(asset_type, '')) = LOWER(?)"); params.push(t.asset_type === '(not set)' ? '' : t.asset_type); }
+  return { sql: cond.join(' AND '), params };
+}
 const isHere = (t, a) => a.country === t.country && (!t.site || a.location === t.site);
+// At this place but not in this stocktake's filter (e.g. an Active laptop while counting Broken ones).
+const inFilter = (t, a) => (!t.status_filter || a.status === t.status_filter)
+  && (!t.department || (a.department || '') === (t.department === '(not set)' ? '' : t.department))
+  && (!t.asset_type || String(a.asset_type || '').toLowerCase() === (t.asset_type === '(not set)' ? '' : t.asset_type.toLowerCase()));
+const isAdmin = (req) => !!(req.user && req.user.role === 'admin');
+const ipOf = (req) => String(req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim().slice(0, 60);
+const logScan = (req, v) => run(`INSERT INTO qr_scans (asset_id, code, source, stocktake_id, result, scanned_by, ip) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  [v.asset_id || null, str(v.code, 300), v.source, v.stocktake_id || null, v.result || '', req.user.username, ipOf(req)]).catch(() => {});
 
 async function campaign(req, res) {
   const t = await get('SELECT * FROM stocktakes WHERE id = ?', [req.params.id]);
@@ -57,13 +78,44 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const country = str(b.country, 60), site = SITES.includes(b.site) && country === 'Vietnam' ? b.site : '';
   if (!country) return res.status(400).json({ error: 'Pick a country' });
   if (!inScope(req, country)) return res.status(403).json({ error: 'Not in your region' });
-  const name = str(b.name, 80) || `${country}${site ? ' ' + site : ''} audit ${new Date().toISOString().slice(0, 10)}`;
-  const e = expectedSql({ country, site });
+  const f = { country, site, status_filter: STATUSES.includes(b.status) ? b.status : '', department: str(b.department, 120), asset_type: str(b.asset_type, 60) };
+  const what = [f.status_filter, f.asset_type, f.department].filter(Boolean).join(' · ');
+  const name = str(b.name, 80) || `${country}${site ? ' ' + site : ''}${what ? ' · ' + what : ''} audit ${new Date().toISOString().slice(0, 10)}`;
+  const e = expectedSql(f);
   const expected = Number((await get(`SELECT COUNT(*) AS c FROM assets WHERE ${e.sql}`, e.params)).c);
-  const r = await run('INSERT INTO stocktakes (name, country, site, expected, created_by) VALUES (?, ?, ?, ?, ?)',
-    [name, country, site, expected, req.user.username]);
+  if (!expected) return res.status(400).json({ error: 'No asset matches this country / site / filter' });
+  const r = await run('INSERT INTO stocktakes (name, country, site, status_filter, department, asset_type, expected, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [name, country, site, f.status_filter, f.department, f.asset_type, expected, req.user.username]);
   await audit(req.user, 'STOCKTAKE', null, `Started stocktake "${name}" (${expected} assets expected)`);
   res.status(201).json({ id: Number(r.lastInsertRowid), name, expected });
+}));
+
+// Choices for "New stocktake": departments and asset types (with counts) of a country / site.
+router.get('/options', wrap(async (req, res) => {
+  const country = str(req.query.country, 60);
+  if (!country || !inScope(req, country)) return res.json({ departments: [], types: [], statuses: [] });
+  const cond = ['deleted_at IS NULL', 'country = ?'], params = [country];
+  if (SITES.includes(req.query.site)) { cond.push('location = ?'); params.push(req.query.site); }
+  const W = cond.join(' AND ');
+  const departments = await all(`SELECT COALESCE(NULLIF(TRIM(department), ''), '(not set)') AS v, COUNT(*) AS n FROM assets WHERE ${W} GROUP BY v ORDER BY n DESC`, params);
+  const types = await all(`SELECT COALESCE(NULLIF(TRIM(asset_type), ''), '(not set)') AS v, COUNT(*) AS n FROM assets WHERE ${W} GROUP BY v ORDER BY n DESC`, params);
+  const statuses = await all(`SELECT status AS v, COUNT(*) AS n FROM assets WHERE ${W} GROUP BY status ORDER BY n DESC`, params);
+  res.json({ departments, types, statuses, total: statuses.reduce((t, r) => t + Number(r.n), 0) });
+}));
+
+// Label prints are recorded (purpose, who, when) — admins see how often each label was printed.
+router.post('/labels/printed', requireRole('admin', 'editor'), wrap(async (req, res) => {
+  const b = req.body || {};
+  const ids = (Array.isArray(b.ids) ? b.ids : []).map(Number).filter(Boolean).slice(0, 500);
+  const purpose = str(b.purpose, 120);
+  if (!ids.length) return res.status(400).json({ error: 'No labels' });
+  if (!purpose) return res.status(400).json({ error: 'Pick what the labels are for' });
+  const rows = await all(`SELECT id, country FROM assets WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+  const ok = rows.filter(a => inScope(req, a.country)).map(a => a.id);
+  const batchId = `${Date.now().toString(36)}-${req.user.username}`;
+  for (const id of ok) await run('INSERT INTO qr_prints (asset_id, purpose, batch, printed_by) VALUES (?, ?, ?, ?)', [id, purpose, batchId, req.user.username]);
+  await audit(req.user, 'PRINT', ok.length === 1 ? ok[0] : null, `Printed ${ok.length} QR label${ok.length === 1 ? '' : 's'} — ${purpose}`);
+  res.json({ ok: true, printed: ok.length });
 }));
 
 // Labels (registered before /:id so "labels" is not read as an id).
@@ -82,10 +134,18 @@ router.get('/labels', wrap(async (req, res) => {
     rows = await all(`SELECT ${COLS} FROM assets WHERE ${cond.join(' AND ')} ORDER BY asset_type, brand_model, id LIMIT 500`, params);
   }
   rows = rows.filter(a => inScope(req, a.country));
+  const counts = new Map();
+  if (isAdmin(req) && rows.length) {
+    const ph = rows.map(() => '?').join(',');
+    const ids = rows.map(a => a.id);
+    for (const r of await all(`SELECT asset_id, COUNT(*) AS n, MAX(printed_at) AS last FROM qr_prints WHERE asset_id IN (${ph}) GROUP BY asset_id`, ids)) counts.set(r.asset_id, { printed: r.n, lastPrint: r.last });
+    for (const r of await all(`SELECT asset_id, COUNT(*) AS n FROM qr_scans WHERE asset_id IN (${ph}) GROUP BY asset_id`, ids)) counts.set(r.asset_id, { ...(counts.get(r.asset_id) || {}), scanned: r.n });
+  }
   const out = [];
   for (const a of rows) {
     out.push({ id: a.id, code: a.asset_s4 || a.asset_code || '', model: a.brand_model || '', serial: a.serial_no || '', pc: a.computer_no || '',
       country: a.country, site: a.location || '', type: a.asset_type || '',
+      ...(isAdmin(req) ? { printed: (counts.get(a.id) || {}).printed || 0, lastPrint: (counts.get(a.id) || {}).lastPrint || '', scanned: (counts.get(a.id) || {}).scanned || 0 } : {}),
       svg: await QRCode.toString(scanUrl(req, a.id), { type: 'svg', margin: 0, errorCorrectionLevel: 'M' }) });
   }
   res.json(out);
@@ -97,14 +157,56 @@ router.get('/asset/:aid', wrap(async (req, res) => {
   if (!inScope(req, a.country)) return res.status(403).json({ error: 'Not in your region' });
   const cs = countrySql(req, 'country', '');
   const open = await all(`SELECT id, name, country, site FROM stocktakes WHERE status = 'open'${cs.clause ? ' AND ' + cs.clause : ''} ORDER BY id DESC`, cs.params);
-  res.json({ asset: a, openStocktakes: open });
+  if (req.query.from === 'label') await logScan(req, { asset_id: a.id, code: `scan.html?a=${a.id}`, source: 'label', result: 'opened' });
+  res.json({ asset: a, openStocktakes: open, isAdmin: isAdmin(req) });
+}));
+
+// QR history of an asset (admins): label prints, every scan (who / when / where), photos.
+router.get('/asset/:aid/qr', wrap(async (req, res) => {
+  const a = await get('SELECT id, country FROM assets WHERE id = ?', [req.params.aid]);
+  if (!a) return res.status(404).json({ error: 'Asset not found' });
+  if (!inScope(req, a.country)) return res.status(403).json({ error: 'Not in your region' });
+  const photos = await all('SELECT id, stocktake_id, note, size, taken_by, taken_at FROM asset_photos WHERE asset_id = ? ORDER BY id DESC', [a.id]);
+  if (!isAdmin(req)) return res.json({ admin: false, photos });
+  const prints = await all('SELECT purpose, printed_by, printed_at FROM qr_prints WHERE asset_id = ? ORDER BY id DESC', [a.id]);
+  const scans = await all(`SELECT q.source, q.result, q.scanned_by, q.scanned_at, q.ip, t.name AS stocktake FROM qr_scans q
+      LEFT JOIN stocktakes t ON t.id = q.stocktake_id WHERE q.asset_id = ? ORDER BY q.id DESC LIMIT 200`, [a.id]);
+  res.json({ admin: true, prints, scans, photos });
+}));
+
+// Photo of an asset (taken after a scan). Admins; the phone shrinks it to ≤ 1280 px JPEG first.
+const MAX_PHOTO = 1.5 * 1024 * 1024;
+router.post('/asset/:aid/photo', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Only an admin can add photos' });
+  const a = await get('SELECT id, country, asset_s4, asset_code FROM assets WHERE id = ? AND deleted_at IS NULL', [req.params.aid]);
+  if (!a) return res.status(404).json({ error: 'Asset not found' });
+  if (!inScope(req, a.country)) return res.status(403).json({ error: 'Not in your region' });
+  const b = req.body || {};
+  const m = String(b.image || '').match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) return res.status(400).json({ error: 'Not an image' });
+  const size = Math.floor(m[2].length * 3 / 4);
+  if (size > MAX_PHOTO) return res.status(413).json({ error: 'Photo too large' });
+  const tid = Number(b.stocktake_id) || null;
+  const r = await run('INSERT INTO asset_photos (asset_id, stocktake_id, note, mime, size, data_b64, taken_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [a.id, tid, str(b.note, 200), m[1], size, m[2], req.user.username]);
+  await audit(req.user, 'PHOTO', a.id, `Photo of "${a.asset_s4 || a.asset_code || '#' + a.id}" saved${tid ? ' (stocktake)' : ''}`);
+  res.json({ ok: true, id: Number(r.lastInsertRowid) });
+}));
+router.get('/photo/:pid', wrap(async (req, res) => {
+  const p = await get('SELECT p.*, a.country FROM asset_photos p LEFT JOIN assets a ON a.id = p.asset_id WHERE p.id = ?', [Number(String(req.params.pid).replace(/\D/g, ''))]);
+  if (!p) return res.status(404).json({ error: 'Photo not found' });
+  if (!inScope(req, p.country)) return res.status(403).json({ error: 'Not in your region' });
+  res.setHeader('Content-Type', p.mime || 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.send(Buffer.from(p.data_b64 || '', 'base64'));
 }));
 
 router.get('/:id', wrap(async (req, res) => {
   const t = await campaign(req, res); if (!t) return;
   const e = expectedSql(t);
   const expected = await all(`SELECT ${COLS} FROM assets WHERE ${e.sql} ORDER BY asset_type, brand_model, id`, e.params);
-  const scans = await all(`SELECT s.*, a.asset_code, a.asset_s4, a.asset_type, a.brand_model, a.serial_no, a.computer_no, a.country, a.location, a.status, a.user_name
+  const scans = await all(`SELECT s.*, a.asset_code, a.asset_s4, a.asset_type, a.brand_model, a.serial_no, a.computer_no, a.country, a.location, a.status, a.user_name, a.department,
+        (SELECT COUNT(*) FROM asset_photos p WHERE p.asset_id = s.asset_id AND p.stocktake_id = s.stocktake_id) AS photos
       FROM stocktake_scans s LEFT JOIN assets a ON a.id = s.asset_id WHERE s.stocktake_id = ? ORDER BY s.id DESC`, [t.id]);
   const scanned = new Set(scans.filter(s => s.asset_id).map(s => s.asset_id));
   try { t.result = t.result ? JSON.parse(t.result) : null; } catch { t.result = null; }
@@ -112,6 +214,7 @@ router.get('/:id', wrap(async (req, res) => {
     stocktake: t,
     found: scans.filter(s => s.result === 'found'),
     elsewhere: scans.filter(s => s.result === 'elsewhere'),
+    outside: scans.filter(s => s.result === 'outside'),
     unknown: scans.filter(s => s.result === 'unknown'),
     missing: expected.filter(a => !scanned.has(a.id)),
     expected: expected.length,
@@ -136,15 +239,21 @@ router.post('/:id/scan', requireRole('admin', 'editor'), wrap(async (req, res) =
   const a = await resolve(code);
   if (!a) {
     await run('INSERT INTO stocktake_scans (stocktake_id, code, result, note, scanned_by) VALUES (?, ?, ?, ?, ?)', [t.id, code, 'unknown', note, req.user.username]);
+    await logScan(req, { code, source: 'stocktake', stocktake_id: t.id, result: 'unknown' });
     return res.json({ result: 'unknown', code });
   }
   if (!inScope(req, a.country)) return res.status(403).json({ error: 'That asset belongs to a country outside your region' });
+  const scans = Number((await get('SELECT COUNT(*) AS n FROM qr_scans WHERE asset_id = ?', [a.id])).n) + 1;
   const prev = await get('SELECT result, scanned_at, scanned_by FROM stocktake_scans WHERE stocktake_id = ? AND asset_id = ?', [t.id, a.id]);
-  if (prev) return res.json({ result: prev.result, already: true, asset: a, scanned_at: prev.scanned_at, scanned_by: prev.scanned_by });
-  const result = isHere(t, a) ? 'found' : 'elsewhere';
+  if (prev) {
+    await logScan(req, { asset_id: a.id, code, source: 'stocktake', stocktake_id: t.id, result: 'again' });
+    return res.json({ result: prev.result, already: true, asset: a, scanned_at: prev.scanned_at, scanned_by: prev.scanned_by, askPhoto: isAdmin(req), ...(isAdmin(req) ? { scans } : {}) });
+  }
+  const result = !isHere(t, a) ? 'elsewhere' : inFilter(t, a) ? 'found' : 'outside';
   await run('INSERT INTO stocktake_scans (stocktake_id, asset_id, code, result, note, scanned_by) VALUES (?, ?, ?, ?, ?, ?)',
     [t.id, a.id, code, result, note, req.user.username]);
-  res.json({ result, asset: a });
+  await logScan(req, { asset_id: a.id, code, source: 'stocktake', stocktake_id: t.id, result });
+  res.json({ result, asset: a, askPhoto: isAdmin(req), ...(isAdmin(req) ? { scans } : {}) });
 }));
 
 router.post('/:id/move/:assetId', requireRole('admin', 'editor'), wrap(async (req, res) => {
@@ -171,7 +280,8 @@ router.post('/:id/close', requireRole('admin', 'editor'), wrap(async (req, res) 
   const scanned = new Set(scans.filter(s => s.asset_id).map(s => s.asset_id));
   const missing = expected.filter(a => !scanned.has(a.id)).map(a => a.id);
   const result = { expected: expected.length, found: scans.filter(s => s.result === 'found').length,
-    elsewhere: scans.filter(s => s.result === 'elsewhere').length, unknown: scans.filter(s => s.result === 'unknown').length,
+    elsewhere: scans.filter(s => s.result === 'elsewhere').length, outside: scans.filter(s => s.result === 'outside').length,
+    unknown: scans.filter(s => s.result === 'unknown').length,
     missing: missing.length, missingIds: missing };
   await run("UPDATE stocktakes SET status = 'closed', closed_at = datetime('now'), expected = ?, result = ? WHERE id = ?",
     [expected.length, JSON.stringify(result), t.id]);

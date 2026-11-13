@@ -1032,6 +1032,42 @@ async function migrate() {
       scanned_at    TEXT    DEFAULT (datetime('now')),
       UNIQUE (stocktake_id, asset_id));
     CREATE INDEX IF NOT EXISTS idx_scans_take ON stocktake_scans(stocktake_id);`);
+  // Stocktake filters (status / department / asset type) + QR label prints, every QR scan, asset photos.
+  const stcols = (await backend.all('PRAGMA table_info(stocktakes)')).map(c => c.name);
+  for (const col of ['status_filter', 'department', 'asset_type']) {
+    if (!stcols.includes(col)) await backend.run(`ALTER TABLE stocktakes ADD COLUMN ${col} TEXT DEFAULT ''`);
+  }
+  await backend.script(`CREATE TABLE IF NOT EXISTS qr_prints (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id    INTEGER NOT NULL,
+      purpose     TEXT    DEFAULT '',
+      batch       TEXT    DEFAULT '',
+      printed_by  TEXT    DEFAULT '',
+      printed_at  TEXT    DEFAULT (datetime('now')));
+    CREATE INDEX IF NOT EXISTS idx_qr_prints_asset ON qr_prints(asset_id);
+    CREATE TABLE IF NOT EXISTS qr_scans (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id      INTEGER DEFAULT NULL,
+      code          TEXT    DEFAULT '',
+      source        TEXT    DEFAULT '',             -- stocktake | label
+      stocktake_id  INTEGER DEFAULT NULL,
+      result        TEXT    DEFAULT '',
+      scanned_by    TEXT    DEFAULT '',
+      ip            TEXT    DEFAULT '',
+      scanned_at    TEXT    DEFAULT (datetime('now')));
+    CREATE INDEX IF NOT EXISTS idx_qr_scans_asset ON qr_scans(asset_id);
+    CREATE TABLE IF NOT EXISTS asset_photos (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id      INTEGER NOT NULL,
+      stocktake_id  INTEGER DEFAULT NULL,
+      note          TEXT    DEFAULT '',
+      mime          TEXT    DEFAULT 'image/jpeg',
+      size          INTEGER DEFAULT 0,
+      data_b64      TEXT    DEFAULT '',
+      taken_by      TEXT    DEFAULT '',
+      taken_at      TEXT    DEFAULT (datetime('now')));
+    CREATE INDEX IF NOT EXISTS idx_asset_photos_asset ON asset_photos(asset_id);`);
+
   // Leaver return checklist: one row per thing to give back / switch off (routes/leavers.js).
   await backend.script(`CREATE TABLE IF NOT EXISTS leaver_items (
       person_id   INTEGER NOT NULL,
