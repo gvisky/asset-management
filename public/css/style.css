@@ -1022,3 +1022,30 @@ body.lbl-tallmode .lb-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
   body.lbl-tallmode .lb-sheet { display: block; }
   body.lbl-tallmode .tl { border: 0; page-break-after: always; }
 }
+/* QR labels page: list grouped by model, preview, print selected */
+.lb-filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.lb-filters .form-control { min-width: 140px; }
+.lb-listcard { margin-top: 14px; }
+.lb-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff; z-index: 2; }
+.lg-group { border-bottom: 1px solid var(--border); }
+.lg-head { display: flex; align-items: center; gap: 8px; padding: 9px 16px; background: #f8fafc; cursor: pointer; user-select: none; }
+.lg-head:hover { background: #f1f5f9; }
+.lg-caret { color: #64748b; width: 12px; }
+.lg-n { margin-left: auto; font-size: 12.5px; color: #64748b; }
+.lg-rows { padding: 2px 0; }
+.lg-row { display: grid; grid-template-columns: 22px 130px 110px 150px 120px 150px 1fr auto auto; gap: 10px; align-items: center; padding: 6px 16px 6px 36px; font-size: 13px; cursor: pointer; border-top: 1px solid #f1f5f9; }
+.lg-row:hover { background: #eff6ff; }
+.lg-row.sel { background: #f0fdf4; }
+.lg-code { font-weight: 700; }
+.lg-c { color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lg-adm { font-size: 11.5px; color: #b45309; white-space: nowrap; }
+@media (max-width: 900px) { .lg-row { grid-template-columns: 22px 1fr auto; } .lg-row .lg-c { display: none; } .lg-row .lg-adm { display: none; } }
+#lb-sheet { display: none; }
+.pv-wrap { display: flex; justify-content: center; }
+.pv-wrap .lbl { width: 63.5mm; height: 38.1mm; border: 1px solid #cbd5e1; }
+.pv-wrap.pv-tall .tl { border: 1px solid #cbd5e1; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+@media print {
+  .lb-listcard, .modal-overlay { display: none !important; }
+  #lb-sheet { display: grid; }
+  body.lbl-single #lb-sheet, body.lbl-tallmode #lb-sheet { display: block; }
+}

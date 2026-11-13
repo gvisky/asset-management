@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-13",
+    "title": "QR labels: list, tick & print, preview",
+    "items": [
+      "The labels page lists every asset straight away, grouped by model (biggest first), with filters for country, site, asset type, status and search.",
+      "Tick assets — or a whole model with its group box — and press 🖨 Print selected (N).",
+      "Click an asset to preview its label in the chosen paper size, with a 🖨 Print this label button.",
+      "Admins see 🏷 printed / 📷 scanned counts on each row."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Tall QR label 6.5 × 14 cm with spare parts",
     "items": [
       "QR labels → Paper: \"Tall label · 6.5 × 14 cm\" — one label per page with a big QR, code, type / model, status, serial, PC No, place, department, holder and purchase date.",
