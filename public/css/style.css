@@ -1049,3 +1049,23 @@ body.lbl-tallmode .lb-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
   #lb-sheet { display: grid; }
   body.lbl-single #lb-sheet, body.lbl-tallmode #lb-sheet { display: block; }
 }
+/* Shared label printing (label-print.js): only the labels are printed */
+#lp-sheet { display: none; }
+@media print {
+  body.lp-printing > *:not(#lp-sheet) { display: none !important; }
+  body.lp-printing #lp-sheet { display: grid; padding: 0; }
+  body.lp-printing.lbl-single #lp-sheet, body.lp-printing.lbl-tallmode #lp-sheet { display: block; }
+}
+/* Stocktake lists grouped by model, tick to print labels */
+.sg-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.sg-head { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f8fafc; border-top: 1px solid var(--border); cursor: pointer; user-select: none; }
+.sg-head:hover { background: #f1f5f9; }
+.sg-row { display: grid; grid-template-columns: 22px 150px 170px 1fr 90px auto; gap: 10px; align-items: center; padding: 7px 16px 7px 36px; border-top: 1px solid #f1f5f9; cursor: pointer; font-size: 13px; }
+.sg-row:hover { background: #eff6ff; }
+.sg-row.sel { background: #f0fdf4; }
+.sg-row.sg-unk { cursor: default; }
+.sg-x { white-space: nowrap; text-align: right; cursor: default; }
+@media (max-width: 800px) { .sg-row { grid-template-columns: 22px 1fr auto; } .sg-row > span:nth-child(3), .sg-row > span:nth-child(4) { display: none; } }
+.lp-pv-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lp-pv-foot select { flex: 1 1 180px; min-width: 0; font-size: 13px; padding: 6px 8px; }
+.lp-pv-foot .btn { white-space: nowrap; }

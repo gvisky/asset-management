@@ -3,6 +3,8 @@
 const stEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const stErr = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
 let stCur = null, stData = null, stStop = null, stTab = 'missing';
+const stSel = new Set();            // assets ticked for label printing
+let stOpen = null;                   // model groups opened (null = default)
 
 function stSiteLabel(t) { return t.country + (t.site ? ' · ' + t.site : ''); }
 // Filters of a stocktake (status / asset type / department) as text.
@@ -28,17 +30,44 @@ async function loadList() {
 }
 
 async function openTake(id) {
+  if (stCur !== id) { stSel.clear(); stOpen = null; }
   stCur = id;
   try { stData = await apiGet('/api/stocktake/' + id); } catch (e) { showToast(stErr(e, 'Could not open'), 'error'); return; }
   renderTake();
 }
 
+// One asset line (click = label preview; checkbox = pick for printing).
 function assetRow(a, extra = '') {
-  return `<tr><td><b>${stEsc(a.asset_s4 || a.asset_code || '#' + (a.asset_id || a.id))}</b><div class="text-muted text-sm">${stEsc(a.asset_type || '')}</div></td>
-    <td>${stEsc(a.brand_model || '')}<div class="text-muted text-sm">SN ${stEsc(a.serial_no || '—')} · ${stEsc(a.computer_no || '')}</div></td>
-    <td class="text-sm">${stEsc(a.country || '')}${a.location ? ' · ' + stEsc(a.location) : ''}<div class="text-muted">${stEsc(a.user_name || '')}</div></td>
-    <td class="text-sm">${stEsc(a.status || '')}</td><td style="white-space:nowrap">${extra}</td></tr>`;
+  const id = a.asset_id || a.id;
+  return `<div class="sg-row${stSel.has(id) ? ' sel' : ''}" onclick="LabelPrint.preview(${id}, stPaper())" title="Click to preview its QR label">
+    <input type="checkbox" ${stSel.has(id) ? 'checked' : ''} onclick="event.stopPropagation();stPick(${id}, this.checked)">
+    <span><b>${stEsc(a.asset_s4 || a.asset_code || '#' + id)}</b><div class="text-muted text-sm">${stEsc(a.asset_type || '')}</div></span>
+    <span class="text-sm">SN ${stEsc(a.serial_no || '—')}<div class="text-muted">${stEsc(a.computer_no || '')}</div></span>
+    <span class="text-sm">${stEsc(a.country || '')}${a.location ? ' · ' + stEsc(a.location) : ''}<div class="text-muted">${stEsc(a.user_name || '')}</div></span>
+    <span>${statusBadge(a.status)}</span>
+    <span class="sg-x" onclick="event.stopPropagation()">${extra}</span></div>`;
 }
+// A list grouped by model (biggest first), with a select-all box per model.
+function groupedList(items, extraFn) {
+  const m = new Map();
+  for (const a of items) { const k = a.brand_model || '(model not set)'; if (!m.has(k)) m.set(k, []); m.get(k).push(a); }
+  const gs = [...m.entries()].sort((x, y) => (x[0] === '(model not set)') - (y[0] === '(model not set)') || y[1].length - x[1].length || x[0].localeCompare(y[0]));
+  if (stOpen === null) stOpen = new Set(items.length <= 120 ? gs.map(g => g[0]) : gs.slice(0, 3).map(g => g[0]));
+  return gs.map(([model, list]) => {
+    const ids = list.map(a => a.asset_id || a.id), n = ids.filter(i => stSel.has(i)).length, open = stOpen.has(model);
+    return `<div class="sg"><div class="sg-head" onclick="stToggle(${jsArg(model)})">
+        <input type="checkbox" ${n === ids.length ? 'checked' : ''} ${n && n < ids.length ? 'data-half="1"' : ''} onclick="event.stopPropagation();stPickGroup(${jsArg(ids.join(','))}, this.checked)" title="Select all of this model">
+        <span class="lg-caret">${open ? '▾' : '▸'}</span><b>${stEsc(model)}</b><span class="lg-n">${n ? `<b>${n}</b> / ` : ''}${list.length}</span></div>
+      ${open ? list.map(a => assetRow(a, extraFn ? extraFn(a) : '')).join('') : ''}</div>`;
+  }).join('');
+}
+function stToggle(model) { if (stOpen.has(model)) stOpen.delete(model); else stOpen.add(model); renderBody(); }
+function stPick(id, on) { on ? stSel.add(id) : stSel.delete(id); renderBody(); }
+function stPickGroup(ids, on) { for (const id of String(ids).split(',').map(Number)) on ? stSel.add(id) : stSel.delete(id); renderBody(); }
+function stTabItems() { const d = stData; return stTab === 'missing' ? d.missing : stTab === 'found' ? d.found : stTab === 'elsewhere' ? d.elsewhere : stTab === 'outside' ? (d.outside || []) : []; }
+function stPickAll(on) { for (const a of stTabItems()) on ? stSel.add(a.asset_id || a.id) : stSel.delete(a.asset_id || a.id); renderBody(); }
+// Paper: tall 6.5 × 14 cm by default for a Broken stocktake (spare parts on the label), else the A4 sheet.
+function stPaper() { const el = document.getElementById('st-paper'); return el ? el.value : 'sheet'; }
 
 // Header (with the camera) is drawn once per stocktake; counts and lists are redrawn after each scan.
 function renderTake() {
@@ -70,16 +99,26 @@ function renderBody() {
   const tabs = [['missing', t.status === 'open' ? '❌ Not scanned yet' : '❌ Missing', d.missing.length], ['elsewhere', '📍 Found elsewhere', d.elsewhere.length],
     ...((d.outside || []).length ? [['outside', '🔸 Here, not in this list', d.outside.length]] : []), ['unknown', '❓ Unknown', d.unknown.length], ['found', '✅ Found', d.found.length]];
   const photoBtn = (s) => (stIsAdmin() && open ? ` <button class="btn btn-ghost btn-sm" onclick="photoFor(${s.asset_id})" title="Take / add a photo">📷${s.photos ? ' ' + s.photos : ''}</button>` : (s.photos ? ` <span title="photos">📷 ${s.photos}</span>` : ''));
-  let rows = '';
-  if (stTab === 'missing') rows = d.missing.map(a => assetRow(a)).join('');
-  if (stTab === 'found') rows = d.found.map(s => assetRow(s, `<span class="text-muted text-sm">${stEsc(String(s.scanned_at).slice(11, 16))} · ${stEsc(s.scanned_by)}</span>${photoBtn(s)}`)).join('');
-  if (stTab === 'outside') rows = (d.outside || []).map(s => assetRow(s, `<span class="text-muted text-sm">${stEsc(s.department || '')}</span>${photoBtn(s)}`)).join('');
-  if (stTab === 'elsewhere') rows = d.elsewhere.map(s => assetRow(s, open ? `<button class="btn btn-ghost btn-sm" onclick="moveHere(${s.asset_id})">Move here (${stEsc(stSiteLabel(t))})</button>` : '')).join('');
-  if (stTab === 'unknown') rows = d.unknown.map(s => `<tr><td colspan="4"><b>${stEsc(s.code)}</b> <span class="text-muted text-sm">· ${stEsc(String(s.scanned_at).slice(0, 16))} · ${stEsc(s.scanned_by)}${s.note ? ' · ' + stEsc(s.note) : ''}</span></td>
-     <td><a class="btn btn-ghost btn-sm" href="/inventory.html?search=${encodeURIComponent(s.code)}">Look up / add →</a></td></tr>`).join('');
-  document.getElementById('st-body').innerHTML = `<div class="st-tabs">${tabs.map(([k, l, n]) => `<button class="st-tab${stTab === k ? ' on' : ''}" onclick="stTab='${k}';renderBody()">${l} <b>${n}</b></button>`).join('')}</div>
-      <div class="table-wrap"><table><thead><tr><th>Asset</th><th>Model / serial</th><th>Registered at</th><th>Status</th><th></th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5" class="empty-state">Nothing here</td></tr>'}</tbody></table></div>`;
+  const timeBy = (x) => `<span class="text-muted text-sm">${stEsc(String(x.scanned_at).slice(11, 16))} · ${stEsc(x.scanned_by)}</span>`;
+  let list = '';
+  if (stTab === 'missing') list = groupedList(d.missing);
+  if (stTab === 'found') list = groupedList(d.found, (x) => timeBy(x) + photoBtn(x));
+  if (stTab === 'outside') list = groupedList(d.outside || [], (x) => `<span class="text-muted text-sm">${stEsc(x.department || '')}</span>${photoBtn(x)}`);
+  if (stTab === 'elsewhere') list = groupedList(d.elsewhere, (x) => (open ? `<button class="btn btn-ghost btn-sm" onclick="moveHere(${x.asset_id})">Move here (${stEsc(stSiteLabel(t))})</button>` : ''));
+  if (stTab === 'unknown') list = d.unknown.map(x => `<div class="sg-row sg-unk"><span></span><span><b>${stEsc(x.code)}</b></span>
+     <span class="text-muted text-sm">${stEsc(String(x.scanned_at).slice(0, 16))} · ${stEsc(x.scanned_by)}${x.note ? ' · ' + stEsc(x.note) : ''}</span><span></span><span></span>
+     <span class="sg-x"><a class="btn btn-ghost btn-sm" href="/inventory.html?search=${encodeURIComponent(x.code)}">Look up / add →</a></span></div>`).join('');
+  const prevPaper = stPaper(), defPaper = document.getElementById('st-paper') ? prevPaper : (t.status_filter === 'Broken' ? 'tall' : 'sheet');
+  document.getElementById('st-body').innerHTML = `<div class="st-tabs">${tabs.map(([k, l, n]) => `<button class="st-tab${stTab === k ? ' on' : ''}" onclick="stTab='${k}';stOpen=null;renderBody()">${l} <b>${n}</b></button>`).join('')}</div>
+      ${stTab !== 'unknown' ? `<div class="sg-bar">
+        <button class="btn btn-ghost btn-sm" onclick="stPickAll(true)">Select all in this list</button>
+        <button class="btn btn-ghost btn-sm" onclick="stPickAll(false)">Clear</button>
+        <span class="text-muted text-sm">${stSel.size ? `${stSel.size} selected` : 'Tick assets (or a whole model) to print their QR labels · click an asset to preview'}</span>
+        <span style="flex:1"></span>
+        <select class="form-control" id="st-paper" style="width:auto">${Object.entries(LabelPrint.PAPERS).map(([k, v]) => `<option value="${k}"${k === defPaper ? ' selected' : ''}>${v}</option>`).join('')}</select>
+        <button class="btn btn-primary btn-sm" ${stSel.size ? '' : 'disabled'} onclick="LabelPrint.print([...stSel], stPaper())">🖨 Print labels (${stSel.size})</button></div>` : ''}
+      <div class="sg-list">${list || '<div class="empty-state" style="padding:24px">Nothing here</div>'}</div>`;
+  document.querySelectorAll('.sg-head input[data-half]').forEach(i => { i.indeterminate = true; });
 }
 
 const RESULT = { found: ['✅ Found', '#16a34a'], elsewhere: ['📍 Found elsewhere', '#d97706'], outside: ['🔸 Here, but not in this list', '#0891b2'], unknown: ['❓ Unknown code', '#dc2626'] };
