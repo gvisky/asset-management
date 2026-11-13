@@ -69,7 +69,7 @@ The project is **one repo + one live site + one database**. Every push to `main`
 - With every user-visible change, add an entry to `public/data/app-updates.json` (date, title, short points) — it feeds the Dashboard's **🚀 New app function update** box.
 
 ## Open items
-- **User Inventory re-import overdue** — last Azure CSV import was 29 May 2026.
-- **Malaysia/Thailand asset data** — Thailand has 46 assets and Malaysia 34 in the live DB; check whether the full lists still need importing.
-- **Account security** — default seeded passwords should be changed by each user; the `test` account (global IT admin) has a weak password — change it or lower its role when not testing.
-- **2027 proposal** — `docs/PROPOSAL-2027.md` (research-based roadmap: Graph sync, Entra SSO, lifecycle / refresh / depreciation, QR stocktake + e-signed handover, security views, licence reclaim, Teams alerts, KPI scorecard, new design) + clickable mockup `docs/proposal/mockup.html`.
+- **2027 proposal** — `docs/PROPOSAL-2027.md` + mockup `docs/proposal/mockup.html`.
+  - **Done (Nov 2026):** depreciation, KPI page, M365 licence reclaim, QR labels + phone stocktake + e-signed handover, leaver return checklist.
+  - **Pending:** lifecycle states with dates (In repair / Loaner / Retired / Disposed) · refresh plan (age per type, Windows 10 / end-of-support, link to Budget) · warranty auto-lookup (Lenovo / Dell API keys) · cost per device (TCO) · loaner pool · disposal record + wipe certificate · movers / joiners flags · new design (dark mode, Ctrl+K, side panel, saved views, PWA).
+  - **Not needed now (13 Nov 2026):** Microsoft Graph sync, Entra SSO, security views, Teams alerts + weekly digest, uptime history, staff "My devices" page; also the User Inventory re-import reminder, the Malaysia / Thailand import check and the account-password clean-up.
