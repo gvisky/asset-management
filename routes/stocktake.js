@@ -235,12 +235,15 @@ router.get('/photo/:pid', wrap(async (req, res) => {
 router.get('/:id', wrap(async (req, res) => {
   const t = await campaign(req, res); if (!t) return;
   const e = expectedSql(t);
-  const expected = await all(`SELECT ${COLS} FROM assets WHERE ${e.sql} ORDER BY asset_type, brand_model, id`, e.params);
-  const scans = await all(`SELECT s.*, a.asset_code, a.asset_s4, a.asset_type, a.brand_model, a.serial_no, a.computer_no, a.country, a.location, a.status, a.user_name, a.department,
+  const expected = await all(`SELECT ${COLS}, purchase_date, warranty_expiry, remark, parts FROM assets WHERE ${e.sql} ORDER BY asset_type, brand_model, id`, e.params);
+  const scans = await all(`SELECT s.*, a.asset_code, a.asset_s4, a.asset_type, a.brand_model, a.serial_no, a.computer_no, a.country, a.location, a.status, a.user_name, a.ad_name, a.department,
+        a.purchase_date, a.warranty_expiry, a.remark, a.parts,
         (SELECT COUNT(*) FROM asset_photos p WHERE p.asset_id = s.asset_id AND p.stocktake_id = s.stocktake_id) AS photos
       FROM stocktake_scans s LEFT JOIN assets a ON a.id = s.asset_id WHERE s.stocktake_id = ? ORDER BY s.id DESC`, [t.id]);
   const scanned = new Set(scans.filter(s => s.asset_id).map(s => s.asset_id));
   try { t.result = t.result ? JSON.parse(t.result) : null; } catch { t.result = null; }
+  // Extra info for the lists: parts condition of broken laptops (the raw parts JSON is not sent).
+  for (const a of [...expected, ...scans]) { const c = conditionOf(a); if (c) a.condition = CONDITION_LABEL[c]; delete a.parts; }
   res.json({
     stocktake: t,
     found: scans.filter(s => s.result === 'found'),

@@ -50,11 +50,12 @@
   <header class="topbar">
     <span class="topbar-title">Stocktake <span class="text-muted text-sm" style="font-weight:400">· QR audit</span></span>
     <span id="alert-btn-slot"></span>
-    <a class="btn btn-ghost btn-sm" href="/labels.html">🏷 Print labels</a>
+    <button class="btn btn-ghost btn-sm" id="btn-labels" onclick="LabelsPanel.toggle({})">🏷 QR labels</button>
     <button class="btn btn-primary btn-sm" id="btn-new">➕ New stocktake</button>
   </header>
 
   <main class="content">
+    <div id="lb-panel" hidden></div>
     <div id="st-main"><p class="text-muted">Loading…</p></div>
   </main>
 </div>
@@ -83,7 +84,10 @@
 <script src="/js/alerts.js"></script>
 <script src="/js/qr-scan.js?v=20261113a"></script>
 <script src="/js/qr-history.js?v=20261113a"></script>
-<script src="/js/label-print.js?v=20261113b"></script>
-<script src="/js/stocktake.js?v=20261113d"></script>
+<script src="/js/parts-check.js?v=20261110b"></script>
+<script src="/js/label-print.js?v=20261113c"></script>
+<script src="/js/quick-edit.js?v=20261113a"></script>
+<script src="/js/labels.js?v=20261113f"></script>
+<script src="/js/stocktake.js?v=20261113e"></script>
 </body>
 </html>
