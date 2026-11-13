@@ -256,6 +256,12 @@ function renderTable(rows) {
         ? `<button class="btn btn-ghost btn-sm" onclick="viewAssets(${jsArg(adName)}, ${jsArg(p.display_name)})">${cnt} asset${cnt !== 1 ? 's' : ''}</button>`
         : `<span class="badge badge-active">${cnt}</span>`;
     }
+    // My devices: status of the confirmation, and 📨 for IT admins to make the message.
+    const conf = p.devices_confirmed_at
+      ? `<div class="text-sm" style="color:${p.devices_not_have ? '#b91c1c' : '#15803d'}" title="Confirmed by the user on My devices">${p.devices_not_have ? `⚠ ${p.devices_not_have} not with them` : '✅ confirmed'} ${esc(String(p.devices_confirmed_at).slice(0, 10))}</div>`
+      : p.confirm_sent_at ? `<div class="text-sm text-muted" title="Link made, not confirmed yet">📨 sent ${esc(String(p.confirm_sent_at).slice(0, 10))}</div>` : '';
+    if (canEditUsers && p.email) assetsCell += ` <button class="btn btn-ghost btn-sm" title="My devices: message for ${esc(p.display_name)} to check and confirm their devices" onclick="openConfirm(${p.id})">📨</button>`;
+    assetsCell += conf;
     // In User Inventory but missing from the latest Azure user export → left / disabled / renamed?
     const notInAzure = lastAzureImport && p.azure_seen_at && p.azure_seen_at < lastAzureImport
       ? ' <span class="badge badge-retired" title="Not in the latest Azure user export (left, disabled or renamed?)">not in Azure</span>' : '';
@@ -658,3 +664,80 @@ function setupAdUpload() {
 }
 const adSetupSafe = () => { try { setupAdUpload(); } catch (e) { console.error('[AD upload setup]', e); } };
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', adSetupSafe); else adSetupSafe();
+
+// ── My devices: personal link + ready message for the person to confirm their devices (routes/confirm.js) ──
+function mdcOverlay() {
+  let ov = document.getElementById('mdc-ov');
+  if (ov) return ov;
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="mdc-ov"><div class="modal" style="max-width:720px">
+    <div class="modal-header"><span class="modal-title" id="mdc-t">My devices</span><button class="modal-close" onclick="document.getElementById('mdc-ov').classList.remove('open')" aria-label="Close">✕</button></div>
+    <div class="modal-body" id="mdc-b"></div>
+    <div class="modal-footer" id="mdc-f"></div></div></div>`);
+  return document.getElementById('mdc-ov');
+}
+const mdcDate = (s) => (s ? esc(String(s).slice(0, 16)) + ' UTC' : '');
+async function openConfirm(id) {
+  const ov = mdcOverlay(); ov.classList.add('open');
+  const b = document.getElementById('mdc-b'), f = document.getElementById('mdc-f');
+  b.innerHTML = '<p class="text-muted">Loading…</p>'; f.innerHTML = '';
+  let d;
+  try { d = await apiGet('/api/confirm/person/' + id); } catch (e) { b.innerHTML = '<p class="text-muted">Could not load.</p>'; return; }
+  document.getElementById('mdc-t').textContent = `📨 My devices — ${d.person.display_name}`;
+  const st = (l) => {
+    if (l.confirmed_at) return `✅ confirmed ${mdcDate(l.confirmed_at)}`;
+    if (l.revoked) return 'replaced by a newer link';
+    if (l.expires_at < d.now) return 'expired';
+    if (l.attempts >= 5 && !l.verified_at) return `🔒 locked (${l.attempts} wrong emails)`;
+    return [l.verified_at ? `email checked ${mdcDate(l.verified_at)}` : l.opened_at ? `opened ${mdcDate(l.opened_at)}` : 'not opened yet',
+      l.attempts ? `${l.attempts} wrong email${l.attempts > 1 ? 's' : ''}` : ''].filter(Boolean).join(' · ');
+  };
+  const res = (c) => (!c ? '<span class="text-muted">not confirmed</span>'
+    : c.result === 'have' ? `<span style="color:#15803d">✓ has it</span> <span class="text-muted text-sm">${mdcDate(c.confirmed_at)}</span>`
+    : `<span style="color:#b91c1c">✗ not with them</span> <span class="text-muted text-sm">${mdcDate(c.confirmed_at)}${c.note ? ' · “' + esc(c.note) + '”' : ''}</span>`);
+  b.innerHTML = `<div class="text-sm text-muted" style="margin-bottom:8px">${esc(d.person.email)} · ${esc(d.person.country)} — the link only opens the list when this email is typed.</div>
+    <h4 style="margin:6px 0">Devices registered (AD Name = ${esc(String(d.person.email).split('@')[0])}): ${d.assets.length}</h4>
+    ${d.assets.length ? `<div class="table-wrap"><table><thead><tr><th>Asset</th><th>Device</th><th>Serial</th><th>Last answer</th></tr></thead><tbody>${d.assets.map(a => `<tr>
+      <td><b>${esc(a.code || '#' + a.id)}</b></td><td>${esc([a.type, a.model].filter(Boolean).join(' · '))}</td><td class="text-sm">${esc(a.serial || '—')}</td><td>${res(a.confirmation)}</td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="text-muted text-sm">No asset has this AD Name — the person will be asked to confirm they hold no company device.</p>'}
+    ${d.gone.length ? `<p class="text-sm text-muted">Confirmed earlier, no longer registered to them: ${d.gone.map(g => esc(g.asset_label)).join('; ')}</p>` : ''}
+    <h4 style="margin:12px 0 4px">Links sent</h4>
+    ${d.links.length ? `<ul class="mdc-st">${d.links.map(l => `<li>${mdcDate(l.created_at)} by ${esc(l.created_by)} — ${st(l)}</li>`).join('')}</ul>` : '<p class="text-muted text-sm">None yet.</p>'}
+    <div id="mdc-msg"></div>`;
+  f.innerHTML = `<span class="text-muted text-sm" style="margin-right:auto">A new link replaces the old one · valid 14 days</span>
+    <button class="btn btn-primary" id="mdc-new">📨 Make link &amp; message</button>`;
+  document.getElementById('mdc-new').onclick = () => makeConfirmLink(id);
+}
+
+async function makeConfirmLink(id) {
+  const btn = document.getElementById('mdc-new'); btn.disabled = true;
+  let r;
+  try { r = await apiPost(`/api/confirm/person/${id}/link`, {}); }
+  catch (e) { let m = 'Could not make the link'; try { m = JSON.parse(e.message).error || m; } catch {} showToast(m, 'error'); btn.disabled = false; return; }
+  const first = String(r.name || '').trim();   // full name: name order differs by country
+  const until = String(r.expires_at).slice(0, 10);
+  const list = r.assets.length ? r.assets.map(a => `${[a.type, a.model].filter(Boolean).join(' ')} — ${a.code || ''}${a.serial ? ' · SN ' + a.serial : ''}`) : [];
+  const subject = 'Please confirm your company devices';
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;color:#1e293b;line-height:1.5">
+<p>Dear ${esc(first || r.name)},</p>
+<p>IT keeps a record of the company devices registered to you${list.length ? ` (<b>${list.length}</b> device${list.length > 1 ? 's' : ''})` : ''}. Please take one minute to check the list and confirm.</p>
+<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="border-radius:6px;background:#1a56db">
+<a href="${esc(r.url)}" style="display:inline-block;padding:11px 22px;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;background:#1a56db">✅ Check &amp; confirm my devices</a></td></tr></table>
+<p style="font-size:13px;color:#475569">The page will ask for your work email (the address this message was sent to) to make sure it is you. The link is personal — please do not forward it — and works until <b>${esc(until)}</b>.</p>
+<p>Thank you,<br>${esc(r.sender)} — IT</p></div>`;
+  const text = `Dear ${first || r.name},\n\nIT keeps a record of the company devices registered to you${list.length ? ` (${list.length})` : ''}. Please take one minute to check the list and confirm:\n\n${r.url}\n\nThe page will ask for your work email (the address this message was sent to) to make sure it is you. The link is personal — please do not forward it — and works until ${until}.\n\nThank you,\n${r.sender} — IT`;
+  document.getElementById('mdc-msg').innerHTML = `<h4 style="margin:14px 0 6px">Message to send to <b>${esc(r.email)}</b> <span class="text-muted text-sm">· subject: ${esc(subject)}</span></h4>
+    <div class="mdc-msg">${html}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn btn-primary btn-sm" id="mdc-copy">📋 Copy message</button>
+      <a class="btn btn-ghost btn-sm" href="mailto:${encodeURIComponent(r.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}">✉️ Open in Outlook (plain text)</a>
+      <button class="btn btn-ghost btn-sm" id="mdc-link">🔗 Copy link only</button></div>
+    <p class="text-muted text-sm" style="margin-top:6px">Paste into a new Outlook email to <b>${esc(r.email)}</b> — the button stays a button. Send it only to this address: the page checks the email.</p>`;
+  document.getElementById('mdc-copy').onclick = async () => {
+    try { await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]); showToast('Message copied — paste it into the email'); }
+    catch { try { await navigator.clipboard.writeText(text); showToast('Copied as plain text'); } catch { showToast('Copy failed — select the message and copy it', 'error'); } }
+  };
+  document.getElementById('mdc-link').onclick = async () => { try { await navigator.clipboard.writeText(r.url); showToast('Link copied'); } catch { showToast('Copy failed', 'error'); } };
+  btn.textContent = '📨 Make a new link'; btn.disabled = false;
+  document.getElementById('mdc-msg').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  loadPeople(currentPage || 1);
+}

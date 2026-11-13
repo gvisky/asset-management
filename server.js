@@ -43,9 +43,12 @@ app.use('/api/stocktake', require('./routes/stocktake'));
 app.use('/api/m365', require('./routes/m365'));
 app.use('/api/leavers', require('./routes/leavers'));
 app.use('/api/kpi', require('./routes/kpi'));
+app.use('/api/confirm', require('./routes/confirm').admin);
+app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff confirm their devices with a personal link
 
 // Public files that must load before login (login page + shared CSS/JS)
-const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico'];
+const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico',
+  '/my-devices.html', '/js/my-devices.js'];   // "My devices": opened from the personal link, no login
 
 // Which build is running (Render sets RENDER_GIT_COMMIT) — to check a deploy really went live.
 app.get('/api/version', (req, res) => {

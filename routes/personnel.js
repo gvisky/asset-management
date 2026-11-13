@@ -92,7 +92,11 @@ router.get('/', wrap(async (req, res) => {
   const data = await all(
     `SELECT p.*, (SELECT COUNT(*) FROM assets a WHERE ${adMatch}) AS asset_count,
             (SELECT COUNT(*) FROM devices d WHERE d.person_id = p.id) AS device_count,
-            ${INTUNE_LAST_SQL} AS intune_last, ${ENTRA_LAST_SQL} AS entra_last
+            ${INTUNE_LAST_SQL} AS intune_last, ${ENTRA_LAST_SQL} AS entra_last,
+            (SELECT MAX(c.confirmed_at) FROM confirm_links c WHERE c.person_id = p.id) AS devices_confirmed_at,
+            (SELECT MAX(c.created_at) FROM confirm_links c WHERE c.person_id = p.id) AS confirm_sent_at,
+            (SELECT COUNT(*) FROM asset_confirmations ac WHERE ac.person_id = p.id AND ac.result = 'not_have'
+               AND ac.link_id = (SELECT MAX(c2.id) FROM confirm_links c2 WHERE c2.person_id = p.id AND c2.confirmed_at IS NOT NULL)) AS devices_not_have
      FROM personnel p ${where} ORDER BY ${ORDER[sort] || ORDER.updated} LIMIT ? OFFSET ?`,
     [...params, Number(limit), offset]
   );

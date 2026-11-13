@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-13",
+    "title": "My devices: staff confirm their own devices",
+    "items": [
+      "User Inventory → 📨 next to a person (IT admin): see their devices and earlier answers, then 📨 Make link & message — a ready email with a ✅ Check & confirm my devices button. 📋 Copy message and paste it into Outlook to that person (or ✉️ Open in Outlook / 🔗 Copy link only).",
+      "The personal link works 14 days; a new link replaces the old one. The page asks for the person's work email and shows the devices only when it matches our record — 5 wrong emails lock the link.",
+      "The person answers ✓ I have it / ✗ Not with me (with a note) for each device, can add a device that is missing from the list, types their name to sign and presses Confirm.",
+      "Each answer is recorded with time, IP and browser (Audit Log); \"Not with me\" or a missing device raises an IT alert. The Assets column shows ✅ confirmed / ⚠ not with them / 📨 sent with the date."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "New label size: Big label 15 × 15 cm",
     "items": [
       "Paper → \"Big label · 15 × 15 cm\" on the Stocktake page, the QR labels panel / page and the label preview — one label per page.",
