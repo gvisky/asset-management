@@ -27,6 +27,7 @@ const router = express.Router();
 const { get, all, run, audit } = require('../db/database');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { inScope, countrySql } = require('../lib/scope');
+const { PARTS, CONDITION_LABEL, parseParts, conditionOf } = require('../lib/parts');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 router.use(requireAuth);
@@ -124,14 +125,14 @@ router.get('/labels', wrap(async (req, res) => {
   if (req.query.ids) {
     const ids = String(req.query.ids).split(',').map(Number).filter(Boolean).slice(0, 500);
     if (!ids.length) return res.json([]);
-    rows = await all(`SELECT ${COLS} FROM assets WHERE deleted_at IS NULL AND id IN (${ids.map(() => '?').join(',')})`, ids);
+    rows = await all(`SELECT ${COLS}, parts, purchase_date FROM assets WHERE deleted_at IS NULL AND id IN (${ids.map(() => '?').join(',')})`, ids);
   } else {
     const country = str(req.query.country, 60);
     if (!country) return res.status(400).json({ error: 'Pick a country or assets' });
     const cond = ['deleted_at IS NULL', 'country = ?'], params = [country];
     if (req.query.site) { cond.push('location = ?'); params.push(str(req.query.site, 20)); }
     if (req.query.type) { cond.push('LOWER(asset_type) = LOWER(?)'); params.push(str(req.query.type, 40)); }
-    rows = await all(`SELECT ${COLS} FROM assets WHERE ${cond.join(' AND ')} ORDER BY asset_type, brand_model, id LIMIT 500`, params);
+    rows = await all(`SELECT ${COLS}, parts, purchase_date FROM assets WHERE ${cond.join(' AND ')} ORDER BY asset_type, brand_model, id LIMIT 500`, params);
   }
   rows = rows.filter(a => inScope(req, a.country));
   const counts = new Map();
@@ -145,6 +146,12 @@ router.get('/labels', wrap(async (req, res) => {
   for (const a of rows) {
     out.push({ id: a.id, code: a.asset_s4 || a.asset_code || '', model: a.brand_model || '', serial: a.serial_no || '', pc: a.computer_no || '',
       country: a.country, site: a.location || '', type: a.asset_type || '',
+      // For the tall label (6.5 × 14 cm): more asset info, and the spare parts of a broken laptop.
+      status: a.status || '', department: a.department || '', holder: a.user_name || a.ad_name || '', purchase: a.purchase_date || '',
+      ...(() => { const cond = conditionOf(a); if (!cond) return {};
+        const p = parseParts(a.parts);
+        return { condition: CONDITION_LABEL[cond], parts: PARTS.map(([k, n]) => ({ part: n, state: p.total ? 'bad' : (p[k] || '') })),
+          partsNote: p.note || '', partsChecked: p.checked_at ? `${p.checked_at} UTC · ${p.checked_by || ''}` : '' }; })(),
       ...(isAdmin(req) ? { printed: (counts.get(a.id) || {}).printed || 0, lastPrint: (counts.get(a.id) || {}).lastPrint || '', scanned: (counts.get(a.id) || {}).scanned || 0 } : {}),
       svg: await QRCode.toString(scanUrl(req, a.id), { type: 'svg', margin: 0, errorCorrectionLevel: 'M' }) });
   }
