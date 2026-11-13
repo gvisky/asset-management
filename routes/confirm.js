@@ -87,9 +87,11 @@ const publicAsset = (a) => ({ id: a.id, code: a.asset_s4 || a.asset_code || '', 
 // ── IT admin ─────────────────────────────────────────────────────────────────
 const admin = express.Router();
 admin.use(requireAuth);
-// Open links ("ask everyone"): admins and editors; everything else here: IT admins.
-admin.use((req, res, next) => (isITAdmin(req.user) || (req.path.startsWith('/campaigns') && req.user && ['admin', 'editor'].includes(req.user.role))
-  ? next() : res.status(403).json({ error: 'IT administrator only' })));
+// Open links ("ask everyone"): admins and editors WITH Asset Inventory access (not User-Inventory-only
+// editors); everything else here: IT admins.
+const canOpenLinks = (u) => !!u && ['admin', 'editor'].includes(u.role) && u.asset_access !== 0;
+admin.use((req, res, next) => (isITAdmin(req.user) || (req.path.startsWith('/campaigns') && canOpenLinks(req.user))
+  ? next() : res.status(403).json({ error: req.path.startsWith('/campaigns') ? 'Admins and editors with Asset Inventory access only' : 'IT administrator only' })));
 
 async function personFor(req, res) {
   const p = await get('SELECT id, display_name, email, ad_email, country, status, mobile_policy FROM personnel WHERE id = ?', [Number(req.params.id)]);

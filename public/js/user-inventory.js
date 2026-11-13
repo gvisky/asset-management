@@ -189,7 +189,8 @@ async function loadPeople(page = 1) {
     lastAdImport = result.ad_last_import || null;
     adCountries = result.ad_countries || [];
     document.getElementById('btn-dirsync-upload').style.display = result.can && result.can.adUpload ? '' : 'none';
-    document.getElementById('btn-askall').style.display = window.CURRENT_USER && ['admin', 'editor'].includes(window.CURRENT_USER.role) ? '' : 'none';
+    const me = window.CURRENT_USER || {};
+    document.getElementById('btn-askall').style.display = ['admin', 'editor'].includes(me.role) && me.asset_access !== 0 ? '' : 'none';   // not for User-Inventory-only editors
     peopleBaseline = result.baseline || null;
     renderTable(result.data);
     renderPagination(result.total, result.page, result.limit);
