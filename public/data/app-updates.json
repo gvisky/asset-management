@@ -5,7 +5,8 @@
     "items": [
       "Upload AD list now reads the new \"Email Address\" column — each person's market email (…@hayat.vn, @molfix.co.th, @molped.com.my …) — and keeps it as a second email. It shows under the name in User Inventory (✉ …).",
       "My devices: the page accepts either email — <AD name>@hayat.com.tr or the second email — and the person signs with the one they typed.",
-      "The ready message is addressed to both emails (Copy message / Open in Outlook) and tells the person they can use either."
+      "The ready message is addressed to both emails (Copy message / Open in Outlook) and tells the person they can use either.",
+      "Upload AD list ignores the empty \"Modify User\" rows some AD exports contain — they no longer show as shared / function accounts."
     ]
   },
   {
