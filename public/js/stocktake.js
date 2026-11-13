@@ -44,6 +44,14 @@ function stAge(d) {
   return y < 1 ? `${Math.max(0, Math.round(y * 12))} mo` : `${y.toFixed(1)} y`;
 }
 const stBrokenLaptop = (a) => a.status === 'Broken' && String(a.asset_type || '').trim().toLowerCase() === 'laptop';
+// Parts column of a broken laptop: one chip per part (✓ usable · ✗ broken · ↪ used as spare · ? not checked).
+const ST_PARTS = [['screen', 'Screen', 'Scr'], ['mainboard', 'Mainboard', 'MB'], ['ram', 'RAM', 'RAM'], ['keyboard', 'Keyboard', 'KB'], ['battery', 'Battery', 'Bat'], ['storage', 'SSD / Storage', 'SSD'], ['charger', 'Charger', 'Chg']];
+const ST_PMARK = { ok: ['✓', 'usable', 'pt-ok'], bad: ['✗', 'broken', 'pt-bad'], used: ['↪', 'used as spare', 'pt-used'], '': ['?', 'not checked', 'pt-unk'] };
+function stPartsCell(a) {
+  const p = a.partsState; if (!p) return '';
+  if (p.total) return '<span class="pchip pt-bad" title="Total broken — no part can be used">✗ Total broken</span>';
+  return ST_PARTS.map(([k, name, s]) => { const m = ST_PMARK[p[k] || ''] || ST_PMARK['']; return `<span class="pchip ${m[2]}" title="${name}: ${m[1]}">${m[0]} ${s}</span>`; }).join('');
+}
 function assetRow(a, extra = '') {
   const id = a.asset_id || a.id;
   const holder = a.status === 'Broken' ? '' : stReal(a.user_name) || stReal(a.ad_name);
@@ -55,6 +63,7 @@ function assetRow(a, extra = '') {
     <span class="text-sm">SN ${stEsc(stReal(a.serial_no) || '—')}<div class="text-muted">${stEsc(stReal(a.computer_no))}</div></span>
     <span class="text-sm">${stEsc(a.country || '')}${stReal(a.location) ? ' · ' + stEsc(a.location) : ''}<div class="text-muted">${holder ? '👤 ' + stEsc(holder) : ''}${stReal(a.department) ? (holder ? ' · ' : '') + stEsc(a.department) : ''}</div></span>
     <span class="text-sm sg-more">${bought}${warr ? ' · ' + warr : ''}<div class="text-muted">${a.condition ? '🔩 <b>' + stEsc(a.condition) + '</b>' + (stReal(a.remark) ? ' · ' : '') : ''}${stEsc(stReal(a.remark)).slice(0, 90)}</div></span>
+    <span class="sg-parts">${stPartsCell(a)}</span>
     <span>${statusBadge(a.status)}</span>
     <span class="sg-x" onclick="event.stopPropagation()">${extra}${canEdit() ? ` <button class="btn btn-ghost btn-sm" onclick="QuickEdit.open(${id}, stReload)" title="${stBrokenLaptop(a) ? 'Update its spare parts' : 'Edit this asset here'}">${stBrokenLaptop(a) ? '🔩 Parts' : '✏️ Edit'}</button>` : ''}</span></div>`;
 }
@@ -122,7 +131,7 @@ function renderBody() {
   if (stTab === 'outside') list = groupedList(d.outside || [], (x) => `<span class="text-muted text-sm">${stEsc(x.department || '')}</span>${photoBtn(x)}`);
   if (stTab === 'elsewhere') list = groupedList(d.elsewhere, (x) => (open ? `<button class="btn btn-ghost btn-sm" onclick="moveHere(${x.asset_id})">Move here (${stEsc(stSiteLabel(t))})</button>` : ''));
   if (stTab === 'unknown') list = d.unknown.map(x => `<div class="sg-row sg-unk"><span></span><span><b>${stEsc(x.code)}</b></span>
-     <span class="text-muted text-sm">${stEsc(String(x.scanned_at).slice(0, 16))} · ${stEsc(x.scanned_by)}${x.note ? ' · ' + stEsc(x.note) : ''}</span><span></span><span class="sg-more"></span><span></span>
+     <span class="text-muted text-sm">${stEsc(String(x.scanned_at).slice(0, 16))} · ${stEsc(x.scanned_by)}${x.note ? ' · ' + stEsc(x.note) : ''}</span><span></span><span class="sg-more"></span><span class="sg-parts"></span><span></span>
      <span class="sg-x"><a class="btn btn-ghost btn-sm" href="/inventory.html?search=${encodeURIComponent(x.code)}">Look up / add →</a></span></div>`).join('');
   const prevPaper = stPaper(), defPaper = document.getElementById('st-paper') ? prevPaper : (t.status_filter === 'Broken' ? 'tall' : 'sheet');
   document.getElementById('st-body').innerHTML = `<div class="st-tabs">${tabs.map(([k, l, n]) => `<button class="st-tab${stTab === k ? ' on' : ''}" onclick="stTab='${k}';stOpen=new Set();renderBody()">${l} <b>${n}</b></button>`).join('')}</div>
@@ -131,6 +140,7 @@ function renderBody() {
         <button class="btn btn-ghost btn-sm" onclick="stPickAll(false)">Clear</button>
         <button class="btn btn-ghost btn-sm" onclick="stExpandAll()">Expand / collapse all</button>
         <span class="text-muted text-sm">${stSel.size ? `${stSel.size} selected` : 'Tick assets (or a whole model) to print their QR labels · click an asset to preview'}</span>
+        ${stTabItems().some(a => a.partsState) ? '<span class="text-muted text-sm">Parts: <span class="pchip pt-ok">✓ usable</span><span class="pchip pt-bad">✗ broken</span><span class="pchip pt-used">↪ used as spare</span><span class="pchip pt-unk">? not checked</span></span>' : ''}
         <span style="flex:1"></span>
         <select class="form-control" id="st-paper" style="width:auto">${Object.entries(LabelPrint.PAPERS).map(([k, v]) => `<option value="${k}"${k === defPaper ? ' selected' : ''}>${v}</option>`).join('')}</select>
         <button class="btn btn-primary btn-sm" ${stSel.size ? '' : 'disabled'} onclick="LabelPrint.print([...stSel], stPaper())">🖨 Print labels (${stSel.size})</button></div>` : ''}

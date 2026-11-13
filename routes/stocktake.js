@@ -243,7 +243,11 @@ router.get('/:id', wrap(async (req, res) => {
   const scanned = new Set(scans.filter(s => s.asset_id).map(s => s.asset_id));
   try { t.result = t.result ? JSON.parse(t.result) : null; } catch { t.result = null; }
   // Extra info for the lists: parts condition of broken laptops (the raw parts JSON is not sent).
-  for (const a of [...expected, ...scans]) { const c = conditionOf(a); if (c) a.condition = CONDITION_LABEL[c]; delete a.parts; }
+  for (const a of [...expected, ...scans]) {
+    const c = conditionOf(a);
+    if (c) { a.condition = CONDITION_LABEL[c]; const p = parseParts(a.parts); a.partsState = { total: !!p.total, ...Object.fromEntries(PARTS.map(([k]) => [k, p[k] || ''])) }; }
+    delete a.parts;
+  }
   res.json({
     stocktake: t,
     found: scans.filter(s => s.result === 'found'),

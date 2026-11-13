@@ -1060,13 +1060,13 @@ body.lbl-tallmode .lb-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
 .sg-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--border); }
 .sg-head { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #f8fafc; border-top: 1px solid var(--border); cursor: pointer; user-select: none; }
 .sg-head:hover { background: #f1f5f9; }
-.sg-row { display: grid; grid-template-columns: 22px 150px 160px minmax(160px, 1fr) minmax(170px, 1fr) 80px auto; gap: 10px; align-items: center; padding: 7px 16px 7px 36px; border-top: 1px solid #f1f5f9; cursor: pointer; font-size: 13px; }
+.sg-row { display: grid; grid-template-columns: 22px 150px 160px minmax(150px, 1fr) minmax(160px, 1fr) auto 80px auto; gap: 10px; align-items: center; padding: 7px 16px 7px 36px; border-top: 1px solid #f1f5f9; cursor: pointer; font-size: 13px; }
 .sg-row:hover { background: #eff6ff; }
 .sg-row.sel { background: #f0fdf4; }
 .sg-row.sg-unk { cursor: default; }
 .sg-x { white-space: nowrap; text-align: right; cursor: default; }
-@media (max-width: 1100px) { .sg-row { grid-template-columns: 22px 140px 150px 1fr 80px auto; } .sg-row > .sg-more { display: none; } }
-@media (max-width: 800px) { .sg-row { grid-template-columns: 22px 1fr auto auto; } .sg-row > span:nth-child(3), .sg-row > span:nth-child(4) { display: none; } }
+@media (max-width: 1100px) { .sg-row { grid-template-columns: 22px 120px 120px minmax(90px, 1fr) auto 80px auto; } .sg-row > .sg-more { display: none; } }
+@media (max-width: 800px) { .sg-row { grid-template-columns: 22px 1fr auto auto; } .sg-row > span:nth-child(3), .sg-row > span:nth-child(4), .sg-row > .sg-parts { display: none; } }
 .lp-pv-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .lp-pv-foot select { flex: 1 1 180px; min-width: 0; font-size: 13px; padding: 6px 8px; }
 .lp-pv-foot .btn { white-space: nowrap; }
@@ -1081,3 +1081,12 @@ body.lbl-tallmode .lb-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
 .lb-scroll { max-height: 60vh; overflow: auto; }
 .lg-x { white-space: nowrap; text-align: right; }
 .lg-x .btn { padding: 2px 7px; }
+/* Parts column (broken laptops) */
+.sg-parts { display: flex; flex-wrap: wrap; gap: 3px; max-width: 230px; }
+.sg-parts:not(:empty) { min-width: 200px; }
+.pchip { display: inline-block; font-size: 11px; line-height: 1; padding: 3px 5px; border-radius: 5px; white-space: nowrap; font-weight: 600; margin-right: 2px; }
+.pchip.pt-ok { background: #dcfce7; color: #166534; }
+.pchip.pt-bad { background: #fee2e2; color: #991b1b; }
+.pchip.pt-used { background: #dbeafe; color: #1e40af; }
+.pchip.pt-unk { background: #f1f5f9; color: #64748b; }
+@media (max-width: 1100px) { .sg-parts:not(:empty) { min-width: 0; max-width: 150px; } .sg-row { gap: 8px; } }
