@@ -992,6 +992,74 @@ async function migrate() {
     CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
     CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at);`);
 
+  // Handover / return records with the e-signature PDF (routes/custody.js).
+  await backend.script(`CREATE TABLE IF NOT EXISTS asset_docs (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id      INTEGER NOT NULL,
+      kind          TEXT    NOT NULL,              -- handover | return
+      person_id     INTEGER DEFAULT NULL,
+      person_name   TEXT    DEFAULT '',
+      person_email  TEXT    DEFAULT '',
+      note          TEXT    DEFAULT '',
+      country       TEXT    DEFAULT '',
+      signed_at     TEXT    DEFAULT (datetime('now')),
+      created_by    TEXT    DEFAULT '',
+      ip            TEXT    DEFAULT '',
+      sha256        TEXT    DEFAULT '',
+      pdf_b64       TEXT    DEFAULT '');
+    CREATE INDEX IF NOT EXISTS idx_asset_docs_asset ON asset_docs(asset_id);
+    CREATE INDEX IF NOT EXISTS idx_asset_docs_person ON asset_docs(person_id);`);
+  // Stocktake (QR audit) campaigns and their scans (routes/stocktake.js).
+  await backend.script(`CREATE TABLE IF NOT EXISTS stocktakes (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    NOT NULL,
+      country     TEXT    NOT NULL,
+      site        TEXT    DEFAULT '',
+      status      TEXT    NOT NULL DEFAULT 'open',   -- open | closed
+      expected    INTEGER DEFAULT 0,
+      created_by  TEXT    DEFAULT '',
+      created_at  TEXT    DEFAULT (datetime('now')),
+      closed_at   TEXT    DEFAULT NULL,
+      result      TEXT    DEFAULT '');               -- JSON summary when closed
+    CREATE TABLE IF NOT EXISTS stocktake_scans (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      stocktake_id  INTEGER NOT NULL,
+      asset_id      INTEGER DEFAULT NULL,
+      code          TEXT    DEFAULT '',
+      result        TEXT    NOT NULL,                -- found | elsewhere | unknown
+      note          TEXT    DEFAULT '',
+      scanned_by    TEXT    DEFAULT '',
+      scanned_at    TEXT    DEFAULT (datetime('now')),
+      UNIQUE (stocktake_id, asset_id));
+    CREATE INDEX IF NOT EXISTS idx_scans_take ON stocktake_scans(stocktake_id);`);
+  // Leaver return checklist: one row per thing to give back / switch off (routes/leavers.js).
+  await backend.script(`CREATE TABLE IF NOT EXISTS leaver_items (
+      person_id   INTEGER NOT NULL,
+      item        TEXT    NOT NULL,                  -- asset:<id> | device:<name> | m365 | ad | other:<text>
+      label       TEXT    DEFAULT '',
+      due_date    TEXT    DEFAULT '',
+      done_at     TEXT    DEFAULT NULL,
+      done_by     TEXT    DEFAULT '',
+      note        TEXT    DEFAULT '',
+      PRIMARY KEY (person_id, item));`);
+  // Microsoft 365 "Active users" report (admin centre export) for the licence reclaim list.
+  await backend.script(`CREATE TABLE IF NOT EXISTS m365_users (
+      upn            TEXT PRIMARY KEY,
+      display_name   TEXT DEFAULT '',
+      products       TEXT DEFAULT '',
+      licensed       INTEGER DEFAULT 0,
+      last_activity  TEXT DEFAULT '',                -- latest of all services ('' = never)
+      activity       TEXT DEFAULT '',                -- JSON { Exchange: date, Teams: date, … }
+      is_deleted     INTEGER DEFAULT 0,
+      report_date    TEXT DEFAULT '',
+      uploaded_at    TEXT DEFAULT (datetime('now')));`);
+  // KPI history: one snapshot per country per month (routes/kpi.js).
+  await backend.script(`CREATE TABLE IF NOT EXISTS kpi_snapshots (
+      month    TEXT NOT NULL,
+      country  TEXT NOT NULL,
+      data     TEXT NOT NULL,
+      PRIMARY KEY (month, country));`);
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");

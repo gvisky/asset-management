@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Hayat Communication Tools — QR labels</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">🖥️ Hayat Communication Tools</div>
+    <div class="logo-sub">Asset &amp; User Management</div>
+  </div>
+  <nav>
+    <div class="nav-section-label">Menu</div>
+    <a href="/" class="nav-link" id="nav-dashboard">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="/inventory.html" class="nav-link">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg>
+      Asset Inventory
+    </a>
+    <a href="/server-inventory.html" class="nav-link" id="nav-servers">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      Server Inventory
+    </a>
+    <a href="/devices.html" class="nav-link" id="nav-devices">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      Devices
+    </a>
+    <a href="/maintenance.html" class="nav-link" id="nav-maintenance">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg>
+      Maintenance
+    </a>
+    <a href="/licenses.html" class="nav-link" id="nav-licenses">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M9 11l3 3L22 4"/></svg>
+      Licenses
+    </a>
+    <a href="/reports.html" class="nav-link" id="nav-reports">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+      Reports
+    </a>
+  </nav>
+</aside>
+
+<div class="main-wrap">
+  <header class="topbar">
+    <span class="topbar-title">QR labels <span class="text-muted text-sm" style="font-weight:400" id="lb-count"></span></span>
+    <button class="btn btn-primary btn-sm" id="lb-print">🖨 Print</button>
+  </header>
+
+  <main class="content">
+    <div class="card lb-ctl"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+      <div id="lb-pick" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div><label class="form-label">Country</label><select class="form-control" id="lb-country" data-countries><option value="">—</option></select></div>
+        <div><label class="form-label">Site</label><select class="form-control" id="lb-site"><option value="">All</option><option>Office</option><option>Factory</option></select></div>
+        <div><label class="form-label">Asset type</label><input class="form-control" id="lb-type" placeholder="e.g. Laptop (empty = all)"></div>
+        <button class="btn btn-ghost" id="lb-show">Show labels</button>
+      </div>
+      <div><label class="form-label">Paper</label><select class="form-control" id="lb-mode"><option value="sheet">A4 sheet · 3 × 7 (63.5 × 38.1 mm)</option><option value="single">Label printer · 1 per label</option></select></div>
+      <p class="text-muted text-sm" style="margin:0;flex-basis:100%">The QR opens the asset in this app (login needed) — no personal data on the label. Use durable polyester labels for laptops.</p>
+    </div></div>
+    <div id="lb-sheet" class="lb-sheet"></div>
+  </main>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/js/auth.js"></script>
+<script src="/js/app.js"></script>
+<script src="/js/alerts.js"></script>
+<script src="/js/labels.js?v=20261113a"></script>
+</body>
+</html>

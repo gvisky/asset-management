@@ -1,6 +1,18 @@
 [
   {
     "date": "2026-11-13",
+    "title": "KPIs, Leavers, Stocktake with QR, e-signed handover, M365 reclaim, depreciation",
+    "items": [
+      "📈 KPIs: utilisation, ghost assets, data quality, repair time, leaver recovery and depreciation — split by country, with a monthly trend.",
+      "🚪 Leavers: return checklist per person (assets, Intune devices, M365 licence, AD account); assets tick themselves when returned with an e-signature; % returned within 7 days.",
+      "📷 Stocktake: print QR labels, scan with the phone camera — found / found elsewhere (Move here) / missing / unknown; closing a stocktake gives the ghost-asset KPI.",
+      "✍ Handover & return with e-signature (asset detail, Leavers, scanned label): the signed PDF is kept on the asset instead of the paper form.",
+      "♻ Licenses → Microsoft 365 reclaim: upload the admin centre Active users report; leavers still licensed and users with no activity for 60+ days, per country.",
+      "Book value on every asset (straight-line, 5 years — Circular 45/2013 allows 3–8 for IT equipment)."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Users & Audit: page access of every account",
     "items": [
       "🔑 Logins has a new column with the pages each account can open — ✎ can change data, 👁 read only — and its countries, next to last login, so access can be reviewed any time.",

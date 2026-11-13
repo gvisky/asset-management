@@ -38,6 +38,11 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/countries', require('./routes/countries'));
 app.use('/api/devices', require('./routes/devices'));
 app.use('/api/health',  require('./routes/health'));
+app.use('/api/custody', require('./routes/custody'));
+app.use('/api/stocktake', require('./routes/stocktake'));
+app.use('/api/m365', require('./routes/m365'));
+app.use('/api/leavers', require('./routes/leavers'));
+app.use('/api/kpi', require('./routes/kpi'));
 
 // Public files that must load before login (login page + shared CSS/JS)
 const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico'];
@@ -62,6 +67,12 @@ app.use(async (req, res, next) => {
     }
     next();
   } catch (e) { next(e); }
+});
+
+// QR decoder for the phone scanner (iPhone browsers have no built-in BarcodeDetector).
+app.get('/vendor/jsQR.js', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'node_modules', 'jsqr', 'dist', 'jsQR.js'));
 });
 
 // Static files (served after the gate above)
