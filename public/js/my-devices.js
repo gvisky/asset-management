@@ -22,13 +22,14 @@
     let o;
     try { o = await call('open', {}); } catch (e) { return stop(e.message); }
     main.innerHTML = `<h2 class="md-h">Hello${o.first_name ? ' ' + esc(o.first_name) : ''} 👋</h2>
+      ${o.campaign ? `<div class="text-muted text-sm" style="margin:-2px 0 6px">${esc(o.campaign)}</div>` : ''}
       <p>IT keeps a list of the company devices registered to you. ${o.state === 'done' ? `You already confirmed it on <b>${esc(o.confirmed_at)} UTC</b>.` : 'Please check it and confirm.'}</p>
       <form id="md-f" class="md-form">
         <label class="form-label" for="md-email">Your work email</label>
         <input class="form-control" id="md-email" type="email" autocomplete="email" required placeholder="name@company.com">
         <div class="md-err" id="md-err"></div>
         <button class="btn btn-primary md-btn">Continue →</button>
-        <p class="text-muted text-sm">To be sure it is you, type your work email — the one this message was sent to.</p>
+        <p class="text-muted text-sm">${o.open ? 'Type your company email (…@hayat.com.tr or your local company email).' : 'To be sure it is you, type your work email — the one this message was sent to.'}</p>
       </form>`;
     document.getElementById('md-f').onsubmit = verify;
     document.getElementById('md-email').focus();

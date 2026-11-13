@@ -1137,6 +1137,18 @@ async function migrate() {
   if (!pcolsM.includes('mobile_policy')) await backend.run("ALTER TABLE personnel ADD COLUMN mobile_policy TEXT DEFAULT ''");
   // Second email from the AD list ("Email Address": market domain, e.g. …@hayat.vn) — My devices accepts it too.
   if (!pcolsM.includes('ad_email')) await backend.run("ALTER TABLE personnel ADD COLUMN ad_email TEXT DEFAULT ''");
+  // My devices "open link": one link for everyone (or one country) — the person types their email.
+  await backend.script(`CREATE TABLE IF NOT EXISTS confirm_campaigns (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    DEFAULT '',
+      country     TEXT    DEFAULT '',               -- '' = every country
+      token       TEXT    NOT NULL UNIQUE,          -- shared on purpose (sent to everyone), so kept readable
+      created_by  TEXT    DEFAULT '',
+      created_at  TEXT    DEFAULT (datetime('now')),
+      expires_at  TEXT    NOT NULL,
+      revoked     INTEGER NOT NULL DEFAULT 0);`);
+  const clcols = (await backend.all('PRAGMA table_info(confirm_links)')).map(c => c.name);
+  if (!clcols.includes('campaign_id')) await backend.run('ALTER TABLE confirm_links ADD COLUMN campaign_id INTEGER DEFAULT NULL');
 
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
