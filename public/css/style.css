@@ -1171,3 +1171,7 @@ body.lbl-sqmode .lb-sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
 .md-send { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border: 1px solid #1a56db; color: #1a56db; background: #eff6ff; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; line-height: 1.2; }
 .md-send:hover { background: #1a56db; color: #fff; }
 .md-send svg { width: 14px; height: 14px; }
+.md-conf-link { cursor: pointer; text-decoration: underline dotted; }
+.md-conf-link:hover { text-decoration: underline; }
+.sf-stamp { border: 2px solid #15803d; background: #f0fdf4; color: #14532d; border-radius: 8px; padding: 9px 12px; font-size: 13px; }
+.sf-btns { display: flex; gap: 8px; flex-wrap: wrap; }

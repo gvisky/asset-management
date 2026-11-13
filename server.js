@@ -43,6 +43,7 @@ app.use('/api/stocktake', require('./routes/stocktake'));
 app.use('/api/m365', require('./routes/m365'));
 app.use('/api/leavers', require('./routes/leavers'));
 app.use('/api/kpi', require('./routes/kpi'));
+app.use('/api/confirm-forms', require('./routes/confirm').forms);
 app.use('/api/confirm', require('./routes/confirm').admin);
 app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff confirm their devices with a personal link
 

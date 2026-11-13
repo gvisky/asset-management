@@ -258,8 +258,9 @@ function renderTable(rows) {
         : `<span class="badge badge-active">${cnt}</span>`;
     }
     // My devices: status of the confirmation, and 📨 for IT admins to make the message.
+    const canForms = window.CURRENT_USER && ['admin', 'editor'].includes(window.CURRENT_USER.role);
     const conf = p.devices_confirmed_at
-      ? `<div class="text-sm" style="color:${p.devices_not_have ? '#b91c1c' : '#15803d'}" title="Confirmed by the user on My devices">${p.devices_not_have ? `⚠ ${p.devices_not_have} not with them` : '✅ confirmed'} ${esc(String(p.devices_confirmed_at).slice(0, 10))}</div>`
+      ? `<div class="text-sm${canForms ? ' md-conf-link' : ''}" style="color:${p.devices_not_have ? '#b91c1c' : '#15803d'}" ${canForms ? `onclick="openSignedForms(${p.id})" title="Open the signed forms (Delivery form, Custody Agreement)"` : 'title="Confirmed by the user on My devices"'}>${p.devices_not_have ? `⚠ ${p.devices_not_have} not with them` : '✅ confirmed'} ${esc(String(p.devices_confirmed_at).slice(0, 10))}${canForms ? ' 📄' : ''}</div>`
       : p.confirm_sent_at ? `<div class="text-sm text-muted" title="Link made, not confirmed yet">📨 sent ${esc(String(p.confirm_sent_at).slice(0, 10))}</div>` : '';
     if (canEditUsers && p.email) assetsCell += ` <button class="md-send" title="My devices: message for ${esc(p.display_name)} to check and confirm their devices" onclick="openConfirm(${p.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>Confirm</button>`;
     assetsCell += conf;
@@ -756,4 +757,29 @@ async function makeConfirmLink(id) {
   btn.textContent = '📨 Make a new link'; btn.disabled = false;
   document.getElementById('mdc-msg').scrollIntoView({ behavior: 'smooth', block: 'start' });
   loadPeople(currentPage || 1);
+}
+
+// ── Signed forms of a My devices confirmation (admins / editors) ──
+async function openSignedForms(id) {
+  const ov = mdcOverlay(); ov.classList.add('open');
+  const b = document.getElementById('mdc-b'), f = document.getElementById('mdc-f');
+  b.innerHTML = '<p class="text-muted">Loading…</p>'; f.innerHTML = '';
+  let d;
+  try { d = await apiGet('/api/confirm-forms/person/' + id); }
+  catch (e) { b.innerHTML = '<p class="text-muted">No signed confirmation found.</p>'; return; }
+  document.getElementById('mdc-t').textContent = `📄 Signed forms — ${d.person.name}`;
+  const c = d.link_id;
+  b.innerHTML = `<div class="sf-stamp">✔ <b>E-signed on My devices</b> by <b>${esc(d.signed.with)}</b> · ${esc(d.signed.at)} UTC · IP ${esc(d.signed.ip)} · ref ${esc(d.signed.ref)}
+      ${d.signed.browser ? `<div class="text-muted text-sm">${esc(d.signed.browser)}</div>` : ''}</div>
+    <h4 style="margin:12px 0 6px">🧾 Delivery-Acceptance form — all ${d.items.length} device${d.items.length === 1 ? '' : 's'} on one form</h4>
+    <div class="sf-btns"><a class="btn btn-primary btn-sm" href="/delivery-form.html?c=${c}" target="_blank" rel="noopener">👁 Preview / print / PDF</a>
+      <a class="btn btn-ghost btn-sm" href="/api/confirm-forms/${c}/delivery.xlsx" download>⬇ Excel form</a></div>
+    <h4 style="margin:14px 0 6px">📄 Custody Agreement (HQ) — one per device</h4>
+    ${d.items.length ? `<div class="table-wrap"><table><thead><tr><th>Device</th><th>Asset</th><th>Serial</th><th></th></tr></thead><tbody>${d.items.map(i => `<tr>
+      <td><b>${esc(i.type)}</b> ${esc(i.brand_model)}</td><td>${esc(i.s4 || i.code || '—')}</td><td class="text-sm">${esc(i.serial || '—')}</td>
+      <td style="white-space:nowrap"><a class="btn btn-ghost btn-sm" href="/custody-form.html?c=${c}&k=${encodeURIComponent(i.key)}" target="_blank" rel="noopener">👁 Preview / print / PDF</a></td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="text-muted text-sm">They answered "Not with me" for every device — nothing to put on a form.</p>'}
+    ${d.not_with.length ? `<p class="text-sm" style="color:#b91c1c;margin-top:10px">Not on the forms (answered "Not with me"): ${d.not_with.map(n => esc(n.label) + (n.note ? ` — “${esc(n.note)}”` : '')).join('; ')}</p>` : ''}
+    <p class="text-muted text-sm" style="margin-top:10px">To send to the user: open the form → Print → <b>Save as PDF</b>, then attach the PDF to an email to ${esc([d.person.email, d.person.ad_email].filter(Boolean).join(' / '))}.</p>`;
+  f.innerHTML = '<button class="btn btn-ghost" onclick="document.getElementById(\'mdc-ov\').classList.remove(\'open\')">Close</button>';
 }
