@@ -278,7 +278,7 @@ function renderTable(rows) {
         <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${resBadge}${notInAzure}${notInAd}
           <div class="text-muted text-sm">${emailHtml(p)}</div>${managerLine(p)}</td>
         <td class="when-cell">${logonCell(p)}</td>
-        <td>${assetsCell}</td>
+        <td class="assets-cell">${assetsCell}</td>
         <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${esc(p.country)}</span></td>
