@@ -120,6 +120,30 @@ router.post('/labels/printed', requireRole('admin', 'editor'), wrap(async (req, 
 }));
 
 // Labels (registered before /:id so "labels" is not read as an id).
+// Light list for the labels page (no QR images): every asset of your countries, filters optional.
+router.get('/labels/list', wrap(async (req, res) => {
+  const cs = countrySql(req, 'country', '');
+  const cond = ['deleted_at IS NULL'], params = [];
+  if (cs.clause) { cond.push(cs.clause); params.push(...cs.params); }
+  if (req.query.country) { cond.push('country = ?'); params.push(str(req.query.country, 60)); }
+  if (SITES.includes(req.query.site)) { cond.push('location = ?'); params.push(req.query.site); }
+  if (req.query.type) { cond.push("LOWER(COALESCE(NULLIF(TRIM(asset_type), ''), 'type not set')) = LOWER(?)"); params.push(str(req.query.type, 60)); }
+  if (STATUSES.includes(req.query.status)) { cond.push('status = ?'); params.push(req.query.status); }
+  if (req.query.q) { const q = `%${str(req.query.q, 80).toLowerCase()}%`;
+    cond.push('(LOWER(asset_s4) LIKE ? OR LOWER(asset_code) LIKE ? OR LOWER(serial_no) LIKE ? OR LOWER(computer_no) LIKE ? OR LOWER(brand_model) LIKE ? OR LOWER(user_name) LIKE ?)');
+    params.push(q, q, q, q, q, q); }
+  const rows = await all(`SELECT ${COLS} FROM assets WHERE ${cond.join(' AND ')} ORDER BY LOWER(COALESCE(NULLIF(TRIM(brand_model), ''), 'zzz')), asset_type, id LIMIT 3000`, params);
+  const counts = new Map();
+  if (isAdmin(req) && rows.length) {
+    for (const r of await all('SELECT asset_id, COUNT(*) AS n FROM qr_prints GROUP BY asset_id')) counts.set(r.asset_id, { printed: r.n });
+    for (const r of await all('SELECT asset_id, COUNT(*) AS n FROM qr_scans WHERE asset_id IS NOT NULL GROUP BY asset_id')) counts.set(r.asset_id, { ...(counts.get(r.asset_id) || {}), scanned: r.n });
+  }
+  const types = await all(`SELECT COALESCE(NULLIF(TRIM(asset_type), ''), 'Type not set') AS t, COUNT(*) AS n FROM assets WHERE deleted_at IS NULL${cs.clause ? ' AND ' + cs.clause : ''} GROUP BY t ORDER BY n DESC`, cs.params);
+  res.json({ isAdmin: isAdmin(req), types, limited: rows.length === 3000, list: rows.map(a => ({ id: a.id, code: a.asset_s4 || a.asset_code || '', model: a.brand_model || '',
+    type: a.asset_type || '', serial: a.serial_no || '', pc: a.computer_no || '', country: a.country, site: a.location || '', status: a.status || '',
+    holder: a.user_name || a.ad_name || '', ...(isAdmin(req) ? { printed: (counts.get(a.id) || {}).printed || 0, scanned: (counts.get(a.id) || {}).scanned || 0 } : {}) })) });
+}));
+
 router.get('/labels', wrap(async (req, res) => {
   let rows;
   if (req.query.ids) {

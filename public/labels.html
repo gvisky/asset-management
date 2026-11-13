@@ -49,24 +49,41 @@
 <div class="main-wrap">
   <header class="topbar">
     <span class="topbar-title">QR labels <span class="text-muted text-sm" style="font-weight:400" id="lb-count"></span></span>
-    <button class="btn btn-primary btn-sm" id="lb-print">🖨 Print</button>
+    
   </header>
 
   <main class="content">
-    <div class="card lb-ctl"><div class="card-body" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-      <div id="lb-pick" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-        <div><label class="form-label">Country</label><select class="form-control" id="lb-country" data-countries><option value="">—</option></select></div>
-        <div><label class="form-label">Site</label><select class="form-control" id="lb-site"><option value="">All</option><option>Office</option><option>Factory</option></select></div>
-        <div><label class="form-label">Asset type</label><input class="form-control" id="lb-type" placeholder="e.g. Laptop (empty = all)"></div>
-        <button class="btn btn-ghost" id="lb-show">Show labels</button>
-      </div>
-      <div><label class="form-label">Paper</label><select class="form-control" id="lb-mode"><option value="sheet">A4 sheet · 3 × 7 (63.5 × 38.1 mm)</option><option value="single">Label printer · 1 per label (63.5 × 38.1 mm)</option><option value="tall">Tall label · 6.5 × 14 cm (spare parts for broken laptops)</option></select></div>
-      <p class="text-muted text-sm" style="margin:0;flex-basis:100%">The QR opens the asset in this app (login needed) — no personal data on the label. Use durable polyester labels for laptops.</p>
+    <div class="card lb-ctl"><div class="card-body lb-filters">
+      <div><label class="form-label">Country</label><select class="form-control" id="lb-country"><option value="">All countries</option></select></div>
+      <div><label class="form-label">Site</label><select class="form-control" id="lb-site"><option value="">All sites</option><option>Office</option><option>Factory</option></select></div>
+      <div><label class="form-label">Asset type</label><select class="form-control" id="lb-type"><option value="">All asset types</option></select></div>
+      <div><label class="form-label">Status</label><select class="form-control" id="lb-status"><option value="">All statuses</option><option>Active</option><option>Stock</option><option>Broken</option></select></div>
+      <div style="flex:1;min-width:200px"><label class="form-label">Search</label><input class="form-control" id="lb-q" type="search" placeholder="Code, serial, PC name, model, user…"></div>
+      <div><label class="form-label">Paper</label><select class="form-control" id="lb-mode"><option value="sheet">A4 sheet · 3 × 7 (63.5 × 38.1 mm)</option><option value="single">Label printer · 63.5 × 38.1 mm</option><option value="tall">Tall label · 6.5 × 14 cm</option></select></div>
     </div></div>
+    <div class="card lb-listcard">
+      <div class="lb-toolbar">
+        <button class="btn btn-ghost btn-sm" id="lb-all">Select all shown</button>
+        <button class="btn btn-ghost btn-sm" id="lb-none">Clear</button>
+        <button class="btn btn-ghost btn-sm" id="lb-expand">Expand / collapse all</button>
+        <span class="text-muted text-sm" id="lb-selinfo"></span>
+        <span style="flex:1"></span>
+        <button class="btn btn-primary" id="lb-print" disabled>🖨 Print selected (0)</button>
+      </div>
+      <div id="lb-list"></div>
+      <p class="text-muted text-sm" style="margin:0;padding:10px 16px">Click an asset to preview its label. The QR opens the asset in this app (login needed) — no personal data on the label. Use durable polyester labels for laptops.</p>
+    </div>
     <div id="lb-sheet" class="lb-sheet"></div>
   </main>
 </div>
 
+<div class="modal-overlay" id="pv-overlay">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><span class="modal-title" id="pv-title">Label</span><button class="modal-close" id="pv-x" aria-label="Close">✕</button></div>
+    <div class="modal-body" id="pv-body"></div>
+    <div class="modal-footer"><button class="btn btn-ghost" id="pv-close">Close</button><button class="btn btn-primary" id="pv-print">🖨 Print this label</button></div>
+  </div>
+</div>
 <div class="modal-overlay" id="pp-overlay">
   <div class="modal" style="max-width:480px">
     <div class="modal-header"><span class="modal-title">Print QR labels — what for? <span class="text-muted text-sm" id="pp-n"></span></span><button class="modal-close" id="pp-close" aria-label="Close">✕</button></div>
@@ -83,6 +100,6 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
-<script src="/js/labels.js?v=20261113c"></script>
+<script src="/js/labels.js?v=20261113d"></script>
 </body>
 </html>
