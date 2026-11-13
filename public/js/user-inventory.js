@@ -215,7 +215,8 @@ function emailHtml(p) {
   if (!e) return '—';
   const at = e.indexOf('@');
   if (!p.ad_seen_at || at < 0) return esc(e);
-  return `<b style="color:var(--text, #111827)" title="AD account">${esc(e.slice(0, at))}</b>${esc(e.slice(at))}`;
+  const second = p.ad_email && p.ad_email.toLowerCase() !== e.toLowerCase() ? `<div style="font-size:11.5px" title="Second email (AD list · Email Address)">✉ ${esc(p.ad_email)}</div>` : '';
+  return `<b style="color:var(--text, #111827)" title="AD account">${esc(e.slice(0, at))}</b>${esc(e.slice(at))}${second}`;
 }
 const managerLine = (p) => (p.ad_manager ? `<div class="text-muted" style="font-size:11.5px">↑ ${esc(p.ad_manager)}</div>` : '');
 // Last seen, three sources side by side: AD logon · Intune check-in · Entra sign-in (latest over the person's
@@ -561,7 +562,7 @@ function setupAdUpload() {
 
   // The button opens the window first, with a visible file picker in it (no hidden input to rely on).
   const pickerHtml = `<p style="margin-top:0">Choose the user list exported from Active Directory (<b>.xlsx</b> or <b>.csv</b>) with the columns
-      <i>SAM Account Name, Display Name, Manager, OU Name, Last Logon Time</i>.</p>
+      <i>SAM Account Name, Display Name, Manager, OU Name, Last Logon Time, Email Address</i> (the market email, kept as a second email).</p>
     <input type="file" id="dirsync-file-pick" accept=".xlsx,.xls,.csv" class="form-control">
     <p class="text-muted text-sm">You'll see a preview first — nothing is saved until you click <b>Apply to User Inventory</b>.</p>`;
   const showError = (m) => { body.innerHTML = pickerHtml + `<p style="color:#dc2626;font-weight:600">${adH(m)}</p>`; wirePicker(); };
@@ -611,7 +612,7 @@ function setupAdUpload() {
           .map(([l, v, c]) => `<div class="kpi" style="--kpi-color:${c}"><div class="kpi-main"><div class="kpi-label"><span class="kpi-dot"></span>${l}</div><div class="kpi-value">${v}</div></div></div>`).join('')}
       </div>
       <p class="text-sm text-muted" style="margin:4px 0 8px">Countries in this file: <b>${adH(r.countries.join(', '))}</b> ·
-        ${r.users} user accounts · ${r.resources} resource accounts (shared mailboxes / groups, marked <b>Resource</b>) ·
+        ${r.users} user accounts · ${r.withEmail != null ? `${r.withEmail} with a second email (Email Address) · ` : ''}${r.resources} resource accounts (shared mailboxes / groups, marked <b>Resource</b>) ·
         ${r.staleUsers} with no logon for 90+ days · ${r.neverUsers} never logged on.
         Matched people get their AD account, manager and last logon; nothing else of theirs is changed.</p>
       ${section(`➕ New people to add (${people.length}) — untick anyone you don't want`, true, people.length
@@ -694,7 +695,8 @@ async function openConfirm(id) {
   const res = (c) => (!c ? '<span class="text-muted">not confirmed</span>'
     : c.result === 'have' ? `<span style="color:#15803d">✓ has it</span> <span class="text-muted text-sm">${mdcDate(c.confirmed_at)}</span>`
     : `<span style="color:#b91c1c">✗ not with them</span> <span class="text-muted text-sm">${mdcDate(c.confirmed_at)}${c.note ? ' · “' + esc(c.note) + '”' : ''}</span>`);
-  b.innerHTML = `<div class="text-sm text-muted" style="margin-bottom:8px">${esc(d.person.email)} · ${esc(d.person.country)} — the link only opens the list when this email is typed.</div>
+  const second = d.person.ad_email && d.person.ad_email.toLowerCase() !== String(d.person.email).toLowerCase() ? d.person.ad_email : '';
+  b.innerHTML = `<div class="text-sm text-muted" style="margin-bottom:8px">${esc(d.person.email)}${second ? ' · ' + esc(second) : ''} · ${esc(d.person.country)} — the link only opens the list when ${second ? 'one of these emails' : 'this email'} is typed.</div>
     <h4 style="margin:6px 0">Devices registered (AD Name = ${esc(String(d.person.email).split('@')[0])}): ${d.assets.length}</h4>
     ${d.assets.length ? `<div class="table-wrap"><table><thead><tr><th>Asset</th><th>Device</th><th>Serial</th><th>Last answer</th></tr></thead><tbody>${d.assets.map(a => `<tr>
       <td><b>${esc(a.code || '#' + a.id)}</b></td><td>${esc([a.type, a.model].filter(Boolean).join(' · '))}</td><td class="text-sm">${esc(a.serial || '—')}</td><td>${res(a.confirmation)}</td></tr>`).join('')}</tbody></table></div>`
@@ -735,16 +737,17 @@ async function makeConfirmLink(id) {
 <p>IT keeps a record of the company devices registered to you${list.length ? ` (<b>${list.length}</b> device${list.length > 1 ? 's' : ''})` : ''}. Please take one minute to check the list and confirm.</p>
 <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td style="border-radius:6px;background:#1a56db">
 <a href="${esc(r.url)}" style="display:inline-block;padding:11px 22px;font-size:15px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:6px;background:#1a56db">✅ Check &amp; confirm my devices</a></td></tr></table>
-<p style="font-size:13px;color:#475569">The page will ask for your work email (the address this message was sent to) to make sure it is you. The link is personal — please do not forward it — and works until <b>${esc(until)}</b>.</p>
+<p style="font-size:13px;color:#475569">The page will ask for your work email (${esc([r.email, r.ad_email].filter(Boolean).join(' or '))}) to make sure it is you. The link is personal — please do not forward it — and works until <b>${esc(until)}</b>.</p>
 <p>Thank you,<br>${esc(r.sender)} — IT</p></div>`;
-  const text = `Dear ${first || r.name},\n\nIT keeps a record of the company devices registered to you${list.length ? ` (${list.length})` : ''}. Please take one minute to check the list and confirm:\n\n${r.url}\n\nThe page will ask for your work email (the address this message was sent to) to make sure it is you. The link is personal — please do not forward it — and works until ${until}.\n\nThank you,\n${r.sender} — IT`;
-  document.getElementById('mdc-msg').innerHTML = `<h4 style="margin:14px 0 6px">Message to send to <b>${esc(r.email)}</b> <span class="text-muted text-sm">· subject: ${esc(subject)}</span></h4>
+  const text = `Dear ${first || r.name},\n\nIT keeps a record of the company devices registered to you${list.length ? ` (${list.length})` : ''}. Please take one minute to check the list and confirm:\n\n${r.url}\n\nThe page will ask for your work email (${[r.email, r.ad_email].filter(Boolean).join(' or ')}) to make sure it is you. The link is personal — please do not forward it — and works until ${until}.\n\nThank you,\n${r.sender} — IT`;
+  const to = [r.email, r.ad_email].filter(Boolean);
+  document.getElementById('mdc-msg').innerHTML = `<h4 style="margin:14px 0 6px">Message to send to <b>${esc(to.join(' ; '))}</b> <span class="text-muted text-sm">· subject: ${esc(subject)}</span></h4>
     <div class="mdc-msg">${html}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
       <button class="btn btn-primary btn-sm" id="mdc-copy">📋 Copy message</button>
-      <a class="btn btn-ghost btn-sm" href="mailto:${encodeURIComponent(r.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}">✉️ Open in Outlook (plain text)</a>
+      <a class="btn btn-ghost btn-sm" href="mailto:${to.map(encodeURIComponent).join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}">✉️ Open in Outlook (plain text)</a>
       <button class="btn btn-ghost btn-sm" id="mdc-link">🔗 Copy link only</button></div>
-    <p class="text-muted text-sm" style="margin-top:6px">Paste into a new Outlook email to <b>${esc(r.email)}</b> — the button stays a button. Send it only to this address: the page checks the email.</p>`;
+    <p class="text-muted text-sm" style="margin-top:6px">Paste into a new Outlook email to <b>${esc(to.join(' ; '))}</b> — the button stays a button. Send it only to ${to.length > 1 ? 'these addresses' : 'this address'}: the page checks the email.</p>`;
   document.getElementById('mdc-copy').onclick = async () => {
     try { await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]); showToast('Message copied — paste it into the email'); }
     catch { try { await navigator.clipboard.writeText(text); showToast('Copied as plain text'); } catch { showToast('Copy failed — select the message and copy it', 'error'); } }

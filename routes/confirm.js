@@ -4,7 +4,8 @@
    to send to that person's work email. The link holds a random secret (only its SHA-256 hash is stored),
    works for LINK_DAYS days, and a new link replaces the old one.
    The person opens /my-devices.html#t=<secret>; the page asks for their work email. Only when it equals
-   the email on our record (User Inventory) are the devices shown — 5 wrong emails lock the link.
+   an email on our record (User Inventory: <AD name>@hayat.com.tr, or the second "market" email from the
+   AD list, personnel.ad_email) are the devices shown — 5 wrong emails lock the link.
    They tick "I have it" / "Not with me" per asset and press Confirm — the checked work email is the
    signature: one row per asset in asset_confirmations (time, IP, browser), the audit log, and an IT alert
    when something is "not with me".
@@ -82,7 +83,7 @@ admin.use(requireAuth);
 admin.use((req, res, next) => (isITAdmin(req.user) ? next() : res.status(403).json({ error: 'IT administrator only' })));
 
 async function personFor(req, res) {
-  const p = await get('SELECT id, display_name, email, country, status, mobile_policy FROM personnel WHERE id = ?', [Number(req.params.id)]);
+  const p = await get('SELECT id, display_name, email, ad_email, country, status, mobile_policy FROM personnel WHERE id = ?', [Number(req.params.id)]);
   if (!p || !inScope(req, p.country)) { res.status(404).json({ error: 'Person not found' }); return null; }
   return p;
 }
@@ -123,7 +124,7 @@ admin.post('/person/:id/link', wrap(async (req, res) => {
   ]);
   const assets = await assetsOf(p);
   await audit(req.user, 'CONFIRM_LINK', null, `My devices: link made for ${p.display_name} <${p.email}> (${assets.length} asset${assets.length === 1 ? '' : 's'}), valid until ${expires} UTC`);
-  res.json({ url: `${origin(req)}/my-devices.html#t=${token}`, expires_at: expires, name: p.display_name, email: p.email,
+  res.json({ url: `${origin(req)}/my-devices.html#t=${token}`, expires_at: expires, name: p.display_name, email: p.email, ad_email: normEmail(p.ad_email) !== normEmail(p.email) ? normEmail(p.ad_email) : '',
     assets: assets.map(publicAsset), sender: req.user.full_name || req.user.username });
 }));
 
@@ -148,7 +149,10 @@ async function linkFor(req, res) {
   return l;
 }
 async function checkEmail(req, res, l) {
-  if (normEmail(req.body.email) && normEmail(req.body.email) === normEmail(l.email)) return true;
+  const typed = normEmail(req.body.email);
+  if (typed && typed === normEmail(l.email)) return true;
+  const p = typed ? await get('SELECT ad_email FROM personnel WHERE id = ?', [l.person_id]) : null;
+  if (p && normEmail(p.ad_email) && typed === normEmail(p.ad_email)) return true;
   await run('UPDATE confirm_links SET attempts = attempts + 1 WHERE id = ?', [l.id]);
   const left = MAX_ATTEMPTS - l.attempts - 1;
   await audit(null, 'CONFIRM_REFUSED', null, `My devices: wrong email "${String(req.body.email || '').slice(0, 80)}" for the link of person #${l.person_id} (${left > 0 ? left + ' tries left' : 'locked'})`);
@@ -188,7 +192,7 @@ pub.post('/confirm', wrap(async (req, res) => {
   const assets = await assetsOf(p);
   const mobiles = mobileMode(p) === 'company' ? await mobilesOf(p) : [];
   const items = Array.isArray(req.body.items) ? req.body.items : [];
-  const signed = normEmail(l.email);            // the checked work email is the signature
+  const signed = normEmail(req.body.email);     // the checked work email (either of theirs) is the signature
   const byId = new Map(items.filter(i => i.asset_id).map(i => [Number(i.asset_id), i]));
   const byKey = new Map(items.filter(i => i.device_key).map(i => [String(i.device_key), i]));
   const missing = assets.filter(a => !byId.has(a.id) || typeof byId.get(a.id).have !== 'boolean').length

@@ -28,7 +28,7 @@
         <input class="form-control" id="md-email" type="email" autocomplete="email" required placeholder="name@company.com">
         <div class="md-err" id="md-err"></div>
         <button class="btn btn-primary md-btn">Continue →</button>
-        <p class="text-muted text-sm">To be sure it is you, type the email address this message was sent to.</p>
+        <p class="text-muted text-sm">To be sure it is you, type your work email — the one this message was sent to.</p>
       </form>`;
     document.getElementById('md-f').onsubmit = verify;
     document.getElementById('md-email').focus();
@@ -74,7 +74,7 @@
            <div class="md-info">${mob.map(mrow).join('')}</div>`) : ''}
       ${done ? '' : `<div class="form-group" style="margin-top:14px"><label class="form-label">Another company device you use that is not listed? (optional)</label>
           <input class="form-control" id="md-extra" maxlength="300" placeholder="e.g. Dell monitor, iPhone 13 — serial if you know it"></div>
-        <div class="md-signwith">✍️ You sign with your work email <b>${esc(d.email)}</b></div>
+        <div class="md-signwith">✍️ You sign with your work email <b>${esc(email.toLowerCase())}</b></div>
         <label class="md-agree"><input type="checkbox" id="md-agree"> I confirm the answers above are correct, and I will take care of the company devices I have and return them to IT when asked or when I leave.</label>
         <div class="md-err" id="md-err"></div>
         <button class="btn btn-primary md-btn" id="md-go">Confirm</button>`}`;

@@ -298,7 +298,7 @@ router.post('/ad-import', wrap(async (req, res) => {
   try { adRows = parseAdFile(Buffer.from(b.file, 'base64')); }
   catch (e) { return res.status(400).json({ error: /SAM Account Name/.test(e.message) ? e.message : 'Could not read the file — upload the AD export (.xlsx or .csv)' }); }
   if (!adRows.length) {
-    return res.status(400).json({ error: 'No user accounts found. Expected columns: SAM Account Name, Display Name, Manager, OU Name, Last Logon Time.' });
+    return res.status(400).json({ error: 'No user accounts found. Expected columns: SAM Account Name, Display Name, Manager, OU Name, Last Logon Time (and Email Address).' });
   }
   const people = await all('SELECT * FROM personnel');
   const plan = planAdImport(adRows, people);
@@ -313,6 +313,7 @@ router.post('/ad-import', wrap(async (req, res) => {
   const daysAgo = (d) => (d ? Math.floor((Date.now() - new Date(d.replace(' ', 'T') + 'Z').getTime()) / 86400000) : null);
   const summary = {
     accounts: adRows.length, users: plan.users.filter(r => !r.resource).length, resources: plan.resources.length,
+    withEmail: adRows.filter(r => r.email).length,
     matched: plan.matched.length,
     matchedByName: plan.byNameMatch.map(m => ({ ad: adBrief(m.r), person: brief(m.p) })),
     fresh: plan.fresh.map(f => ({ ...adBrief(f), shared: f.shared, resource: !!f.resource })),
@@ -330,10 +331,10 @@ router.post('/ad-import', wrap(async (req, res) => {
   const now = (await get("SELECT datetime('now') AS n")).n;
   const domainVotes = people.reduce((m, p) => { const d = String(p.email || '').split('@')[1]; if (d) m[d.toLowerCase()] = (m[d.toLowerCase()] || 0) + 1; return m; }, {});
   const domain = Object.entries(domainVotes).sort((x, y) => y[1] - x[1])[0]?.[0] || 'hayat.com.tr';
-  const adSet = (r) => [r.sam, r.manager, r.ou, r.lastLogon, r.never ? 1 : 0, now, r.resource ? 1 : 0];
+  const adSet = (r) => [r.sam, r.manager, r.ou, r.lastLogon, r.never ? 1 : 0, now, r.resource ? 1 : 0, r.email || ''];
   const stmts = [];
   for (const m of plan.matched) {
-    stmts.push({ sql: `UPDATE personnel SET ad_sam = ?, ad_manager = ?, ad_ou = ?, ad_last_logon = ?, ad_never_logon = ?, ad_seen_at = ?, ad_resource = ?,
+    stmts.push({ sql: `UPDATE personnel SET ad_sam = ?, ad_manager = ?, ad_ou = ?, ad_last_logon = ?, ad_never_logon = ?, ad_seen_at = ?, ad_resource = ?, ad_email = ?,
                          display_name = CASE WHEN COALESCE(display_name, '') = '' THEN ? ELSE display_name END WHERE id = ?`,
                  args: [...adSet(m.r), m.r.name, m.p.id] });
   }
@@ -361,8 +362,8 @@ router.post('/ad-import', wrap(async (req, res) => {
   for (const f of toAdd) {
     const email = `${f.sam}@${domain}`;
     stmts.push({ sql: `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date,
-                         ad_sam, ad_manager, ad_ou, ad_last_logon, ad_never_logon, ad_seen_at, ad_resource)
-                       SELECT ?, ?, ?, '', 'Active', '', '', '', ?, ?, ?, ?, ?, ?, ?
+                         ad_sam, ad_manager, ad_ou, ad_last_logon, ad_never_logon, ad_seen_at, ad_resource, ad_email)
+                       SELECT ?, ?, ?, '', 'Active', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?
                         WHERE NOT EXISTS (SELECT 1 FROM personnel WHERE LOWER(email) = LOWER(?))`,
                  args: [f.country || 'Unknown', f.name, email, ...adSet(f), email] });
   }
