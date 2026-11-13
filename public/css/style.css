@@ -962,3 +962,16 @@ body.lbl-single .lb-sheet { grid-template-columns: 63.5mm; }
 .cus-lock { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
 .cus-lock[hidden] { display: none; }
 .cus-lock .btn { margin-left: auto; }
+/* Stocktake filters, photo prompt, QR history, print purpose */
+.nt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.st-photo-ask { margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; color: #0f172a; }
+.lbl-adm { font-size: 6.5pt; color: #b45309; }
+.pp-list { display: flex; flex-direction: column; gap: 6px; }
+.pp-opt { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 13.5px; }
+.qr-hist { margin-top: 8px; font-size: 12.5px; }
+.qr-hist summary { cursor: pointer; }
+.qr-cols { display: grid; grid-template-columns: 1fr 1.6fr; gap: 14px; margin-top: 8px; line-height: 1.6; }
+.qr-photos { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.qr-photos img { width: 84px; height: 84px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+@media print { .lbl-adm { display: none !important; } }
+@media (max-width: 700px) { .qr-cols { grid-template-columns: 1fr; } }

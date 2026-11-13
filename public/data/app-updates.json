@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-13",
+    "title": "Stocktake: filters, print & scan log, photos",
+    "items": [
+      "New stocktake: choose Status (Active / Broken / Stock), Asset type and Department as well as country / site; assets scanned at the place but outside the filter are listed separately.",
+      "Printing QR labels asks what for (first label, replacement, a stocktake, other) and records who printed and when; admins see on each label how often it was printed and scanned.",
+      "Every QR scan is recorded (who, when, from a stocktake or the phone camera, result).",
+      "Admins are asked for a photo after each scan — saved on the asset (shrunk on the phone); photos show in the asset detail and the scanned-label page."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "Unlock in place (IT admin)",
     "items": [
       "Return / Hand over window: a locked asset shows the lock at the top with a 🔓 Unlock button for IT admins — signature and note are kept, then Sign & save.",

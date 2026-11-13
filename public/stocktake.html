@@ -64,8 +64,14 @@
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Country *</label><select class="form-control" id="nt-country" data-countries><option value="">—</option></select></div>
       <div class="form-group" id="nt-site-wrap"><label class="form-label">Site</label><select class="form-control" id="nt-site"><option value="">Whole country</option><option>Office</option><option>Factory</option></select></div>
+      <div class="nt-grid">
+        <div class="form-group"><label class="form-label">Status</label><select class="form-control" id="nt-status"><option value="">All statuses</option></select></div>
+        <div class="form-group"><label class="form-label">Asset type</label><select class="form-control" id="nt-type"><option value="">All asset types</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Department</label><select class="form-control" id="nt-dept"><option value="">All departments</option></select>
+        <div class="text-muted text-sm" id="nt-count" style="margin-top:4px"></div></div>
       <div class="form-group"><label class="form-label">Name</label><input class="form-control" id="nt-name" maxlength="80" placeholder="e.g. Q4 2026 audit — HCM Factory"></div>
-      <p class="text-muted text-sm">Every asset registered at this country / site is expected. Print the QR labels first, then scan each asset with the phone.</p>
+      <p class="text-muted text-sm">Every asset registered at this country / site (and matching the filters) is expected. Print the QR labels first, then scan each asset with the phone.</p>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" id="nt-cancel">Cancel</button><button class="btn btn-primary" id="nt-save">Start</button></div>
   </div>
@@ -76,6 +82,7 @@
 <script src="/js/app.js"></script>
 <script src="/js/alerts.js"></script>
 <script src="/js/qr-scan.js?v=20261113a"></script>
-<script src="/js/stocktake.js?v=20261113a"></script>
+<script src="/js/qr-history.js?v=20261113a"></script>
+<script src="/js/stocktake.js?v=20261113b"></script>
 </body>
 </html>

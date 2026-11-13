@@ -2,14 +2,15 @@
    Shows the asset and what can be done: mark it found in an open stocktake, hand over / return, open it. */
 
 const scEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-let scAsset = null;
+let scAsset = null, scLogged = false;
 
 async function loadScan() {
   const id = Number(new URLSearchParams(location.search).get('a'));
   const box = document.getElementById('sc-main');
   if (!id) { box.innerHTML = '<div class="card"><div class="card-body">No asset in this link. <a href="/stocktake.html">Open Stocktake →</a></div></div>'; return; }
   let r;
-  try { r = await apiGet('/api/stocktake/asset/' + id); }
+  // "from=label" records this scan (who / when) — only the first load, not refreshes after an action.
+  try { r = await apiGet('/api/stocktake/asset/' + id + (scLogged ? '' : '?from=label')); scLogged = true; }
   catch (e) { let m = 'Asset not found'; try { m = JSON.parse(e.message).error || m; } catch {} box.innerHTML = `<div class="card"><div class="card-body">${scEsc(m)}</div></div>`; return; }
   const a = scAsset = r.asset;
   const ed = canEdit();
@@ -24,9 +25,12 @@ async function loadScan() {
       ${ed ? r.openStocktakes.map(t => `<button class="btn btn-primary" onclick="markFound(${t.id}, this)">✔ Found — ${scEsc(t.name)}</button>`).join('') : ''}
       ${ed && (a.user_name || a.ad_name) ? '<button class="btn btn-ghost" onclick="custodyReturn(scAsset, loadScan)">↩ Return</button>' : ''}
       ${ed && a.status !== 'Broken' ? '<button class="btn btn-ghost" onclick="custodyHandover(scAsset, loadScan)">✍ Hand over</button>' : ''}
+      ${r.isAdmin ? `<button class="btn btn-ghost" onclick="takeAssetPhoto(${a.id}, null, 'label scan').then(ok => ok && loadScan())">📷 Add photo</button>` : ''}
       <a class="btn btn-ghost" href="/inventory.html?search=${encodeURIComponent(a.asset_s4 || a.asset_code || a.serial_no || '')}">Open in Asset Inventory →</a>
     </div>
+    <div id="sc-qr" style="margin-top:12px"></div>
     <div id="sc-docs" style="margin-top:12px"></div></div></div>`;
+  qrHistoryHtml(a.id).then(h => { const el = document.getElementById('sc-qr'); if (el) el.innerHTML = h; });
   custodyDocsHtml(a.id).then(h => { const el = document.getElementById('sc-docs'); if (el) el.innerHTML = '<div class="form-label">Signed records</div>' + h; });
 }
 

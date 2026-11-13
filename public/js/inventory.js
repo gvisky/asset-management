@@ -473,6 +473,7 @@ async function onView(id) {
           <a class="btn btn-ghost btn-sm" href="/labels.html?ids=${a.id}" target="_blank" rel="noopener">🏷 QR label</a>
         </div>
         <div id="cus-docs" class="text-muted text-sm">Loading…</div>
+        <div id="qr-hist"></div>
       </div>
       <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
@@ -498,6 +499,7 @@ async function onView(id) {
     document.getElementById('view-overlay').classList.add('open');
     window._viewAsset = a;
     custodyDocsHtml(a.id).then(h => { const el = document.getElementById('cus-docs'); if (el) el.innerHTML = h; });
+    qrHistoryHtml(a.id).then(h => { const el = document.getElementById('qr-hist'); if (el) el.innerHTML = h; });
     loadMaintenance(id);
   } catch (err) {
     showToast('Failed to load asset', 'error');
