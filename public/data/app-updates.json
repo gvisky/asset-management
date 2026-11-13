@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-13",
+    "title": "My devices report · User Inventory columns fixed",
+    "items": [
+      "Reports → Lifecycle & audit → \"My devices — confirmations\" (HR & IT): Excel / PDF / HTML. Dashboard: people with devices, confirmed, waiting, not sent yet, devices \"not with me\" — per country and department, answers by month.",
+      "Sheets: People (state, links sent, opened / email checked / confirmed times, wrong emails, signed name), every Answer (time, IP, browser), and the devices people say are not with them.",
+      "User Inventory: the Last seen column is narrow again and the Assets column (count, 📨, confirmation status) stays on one line."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "My devices: staff confirm their own devices",
     "items": [
       "User Inventory → 📨 next to a person (IT admin): see their devices and earlier answers, then 📨 Make link & message — a ready email with a ✅ Check & confirm my devices button. 📋 Copy message and paste it into Outlook to that person (or ✉️ Open in Outlook / 🔗 Copy link only).",

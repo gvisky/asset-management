@@ -15,6 +15,7 @@ const REPORTS = [
   { group: 'Maintenance', id: 'broken',      title: 'Broken & Stock + spare parts', desc: 'Broken and stock devices with the parts check of each broken laptop, spare parts per model and in total.' },
   { group: 'Maintenance', id: 'maintenance', title: 'Open Maintenance', desc: 'Open repairs/services across assets and servers.' },
   { group: 'Lifecycle & audit', id: 'stocktakes', title: 'Stocktakes (QR audit)', desc: 'Every stocktake with found / elsewhere / outside filter / unknown / missing, all scans, and the assets missing in closed stocktakes.' },
+  { group: 'Lifecycle & audit', id: 'mydevices', title: 'My devices — confirmations', desc: 'Who confirmed their devices, who is waiting or not sent yet, devices people say are not with them — per country and department, with every answer (time, IP, signed name).', teams: ['IT', 'HR'] },
   { group: 'Lifecycle & audit', id: 'custody', title: 'Handover & return (e-signed)', desc: 'All signed handover / return records with person, asset, IT member, link to the PDF and its SHA-256.' },
   { group: 'Lifecycle & audit', id: 'depreciation', title: 'Depreciation & book value', desc: 'Book value of every asset (straight-line, 5 years), fully depreciated but still Active, ending in 12 months.' },
   { group: 'Lifecycle & audit', id: 'qrlog', title: 'QR labels & scans log', desc: 'Every label print with its purpose, every QR scan (who, when, where) and every photo.', admin: true },
