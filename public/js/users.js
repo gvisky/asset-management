@@ -111,6 +111,14 @@ async function loadAudit() {
     showToast('Failed to load audit log', 'error');
   }
 }
+// Pages an account can open: ✎ = can change data there, 👁 = read only; plus its countries.
+function accessChips(u) {
+  const pages = u.pages || [];
+  if (!pages.length) return '<span class="text-muted text-sm">no pages</span>';
+  const chips = pages.map(p => `<span class="acc-chip ${p.edit ? 'acc-edit' : 'acc-view'}" title="${htmlEsc(p.page)}: ${p.edit ? 'can change data' : 'read only'}">${p.edit ? '✎' : '👁'} ${htmlEsc(p.page)}</span>`).join('');
+  const scope = u.country ? htmlEsc(u.country) : 'All countries';
+  return `<div class="acc-chips">${chips}</div><div class="text-muted text-sm" style="margin-top:3px">🌏 ${scope} · ${pages.length} page${pages.length === 1 ? '' : 's'}</div>`;
+}
 function renderLogins(list) {
   document.getElementById('logins-tbody').innerHTML = list.map(u => `
     <tr class="au-click" onclick="filterAuditUser(${jsArg(u.username)})">
@@ -119,7 +127,8 @@ function renderLogins(list) {
       <td class="text-sm">${u.last_login ? `${localTime(u.last_login)} <span class="text-muted">· ${ago(u.last_login)}</span>` : '<span class="text-muted">never recorded</span>'}</td>
       <td class="text-sm">${u.last_activity ? `${localTime(u.last_activity)} <span class="text-muted">· ${ago(u.last_activity)}</span>` : '—'}</td>
       <td class="text-sm">${u.failed_7d ? `<b style="color:#dc2626">${u.failed_7d}</b>` : '<span class="text-muted">0</span>'}</td>
-    </tr>`).join('') || '<tr><td colspan="5" class="empty-state">No users.</td></tr>';
+      <td class="acc-cell">${accessChips(u)}</td>
+    </tr>`).join('') || '<tr><td colspan="6" class="empty-state">No users.</td></tr>';
 }
 function filterAuditUser(name) {
   const us = document.getElementById('au-user');
