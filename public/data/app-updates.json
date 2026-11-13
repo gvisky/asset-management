@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-13",
+    "title": "My devices: Active devices only",
+    "items": [
+      "The confirmation page, the signed forms and the My devices report only list Active devices — Broken and Stock devices are kept by IT and are not asked.",
+      "User Inventory shows ○ not confirmed only for people who hold at least one Active device."
+    ]
+  },
+  {
+    "date": "2026-11-13",
     "title": "User Inventory: My devices status only",
     "items": [
       "The Confirm button on each row is gone — use ✉ Ask everyone to confirm at the top.",
