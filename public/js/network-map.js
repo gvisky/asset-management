@@ -64,7 +64,7 @@ const NM = (() => {
   }
   function renderList() {
     const qq = q.toLowerCase();
-    const match = (d) => !qq || `${d.hostname} ${d.alias} ${d.model} ${d.mgmt_ip} ${d.location} ${d.role}`.toLowerCase().includes(qq)
+    const match = (d) => !qq || `${d.hostname} ${d.alias} ${d.model} ${d.mgmt_ip} ${d.mac || ''} ${d.mac ? d.mac.replace(/:/g, '') : ''} ${d.serial} ${d.location} ${d.role}`.toLowerCase().includes(qq)
       || (portsOf.get(d.id) || []).some(p => `${p.port} ${p.peer_host} ${p.peer_port} ${p.patch} vlan${p.vlan}`.toLowerCase().includes(qq));
     const groups = new Map();
     for (const d of D.devices.filter(match)) { const r = groupOf(d); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(d); }
@@ -290,7 +290,7 @@ const NM = (() => {
     if (!l && !n) { tip.hidden = true; return; }
     let html = '';
     if (l) { const [a, b] = l.dataset.k.split('~'); html = `<b>${esc(a)} ⇄ ${esc(b)}</b>` + links().filter(x => [x.a, x.b].sort().join('~') === l.dataset.k).map(x => `<div>${esc(x.a === a ? x.ap : x.bp)} ⇄ ${esc(x.a === a ? x.bp : x.ap)} · ${esc(x.cable || '?')}${x.grp ? ' · Po' + esc(x.grp) : ''}</div>`).join(''); }
-    else { const d = byId.get(Number(n.dataset.id)), s = stats(d); html = `<b>${esc(d.hostname)}</b><div>${esc(d.model)}</div><div>${esc(d.mgmt_ip)} · ${esc(d.location)}</div><div>${s.dev} to devices · ${s.end} to users / patch · ${s.total - s.dev - s.end} free</div>`; }
+    else { const d = byId.get(Number(n.dataset.id)), s = stats(d); html = `<b>${esc(d.hostname)}</b><div>${esc(d.model)}</div><div>${esc(d.mgmt_ip)} · ${esc(d.location)}</div>${d.mac ? `<div>MAC ${esc(d.mac)}</div>` : ''}<div>${s.dev} to devices · ${s.end} to users / patch · ${s.total - s.dev - s.end} free</div>`; }
     const r = $('nm-view-topo').getBoundingClientRect();
     tip.innerHTML = html; tip.hidden = false; tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 260) + 'px'; tip.style.top = (e.clientY - r.top + 12) + 'px';
   }
@@ -327,7 +327,7 @@ const NM = (() => {
     box.innerHTML = `<div class="nm-dh">${icon(d.role, 0, 0, 40, true)}
         <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}${live(d) ? '' : ' <span class="nm-retired">Retired — not in use</span>'}</div>
           <div class="text-muted text-sm">${esc([d.alias, d.role, d.model].filter(Boolean).join(' · '))}</div>
-          <div class="text-sm">${d.mgmt_ip ? `IP <b>${esc(d.mgmt_ip)}</b> · ` : ''}${esc(d.location || '')}${d.serial ? ` · S/N ${esc(d.serial)}` : ''}${d.service_tag && d.service_tag !== d.serial ? ` · tag ${esc(d.service_tag)}` : ''}</div>
+          <div class="text-sm">${d.mgmt_ip ? `IP <b>${esc(d.mgmt_ip)}</b> · ` : ''}${d.mac ? `MAC <b>${esc(d.mac)}</b> · ` : ''}${esc(d.location || '')}${d.serial ? ` · S/N ${esc(d.serial)}` : ''}${d.service_tag && d.service_tag !== d.serial ? ` · tag ${esc(d.service_tag)}` : ''}</div>
           ${ipList(d)}<div class="text-sm"><a href="#" onclick="NM.showInRack();return false">🗄 Show where it is in the racks</a></div>${d.server_id ? `<div class="text-sm"><a href="/server-inventory.html?view=${d.server_id}">📦 Server Inventory record #${d.server_id}</a></div>` : ''}</div>
         <span style="flex:1"></span>
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.editDevice(${d.id})">✏️ Device</button>` : ''}
@@ -405,7 +405,7 @@ const NM = (() => {
     const f = (k, l, ph = '') => `<div class="form-group"><label class="form-label">${l}</label><input class="form-control" id="nd-${k}" value="${esc(d[k] || '')}" placeholder="${ph}" ${k === 'hostname' && id ? 'readonly style="background:#f3f4f6"' : ''}></div>`;
     $('nm-dev-b').innerHTML = `<div class="qe-grid">${f('hostname', 'Hostname *', 'e.g. MR-01/ASW-06')}${f('alias', 'Name / description')}
       <div class="form-group"><label class="form-label">Role</label><select class="form-control" id="nd-role">${ROLES.map(r => `<option${r === d.role ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
-      ${f('model', 'Model', 'e.g. C9200L-48P-4X-E')}${f('mgmt_ip', 'Management IP')}${f('location', 'Location / rack', 'e.g. MAIN RACK - 01 (U38)')}${f('serial', 'Serial')}${f('notes', 'Notes')}
+      ${f('model', 'Model', 'e.g. C9200L-48P-4X-E')}${f('mgmt_ip', 'Management IP')}${f('mac', 'MAC address', 'e.g. 68:9E:0B:8A:E3:78')}${f('location', 'Location / rack', 'e.g. MAIN RACK - 01 (U38)')}${f('serial', 'Serial')}${f('notes', 'Notes')}
       ${id ? `<div class="form-group"><label class="form-label">In use?</label><select class="form-control" id="nd-state"><option value="">In use</option><option value="retired"${d.state === 'retired' ? ' selected' : ''}>Retired — stays in the rack, hidden from the topology</option></select></div>` : ''}
       ${id ? '' : `<div class="form-group"><label class="form-label">Ports: name before the number</label><input class="form-control" id="nd-prefix" placeholder="e.g. GE 1/0/"></div>
         <div class="form-group"><label class="form-label">How many</label><input class="form-control" id="nd-count" type="number" min="0" max="96" placeholder="48"></div>`}</div>`;
@@ -415,7 +415,7 @@ const NM = (() => {
   }
   async function saveDevice(id) {
     const v = (k) => ($('nd-' + k) ? $('nd-' + k).value.trim() : '');
-    const body = { site: D.site, hostname: v('hostname'), alias: v('alias'), role: v('role'), model: v('model'), serial: v('serial'), mgmt_ip: v('mgmt_ip'), location: v('location'), notes: v('notes'), port_prefix: v('prefix'), port_count: v('count') };
+    const body = { site: D.site, hostname: v('hostname'), alias: v('alias'), role: v('role'), model: v('model'), serial: v('serial'), mgmt_ip: v('mgmt_ip'), mac: v('mac'), location: v('location'), notes: v('notes'), port_prefix: v('prefix'), port_count: v('count') };
     if (id && $('nd-state')) body.state = $('nd-state').value;
     try {
       const r = id ? await apiPut('/api/netmap/device/' + id, body) : await apiPost('/api/netmap/device', body);
