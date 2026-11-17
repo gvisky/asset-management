@@ -53,10 +53,11 @@ router.post('/import', wrap(async (req, res) => {
   }
   for (const d of devices) {
     const h = str(d.hostname, 80); if (!h) continue;
-    stmts.push({ sql: `INSERT INTO net_devices (site, hostname, alias, role, model, serial, mgmt_ip, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    const ips = Array.isArray(d.ips) ? JSON.stringify(d.ips.slice(0, 40).map(x => ({ name: str(x.name, 40), ip: str(x.ip, 60) }))) : '';
+    stmts.push({ sql: `INSERT INTO net_devices (site, hostname, alias, role, model, serial, mgmt_ip, location, ips, services, service_tag) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(site, hostname) DO UPDATE SET alias = excluded.alias, role = excluded.role, model = excluded.model, serial = excluded.serial,
-          mgmt_ip = excluded.mgmt_ip, location = excluded.location, updated_at = datetime('now')`,
-      args: [site, h, str(d.alias), str(d.role, 40), str(d.model), str(d.serial, 60), str(d.mgmt_ip, 60), str(d.location)] });
+          mgmt_ip = excluded.mgmt_ip, location = excluded.location, ips = excluded.ips, services = excluded.services, service_tag = excluded.service_tag, updated_at = datetime('now')`,
+      args: [site, h, str(d.alias), str(d.role, 40), str(d.model), str(d.serial, 60), str(d.mgmt_ip, 60), str(d.location), ips, str(d.services, 120), str(d.service_tag, 40)] });
   }
   for (const v of vlans) {
     if (!str(v.vlan, 10)) continue;
@@ -194,6 +195,83 @@ router.post('/port/move', wrap(async (req, res) => {
 router.get('/log', wrap(async (req, res) => {
   const site = str(req.query.site, 80), dev = str(req.query.device, 80);
   res.json(await all(`SELECT * FROM net_port_log WHERE site = ?${dev ? ' AND device = ?' : ''} ORDER BY id DESC LIMIT 300`, dev ? [site, dev] : [site]));
+}));
+
+// ── Server Inventory ← Network map (the implementation document) ───────────────
+// Matches each network device to a Server Inventory record by serial / service tag (ignoring a leading "S"
+// some barcode exports add) and proposes the missing hostname, IP, location and IP list; devices with no record
+// can be added.  GET = preview, POST { site, items: [{ net_id, server_id | 0, fields }] } = apply (admins).
+const CAT = { Firewall: 'Firewall', Router: 'Voice Gateway', 'Core switch': 'Switch', 'Distribution switch': 'Switch', 'Server switch': 'Switch', 'Access switch': 'Switch',
+  'Wireless controller': 'Wireless Controller', 'HCI server': 'Dell Vx-rails', 'Backup storage': 'Dell Data Domain', Server: 'Server', 'ISP / external': 'ISP Router', 'Access point': 'Access Point' };
+const normSn = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+const snEqRaw = (a, b) => { a = normSn(a); b = normSn(b); return !!a && !!b && (a === b || (a.length > 6 && b.length > 6 && (('S' + a) === b || a === ('S' + b)))); };
+const snEq = snEqRaw;
+const ipsText = (ips) => { try { return JSON.parse(ips || '[]').map(x => `${x.name}: ${x.ip}`).join('\n'); } catch { return ''; } };
+// Model code of a device ("CISCO N3K-C3524P-XL" → N3KC3524PXL, "FIREWALL SOPHOS XG210" → XG210) to compare with Server Inventory models.
+const modelCode = (m) => { const t = String(m || '').toUpperCase().split(/\s+/).filter(w => /\d/.test(w)).sort((a, b) => b.length - a.length)[0] || ''; return t.replace(/[^A-Z0-9]/g, ''); };
+const sameModel = (a, b) => { const c = modelCode(a); return c.length >= 4 && String(b || '').toUpperCase().replace(/[^A-Z0-9]/g, '').includes(c); };
+async function syncPlan(site, choose = {}) {
+  const devs = await all('SELECT * FROM net_devices WHERE site = ? ORDER BY hostname', [site]);
+  const servers = await all('SELECT id, hostname, brand_model, serial_no, ip_address, location, role, category, country, net_info FROM servers WHERE deleted_at IS NULL');
+  const used = new Set(), out = [], how = new Map();
+  // 1) the record you picked, 2) linked before, 3) same serial / service tag, 4) same model (serial differs → check).
+  const first = new Map();
+  for (const d of devs) {
+    const c = choose[d.id];
+    let s = c != null ? (Number(c) ? servers.find(x => x.id === Number(c)) : null) : (d.server_id && servers.find(x => x.id === d.server_id)) || servers.find(x => !used.has(x.id) && (snEq(x.serial_no, d.serial) || snEq(x.serial_no, d.service_tag)));
+    if (s) { used.add(s.id); first.set(d.id, s); how.set(d.id, c != null ? 'picked' : 'serial'); }
+    else if (c != null) first.set(d.id, null);
+  }
+  for (const d of devs) {
+    if (first.has(d.id)) continue;
+    const s = servers.find(x => !used.has(x.id) && sameModel(d.model, x.brand_model));
+    if (s) { used.add(s.id); first.set(d.id, s); how.set(d.id, 'model'); } else first.set(d.id, null);
+  }
+  for (const d of devs) {
+    const s = first.get(d.id);
+    const candidates = servers.filter(x => sameModel(d.model, x.brand_model)).map(x => ({ id: x.id, label: `#${x.id} ${x.brand_model} · S/N ${x.serial_no || '—'}${x.hostname ? ' · ' + x.hostname : ''}` }));
+    let ipl = []; try { ipl = JSON.parse(d.ips || '[]'); } catch {}
+    const want = { hostname: d.hostname, ip_address: (d.mgmt_ip || '').split('/')[0] || ((ipl.find(x => /idrac|mgmt|ip address/i.test(x.name)) || {}).ip || '').split('/')[0], location: d.location, role: d.alias || d.role, net_info: [ipsText(d.ips), d.services ? `Services: ${d.services}` : ''].filter(Boolean).join('\n') };
+    const fields = {};
+    if (s) { for (const [k, v] of Object.entries(want)) if (v && String(s[k] || '').trim() !== String(v).trim()) fields[k] = { from: s[k] || '', to: v }; }
+    else for (const [k, v] of Object.entries({ ...want, brand_model: d.model, serial_no: d.serial || d.service_tag, category: CAT[d.role] || 'Network device' })) if (v) fields[k] = { from: '', to: v };
+    out.push({ net_id: d.id, hostname: d.hostname, role: d.role, model: d.model, serial: d.serial || d.service_tag, server: s ? { id: s.id, brand_model: s.brand_model, serial_no: s.serial_no, hostname: s.hostname } : null,
+      action: s ? (Object.keys(fields).length ? 'update' : 'same') : 'add', fields, how: how.get(d.id) || '', candidates,
+      warn: s && how.get(d.id) === 'model' ? ((d.serial || d.service_tag) ? `Matched by model — the document's serial ${d.serial || d.service_tag} differs from this record's ${s.serial_no || '(none)'}. Pick the right record.`
+        : `Matched by model only (no serial in the document) — check the label on the device and pick the right record.`) : '' });
+  }
+  return out;
+}
+router.get('/inventory-sync', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  let choose = {}; try { choose = JSON.parse(req.query.choose || '{}'); } catch {}
+  res.json({ site: str(req.query.site, 80), items: await syncPlan(str(req.query.site, 80), choose) });
+}));
+router.post('/inventory-sync', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  const site = str(req.body.site, 80), pick = new Set((req.body.net_ids || []).map(Number));
+  const plan = (await syncPlan(site, req.body.choose || {})).filter(p => pick.has(p.net_id) && p.action !== 'same');
+  const ALLOWED = ['hostname', 'ip_address', 'location', 'role', 'net_info', 'brand_model', 'serial_no', 'category'];
+  let updated = 0, added = 0;
+  // New records take the country most of the matched devices have.
+  const cs = plan.filter(p => p.server).map(p => p.server.id); const cc = cs.length ? await get(`SELECT country, COUNT(*) n FROM servers WHERE id IN (${cs.map(() => '?').join(',')}) GROUP BY country ORDER BY n DESC LIMIT 1`, cs) : null;
+  const country = (cc && cc.country) || 'Vietnam';
+  for (const p of plan) {
+    const f = Object.fromEntries(Object.entries(p.fields).filter(([k]) => ALLOWED.includes(k)).map(([k, v]) => [k, String(v.to).slice(0, 2000)]));
+    if (p.server) {
+      if (!Object.keys(f).length) continue;
+      await run(`UPDATE servers SET ${Object.keys(f).map(k => `${k} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`, [...Object.values(f), p.server.id]);
+      await run('UPDATE net_devices SET server_id = ? WHERE id = ?', [p.server.id, p.net_id]); updated++;
+    } else {
+      const producer = /cisco|nexus|n3k|c9200|isr|air-/i.test(f.brand_model || '') ? 'Cisco' : /dell|vxrail|poweredge|data domain/i.test(f.brand_model || '') ? 'Dell' : /sophos/i.test(f.brand_model || '') ? 'Sophos' : '';
+      await run(`INSERT INTO servers (country, hostname, brand_model, producer, category, serial_no, ip_address, location, role, net_info, status, remark)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?)`, [country, f.hostname || p.hostname, f.brand_model || '', producer, f.category || 'Network device', f.serial_no || '', f.ip_address || '', f.location || '', f.role || '', f.net_info || '', `Added from the network map (${site})`]);
+      const s = await get('SELECT id FROM servers WHERE hostname = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1', [f.hostname || p.hostname]);
+      if (s) await run('UPDATE net_devices SET server_id = ? WHERE id = ?', [s.id, p.net_id]); added++;
+    }
+  }
+  await audit(req.user, 'UPDATE', null, `Server Inventory updated from the network map "${site}": ${updated} updated, ${added} added`);
+  res.json({ ok: true, updated, added });
 }));
 
 module.exports = router;
