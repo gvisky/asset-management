@@ -1361,3 +1361,10 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .rk-item.grp-dim { opacity: .3; }
 .rk-where { margin-left: 10px; font-size: 13px; }
 .nm-node.on.dim { opacity: 1; }
+/* Virtual servers: backups */
+.bk-chip { display: inline-block; font-size: 12px; border-radius: 10px; padding: 1px 8px; font-weight: 600; white-space: nowrap; }
+.bk-chip.ok { background: #dcfce7; color: #166534; } .bk-chip.old { background: #fef3c7; color: #92400e; } .bk-chip.fail { background: #fee2e2; color: #991b1b; } .bk-chip.none { background: #f1f5f9; color: #64748b; font-weight: 500; }
+.bk-un { background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 13.5px; }
+.bk-un-r { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+.bk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.bk-t .bk-day td { background: #f1f5f9; font-weight: 600; font-size: 12.5px; } .bk-t .bk-fail td { background: #fef2f2; }

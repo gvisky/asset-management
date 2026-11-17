@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Virtual servers: backup jobs from the daily backup report",
+    "items": [
+      "Server Inventory → ☁ Virtual servers → ⬆ Import backup report: choose the 'Daily Backups Hayat Vietnam' e-mails (NetBackup OpsCenter) saved from Outlook as .msg — several at once is fine; .eml / .txt work too. The file is read in your browser; each backup job is kept as a record (job, server, policy, status, start, end, status code). Importing the same report again adds nothing twice.",
+      "New column Last backup: ✓ green with the time of the last job, amber if older than 2 days, red ✗ if it failed, plus the last whole-VM image backup and failed jobs in the last 7 days. Servers that never appear in a report show 'Not in the backup reports'.",
+      "🗄 Backups: every job by day, filter by server and period (1 day to 1 year), success / failure count. Names the backup software uses that are not a hostname (VxRail Manager, vCenter Server Appliance, vRealize Log Insight) are matched to VNHCMCESXMGMT / ESXVCSA / ESXLOG; any other unknown name (e.g. VNHCMCLPHYMMS01, VNHCMCLPHYRTG01) is listed so you can link it to a server or add it."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: MAC address on every device",
     "items": [
       "Every device has a MAC address field (✏️ Device), shown in the device panel and the hover tip; type it in any spelling (689e.0b8a.e378, 68-9E-…) — it is saved as 68:9E:0B:8A:E3:78. Search the map by MAC too.",
