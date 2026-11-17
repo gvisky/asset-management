@@ -192,10 +192,82 @@
     const meta = XLSX.read(data, { type, sheets: ['\u0000none'], dense: true });   // workbook info only
     const info = (meta.Workbook && meta.Workbook.Sheets) || [];
     const sheets = meta.SheetNames.map((name, i) => ({ name, hidden: !!(info[i] && info[i].Hidden) }));
-    return parseWorkbook(sheets, (name) => {
+    const read = (name) => {
       const wb = XLSX.read(data, { type, sheets: [name], dense: true, cellFormula: false, cellHTML: false, cellText: false });
       return XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true });
-    }, fileName);
+    };
+    // Local Finance control (IT_Opex_Control_Table_<Mon><YY>.xlsb): sheet "SAP data".
+    const sap = sheets.find(sh => norm(sh.name) === 'sap data');
+    if (sap) {
+      const finance = parseFinanceRows(read(sap.name), { fileName });
+      if (finance) {
+        if (!finance.length) throw new Error('No IT postings (PIC = IT) found in ' + (fileName || 'file') + ' — sheet "SAP data".');
+        return { items: [], finance, sheets: [sap.name], source: 'finance' };
+      }
+    }
+    return Object.assign(parseWorkbook(sheets, read, fileName), { source: 'turkey' });
+  }
+
+  // ── Local Finance control (SAP line items) ────────────────────────────────
+  // Same SAP postings as the Turkey B-F report, but grouped by the local GL /
+  // "New Account Hierarchy" instead of Masraf Çeşidi + PYP. Only PIC = IT rows.
+  // Each monthly file holds every month so far (earlier months may be restated).
+  const FIN_COLS = {
+    'period': 'period', 's4 gl': 's4_gl', 'cost element': 'local_gl', 'cost element descr': 'gl_desc',
+    's4 cost center': 's4_cc', 'cost center': 'cc', 'co object name': 'cc_name', 'document type': 'doc_type',
+    'document number': 'doc_no', 'posting date': 'posting_date', 'document header text': 'header_text',
+    'reference': 'reference', 'currency': 'currency', 'value in obj crcy': 'amount', 'val coarea crcy': 'usd',
+    'name': 'text', 'order': 'io', 'cost element type': 'cost_type', 'new cost element group': 'cost_group',
+    'pl criteria': 'pl_criteria', 'department': 'department', 'year': 'year', 'group v r': 'group_vr',
+    'io name': 'io_name', 'review note': 'review_note', 'type of expense': 'expense_type', 'pic': 'pic',
+    'budget actual': 'kind',
+  };
+  const xlDate = (v) => {
+    if (typeof v === 'number' && v > 20000 && v < 80000) {
+      const d = new Date(Math.round((v - 25569) * 86400000));
+      return d.toISOString().slice(0, 10);
+    }
+    return txt(v);
+  };
+  function parseFinanceRows(rows, ctx) {
+    ctx = ctx || {};
+    let hr = -1, col = null;
+    for (let h = 0; h < Math.min(6, rows.length); h++) {
+      const m = {};
+      (rows[h] || []).forEach((v, i) => { const k = FIN_COLS[norm(v)]; if (k && m[k] === undefined) m[k] = i; });
+      if (m.amount !== undefined && m.kind !== undefined && m.pic !== undefined && m.period !== undefined) { hr = h; col = m; break; }
+    }
+    if (!col) return null;
+    const get = (r, k) => (col[k] === undefined ? '' : r[col[k]]);
+    const fm = String(ctx.fileName || '').match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[\s_-]*(\d{2})(?!\d)/i);
+    const fileYear = fm ? 2000 + Number(fm[2]) : 0;
+    const out = [];
+    for (let i = hr + 1; i < rows.length; i++) {
+      const r = rows[i] || [];
+      if (norm(get(r, 'pic')) !== 'it') continue;
+      const kindRaw = norm(get(r, 'kind'));
+      const kind = kindRaw === 'budget' ? 'Budget' : kindRaw === 'actual' ? 'Actual' : kindRaw ? 'Adj' : 'Actual';
+      const period = Math.floor(Number(get(r, 'period')) || 0);
+      if (period < 1 || period > 12) continue;
+      const country = countryOf(get(r, 'group_vr')) || countryOf(get(r, 'cc')) || countryOf(ctx.fileName || '');
+      if (!country) continue;
+      out.push({
+        country, year: Number(get(r, 'year')) || fileYear, period, kind,
+        s4_gl: txt(get(r, 's4_gl')), local_gl: txt(get(r, 'local_gl')), gl_desc: txt(get(r, 'gl_desc')),
+        s4_cc: txt(get(r, 's4_cc')), cc: txt(get(r, 'cc')), cc_name: txt(get(r, 'cc_name')),
+        doc_type: txt(get(r, 'doc_type')), doc_no: txt(get(r, 'doc_no')), posting_date: xlDate(get(r, 'posting_date')),
+        header_text: txt(get(r, 'header_text')), text: txt(get(r, 'text')), currency: txt(get(r, 'currency')) || 'VND',
+        amount: r2(get(r, 'amount')), usd: r2(get(r, 'usd')),
+        cost_type: txt(get(r, 'cost_type')), cost_group: txt(get(r, 'cost_group')), pl_criteria: txt(get(r, 'pl_criteria')),
+        department: txt(get(r, 'department')), expense_type: txt(get(r, 'expense_type')),
+        io_name: txt(get(r, 'io_name')), review_note: txt(get(r, 'review_note')),
+      });
+    }
+    // Budget rows carry no year; use the year of the actuals (or the file name).
+    const yrs = out.filter(p => p.year).map(p => p.year);
+    const y0 = yrs.length ? Math.max(...yrs) : fileYear;
+    out.forEach(p => { if (!p.year) p.year = y0; });
+    return out.filter(p => p.year);
   }
 
   // Summary per (country, year) for an import preview.
@@ -325,5 +397,5 @@
     return (cache[raw] = outStr);
   }
 
-  return { COUNTRIES, MONTHS, fold, norm, countryOf, parseRows, parseWorkbook, parseWithXLSX, candidateSheets, summarize, tr, sum, r2 };
+  return { COUNTRIES, MONTHS, fold, norm, countryOf, parseRows, parseWorkbook, parseWithXLSX, parseFinanceRows, candidateSheets, summarize, tr, sum, r2 };
 }));

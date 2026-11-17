@@ -21,11 +21,12 @@ const KIND_LABEL = {
   approved: ['Approved budget', 'Onaylı bütçe'],
   report: ['B-F report', 'Bütçe-Fiili raporu'],
   legacy: ['budget 2026.xlsx (old)', 'eski dosya'],
+  finance: ['Finance control (local SAP)', 'Yerel finans kontrolü'],
 };
 const OCS = ['CAPEX', 'OPEX'];
 
 let DATA = { items: [], glMap: {}, meta: { years: [], sources: [] } };
-const st = Object.assign({ groups: ['pyp'], yoyDiff: false, yoyOpen: [], year: 0, country: '', period: 'fy', pyp: 's4', oc: '', q: '', group: 'pyp', cols: 'sum', ek: true, hideZero: false },
+const st = Object.assign({ finCur: 'usd', finOpen: [], groups: ['pyp'], yoyDiff: false, yoyOpen: [], year: 0, country: '', period: 'fy', pyp: 's4', oc: '', q: '', group: 'pyp', cols: 'sum', ek: true, hideZero: false },
   (() => { try { return JSON.parse(localStorage.getItem('budget.v2') || '{}'); } catch (e) { return {}; } })());
 if (!Array.isArray(st.groups)) st.groups = st.group && st.group !== 'none' ? [st.group] : [];
 delete st.group; delete st.sel;
@@ -37,6 +38,7 @@ const EN = (s) => C.tr(s);
 const bi = (s) => s ? esc(s) + (EN(s) ? `<span class="en">${esc(EN(s))}</span>` : '') : '<span class="text-muted">—</span>';
 const biInline = (s) => s ? esc(s) + (EN(s) ? ` <span class="en-inline">(${esc(EN(s))})</span>` : '') : '';
 const USD = (n) => { const v = Math.round(Number(n) || 0); return (v < 0 ? '−$' : '$') + Math.abs(v).toLocaleString('en-US'); };
+const LOC = (n, cur) => { const v = Math.round(Number(n) || 0); return (v < 0 ? '−' : '') + Math.abs(v).toLocaleString('en-US') + ' ' + (cur || 'VND'); };
 const USDk = (n) => { const v = Number(n) || 0, a = Math.abs(v); const s = a >= 1e6 ? (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(1) + 'K' : Math.round(a); return (v < 0 ? '−$' : '$') + s; };
 const cls = (v) => (v < -0.5 ? 'neg' : v > 0.5 ? 'pos' : '');
 const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
@@ -490,18 +492,19 @@ function closeDetail() { document.getElementById('bd-modal').classList.remove('o
 
 // ── data sources & import ────────────────────────────────────────────────────
 function renderSourceTable() {
-  const src = (DATA.meta.sources || []).slice().sort((x, y) => y.year - x.year || x.country.localeCompare(y.country));
+  const src = (DATA.meta.sources || []).concat((DATA.meta.finSources || []).map(f => Object.assign({ kind: 'finance' }, f)))
+    .slice().sort((x, y) => y.year - x.year || x.country.localeCompare(y.country) || (x.kind === 'finance') - (y.kind === 'finance'));
   document.getElementById('src-table').innerHTML = src.length
     ? '<thead><tr><th>Country</th><th>Year</th><th>Type</th><th>Actual through</th><th class="num">Lines</th><th>File</th><th>Imported</th><th></th></tr></thead><tbody>'
       + src.map(s => `<tr><td>${COUNTRY_FLAG[s.country]} ${esc(s.country)}</td><td>${s.year}</td><td><span class="src-pill ${esc(s.kind)}">${esc((KIND_LABEL[s.kind] || [s.kind])[0])}</span></td>`
         + `<td>${s.actual_months ? MON[s.actual_months - 1] + ' ' + s.year : '<span class="hint">budget only</span>'}</td><td class="num">${s.lines}</td>`
         + `<td class="hint">${esc(s.source_file)}</td><td class="hint">${esc((s.imported_at || '').slice(0, 16).replace('T', ' '))}</td>`
-        + `<td><button class="btn btn-ghost btn-sm" data-del="${esc(s.country)}|${s.year}" title="Remove ${esc(s.country)} ${s.year}">🗑</button></td></tr>`).join('') + '</tbody>'
+        + `<td><button class="btn btn-ghost btn-sm" data-del="${esc(s.country)}|${s.year}|${s.kind === 'finance' ? 'fin' : ''}" title="Remove ${esc(s.country)} ${s.year}${s.kind === 'finance' ? ' Finance control' : ''}">🗑</button></td></tr>`).join('') + '</tbody>'
     : '<tbody><tr><td class="hint">No budget data loaded yet.</td></tr></tbody>';
   document.querySelectorAll('#src-table [data-del]').forEach(btn => btn.addEventListener('click', async () => {
-    const [c, y] = btn.dataset.del.split('|');
-    if (!confirm(`Remove all ${c} ${y} budget lines?`)) return;
-    try { await apiDelete(`/api/budget/${encodeURIComponent(c)}/${y}`); showToast(`${c} ${y} removed`); await loadData(); }
+    const [c, y, fin] = btn.dataset.del.split('|');
+    if (!confirm(`Remove all ${c} ${y} ${fin ? 'Finance control postings' : 'budget lines'}?`)) return;
+    try { await apiDelete(`/api/budget/${fin ? 'finance/' : ''}${encodeURIComponent(c)}/${y}`); showToast(`${c} ${y} removed`); await loadData(); }
     catch (e) { showToast(e.message, 'error'); }
   }));
 }
@@ -509,8 +512,8 @@ function renderSourceTable() {
 let PENDING = [];   // [{ file, sheets, items, plan }]
 const tick = () => new Promise(r => setTimeout(r, 30));
 function fileToArrayBuffer(file) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsArrayBuffer(file); }); }
-async function postImport(body) {
-  const r = await fetch('/api/budget/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+async function postImport(body, fin) {
+  const r = await fetch(fin ? '/api/budget/finance-import' : '/api/budget/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const t = await r.text(); const d = t ? JSON.parse(t) : {};
   if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
   return d;
@@ -518,7 +521,7 @@ async function postImport(body) {
 async function readFiles() {
   const input = document.getElementById('imp-files'), status = document.getElementById('imp-status');
   const files = [...(input.files || [])];
-  if (!files.length) { showToast('Choose one or more .xlsx files first', 'error'); return; }
+  if (!files.length) { showToast('Choose one or more Excel files first', 'error'); return; }
   if (typeof XLSX === 'undefined') { showToast('Excel reader not loaded — hard-refresh the page', 'error'); return; }
   PENDING = []; document.getElementById('imp-preview').innerHTML = '';
   const errors = [];
@@ -526,9 +529,11 @@ async function readFiles() {
     status.textContent = `Reading ${i + 1}/${files.length}: ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`;
     await tick();
     try {
-      const { items, sheets } = C.parseWithXLSX(XLSX, await fileToArrayBuffer(file), 'array', file.name);
-      const { plan } = await postImport({ rows: items, file_name: file.name, dry_run: true });
-      PENDING.push({ file: file.name, sheets, items, plan });
+      const r = C.parseWithXLSX(XLSX, await fileToArrayBuffer(file), 'array', file.name);
+      const fin = r.source === 'finance';
+      const rows = fin ? r.finance : r.items;
+      const { plan } = await postImport({ rows, file_name: file.name, dry_run: true }, fin);
+      PENDING.push({ file: file.name, sheets: r.sheets, items: rows, plan, fin });
     } catch (e) { errors.push(`${file.name}: ${e.message}`); }
   }
   status.textContent = errors.length ? '⚠️ ' + errors.join(' · ') : '';
@@ -540,9 +545,9 @@ function renderPreview() {
   const rows = PENDING.flatMap(p => p.plan.map(x => ({ ...x, file: p.file, sheet: p.sheets.join(', ') })));
   el.innerHTML = `<div class="bdg-scroll"><table class="imp-table"><thead><tr><th>File · sheet</th><th>Country</th><th>Year</th><th>Type</th><th class="num">Lines</th><th class="num">Budget</th><th class="num">Actual+Fcst</th><th>Actual through</th><th>Action</th></tr></thead><tbody>`
     + rows.map(x => `<tr><td class="hint">${esc(x.file)}<br>· ${esc(x.sheet)}</td><td>${COUNTRY_FLAG[x.country]} ${esc(x.country)}</td><td>${x.year}</td><td>${esc((KIND_LABEL[x.kind] || [x.kind])[0])}</td>`
-      + `<td class="num">${x.lines}</td><td class="num">${USD(x.budget)}</td><td class="num">${x.actual ? USD(x.actual) : '–'}</td><td>${x.actual_months ? MON[x.actual_months - 1] : '–'}</td>`
+      + `<td class="num">${x.lines}</td><td class="num">${USD(x.budget)}${x.budget_local ? `<span class="en">${LOC(x.budget_local, x.currency)}</span>` : ''}</td><td class="num">${x.actual ? USD(x.actual) : '–'}${x.actual_local ? `<span class="en">${LOC(x.actual_local, x.currency)}</span>` : ''}</td><td>${x.actual_months ? MON[x.actual_months - 1] : '–'}</td>`
       + `<td><span class="act-${x.action}">${x.action === 'add' ? 'Add' : x.action === 'replace' ? `Replace ${x.existing} lines` : 'Skip'}</span>${x.reason ? `<div class="hint">${esc(x.reason)}</div>` : ''}</td></tr>`).join('')
-    + `</tbody></table></div><div style="margin-top:10px;display:flex;gap:10px;align-items:center"><button class="btn btn-primary" id="imp-save">Save ${PENDING.length} file${PENDING.length > 1 ? 's' : ''}</button><button class="btn btn-ghost" id="imp-cancel">Cancel</button><span class="hint">Approved budgets are saved first, then reports.</span></div>`;
+    + `</tbody></table></div><div style="margin-top:10px;display:flex;gap:10px;align-items:center"><button class="btn btn-primary" id="imp-save">Save ${PENDING.length} file${PENDING.length > 1 ? 's' : ''}</button><button class="btn btn-ghost" id="imp-cancel">Cancel</button><span class="hint">Approved budgets are saved first, then reports; Finance files newest first (older months in them are restated by the newer file).</span></div>`;
   document.getElementById('imp-cancel').onclick = () => { PENDING = []; renderPreview(); };
   document.getElementById('imp-save').onclick = saveImport;
 }
@@ -550,12 +555,13 @@ async function saveImport() {
   const btn = document.getElementById('imp-save'), status = document.getElementById('imp-status');
   btn.disabled = true;
   const order = { approved: 0, report: 1, legacy: 2 };
-  const list = PENDING.slice().sort((x, y) => (order[x.items[0].kind] || 0) - (order[y.items[0].kind] || 0));
+  const am = (p) => Math.max(0, ...p.plan.map(x => x.actual_months || 0));
+  const list = PENDING.slice().sort((x, y) => (x.fin - y.fin) || (x.fin ? am(y) - am(x) : (order[x.items[0].kind] || 0) - (order[y.items[0].kind] || 0)));
   const done = [];
   try {
     for (const p of list) {
       status.textContent = `Saving ${p.file}…`;
-      const d = await postImport({ rows: p.items, file_name: p.file });
+      const d = await postImport({ rows: p.items, file_name: p.file }, p.fin);
       d.plan.forEach(x => done.push(`${x.country} ${x.year}: ${x.action === 'skip' ? 'skipped' : x.lines + ' lines'}`));
     }
     status.textContent = '✅ ' + done.join(' · ');
@@ -563,6 +569,102 @@ async function saveImport() {
     PENDING = []; renderPreview(); document.getElementById('imp-files').value = '';
     await loadData();
   } catch (e) { status.textContent = '❌ ' + e.message; showToast(e.message, 'error'); btn.disabled = false; }
+}
+
+// ── Finance control (local SAP) vs Turkey report ─────────────────────────────
+// Same SAP postings, two GL mappings: Finance groups them by the local "New Account
+// Hierarchy" (cost centers, PIC = IT, Opex only); Turkey by Masraf Çeşidi + PYP.
+// The reconciliation lines both up by S4 GL and month.
+function renderFinance() {
+  const el = document.getElementById('fin-body'); if (!el) return;
+  const all = (DATA.finance || []).filter(f => f.year === st.year && (!st.country || f.country === st.country));
+  const btns = document.getElementById('seg-fincur');
+  if (btns) seg('seg-fincur', null, st.finCur, v => { st.finCur = v; renderAll(); });
+  if (!all.length) {
+    el.innerHTML = `<p class="hint" style="margin:0">No Finance control loaded for ${st.country ? esc(st.country) + ' ' : ''}${st.year}. Upload the Finance team's <b>IT_Opex_Control_Table_&lt;Mon&gt;&lt;YY&gt;.xlsb</b> below (the newest month is enough — it contains every month so far).</p>`;
+    return;
+  }
+  const loc = st.finCur === 'loc';
+  const countries = C.COUNTRIES.filter(c => all.some(f => f.country === c));
+  el.innerHTML = countries.map(c => financeCountry(c, all.filter(f => f.country === c), loc)).join('');
+  el.querySelectorAll('tr.fin-tg').forEach(tr => tr.addEventListener('click', () => {
+    const id = tr.dataset.id, o = new Set(st.finOpen || []);
+    if (o.has(id)) o.delete(id); else o.add(id);
+    st.finOpen = [...o]; save(); renderFinance();
+  }));
+  el.querySelectorAll('tr.line').forEach(tr => tr.addEventListener('click', (e) => { e.stopPropagation(); openDetail(+tr.dataset.id); }));
+}
+function financeCountry(country, fin, loc) {
+  const cur = (fin.find(f => f.currency) || {}).currency || 'VND';
+  const val = (f) => (loc ? f.amount : f.usd);
+  const fmt = (n) => (loc ? LOC(n, cur) : USD(n));
+  const act = fin.filter(f => f.kind !== 'Budget'), bud = fin.filter(f => f.kind === 'Budget');
+  const am = Math.max(0, ...act.map(f => f.period));
+  const vnd = act.reduce((t, f) => t + (f.usd ? f.amount : 0), 0), usd = act.reduce((t, f) => t + f.usd, 0);
+  const rate = usd ? Math.round(vnd / usd) : 0;
+  const src = (DATA.meta.finSources || []).find(x => x.country === country && x.year === st.year) || {};
+  const dash = '<span class="text-muted">–</span>';
+  const cellV = (v) => (Math.abs(v) > 0.5 ? fmt(v) : dash);
+
+  // 1) Finance's own view: budget vs actual by local cost type.
+  const types = new Map();
+  fin.forEach(f => {
+    const k = f.cost_type || f.expense_type || '(none)';
+    if (!types.has(k)) types.set(k, { group: f.cost_group, A: Array(12).fill(0), B: Array(12).fill(0), exp: new Set() });
+    const t = types.get(k); (f.kind === 'Budget' ? t.B : t.A)[f.period - 1] += val(f); if (f.expense_type) t.exp.add(f.expense_type);
+  });
+  const sumR = (a, x, y) => a.slice(x, y + 1).reduce((t, v) => t + v, 0);
+  const tot = { A: Array(12).fill(0), B: Array(12).fill(0) };
+  const rows1 = [...types.entries()].sort((x, y) => x[0].localeCompare(y[0])).map(([k, t]) => {
+    for (let i = 0; i < 12; i++) { tot.A[i] += t.A[i]; tot.B[i] += t.B[i]; }
+    const yb = sumR(t.B, 0, am - 1), ya = sumR(t.A, 0, am - 1), v = yb - ya;
+    return `<tr><td>${esc(k)}<span class="en">${esc([...t.exp].join(', '))}</span></td>${t.A.slice(0, am).map((x, i) => `<td class="num" title="Budget ${fmt(t.B[i])}">${cellV(x)}</td>`).join('')}`
+      + `<td class="num">${fmt(yb)}</td><td class="num"><b>${fmt(ya)}</b></td><td class="num ${cls(v)}">${fmt(v)}</td><td>${usedBar({ B: yb, AF: ya })}</td><td class="num">${fmt(sumR(t.B, 0, 11))}</td></tr>`;
+  }).join('');
+  const tyb = sumR(tot.B, 0, am - 1), tya = sumR(tot.A, 0, am - 1);
+  const t1 = `<div class="bdg-scroll"><table class="mgrid"><thead><tr><th>Cost type (local hierarchy)</th>${MON.slice(0, am).map(m => `<th class="num">${m} A</th>`).join('')}<th class="num">YTD budget</th><th class="num">YTD actual</th><th class="num">Var.</th><th>Used</th><th class="num">Year budget</th></tr></thead><tbody>${rows1}`
+    + `<tr class="tot"><td>Total</td>${tot.A.slice(0, am).map((x, i) => `<td class="num" title="Budget ${fmt(tot.B[i])}">${fmt(x)}</td>`).join('')}<td class="num">${fmt(tyb)}</td><td class="num">${fmt(tya)}</td><td class="num ${cls(tyb - tya)}">${fmt(tyb - tya)}</td><td>${usedBar({ B: tyb, AF: tya })}</td><td class="num">${fmt(sumR(tot.B, 0, 11))}</td></tr></tbody></table></div>`;
+
+  // 2) Reconciliation with the Turkey report by S4 GL (USD, Opex, actual months of both).
+  const trItems = DATA.items.filter(i => i.country === country && i.year === st.year && i.oc === 'OPEX');
+  const trAm = Math.max(0, ...trItems.map(i => i.actual_months));
+  const M = trItems.length ? Math.min(am, trAm) : am;
+  const gls = new Map();
+  const g = (k) => { if (!gls.has(k)) gls.set(k, { F: Array(12).fill(0), T: Array(12).fill(0), fin: [], tr: [], name: '' }); return gls.get(k); };
+  act.forEach(f => { const x = g(f.s4_gl || '(none)'); x.F[f.period - 1] += f.usd; x.fin.push(f); if (!x.name) x.name = f.gl_desc; });
+  trItems.forEach(i => { const x = g(i.gl_no || '(none)'); for (let k = 0; k < M; k++) x.T[k] += i.actual[k] || 0; if (i.actual.slice(0, M).some(v => v)) x.tr.push(i); if (i.gl_name) x.name = EN(i.gl_name) || i.gl_name; });
+  const open = new Set(st.finOpen || []);
+  let sf = 0, stt = 0;
+  const recRows = [...gls.entries()].map(([k, x]) => ({ k, x, f: sumR(x.F, 0, M - 1), t: sumR(x.T, 0, M - 1) }))
+    .filter(r => Math.abs(r.f) > 0.5 || Math.abs(r.t) > 0.5)
+    .sort((a, b) => Math.abs(b.f - b.t) - Math.abs(a.f - a.t))
+    .map(({ k, x, f, t }) => {
+      sf += f; stt += t;
+      const d = f - t, same = Math.abs(d) <= Math.max(5, Math.abs(t) * 0.01);
+      const status = same ? '<span class="rc rc-ok">✓ same</span>' : !Math.abs(f) ? '<span class="rc rc-tr">Only in Turkey report</span>' : !Math.abs(t) ? '<span class="rc rc-fin">Only in Finance</span>' : '<span class="rc rc-diff">Different</span>';
+      const id = country + '|' + k, isOpen = open.has(id);
+      let h = `<tr class="fin-tg yoy-tg" data-id="${esc(id)}"><td><span class="car">${isOpen ? '▾' : '▸'}</span><code>${esc(k)}</code> <span class="hint">${esc(x.name)}</span></td>`
+        + x.F.slice(0, M).map((v, i) => { const dd = v - x.T[i]; return `<td class="num" title="Finance ${USD(v)} · Turkey ${USD(x.T[i])}">${Math.abs(dd) <= Math.max(5, Math.abs(x.T[i]) * 0.01) ? (Math.abs(v) > 0.5 ? '<span class="pos">✓</span>' : dash) : `<span class="${dd < 0 ? 'neg' : 'pos'}">${dd > 0 ? '+' : ''}${USD(dd)}</span>`}</td>`; }).join('')
+        + `<td class="num">${USD(f)}</td><td class="num">${USD(t)}</td><td class="num ${same ? '' : cls(d)}"><b>${same ? '✓' : (d > 0 ? '+' : '') + USD(d)}</b></td><td>${status}</td></tr>`;
+      if (isOpen) {
+        h += `<tr class="yoy-d fin-d"><td colspan="${M + 5}"><div class="fin-det">`
+          + `<div><b>Finance postings</b> <span class="hint">(${x.fin.length})</span><div class="bdg-scroll"><table class="fin-pt"><thead><tr><th>Month</th><th>Date</th><th>Doc</th><th>Cost center</th><th>Text</th><th class="num">${esc(cur)}</th><th class="num">USD</th></tr></thead><tbody>`
+          + (x.fin.length ? x.fin.map(p => `<tr><td>${MON[p.period - 1]}</td><td>${esc(p.posting_date)}</td><td>${esc(p.doc_type)} ${esc(p.doc_no)}</td><td>${esc(p.cc)}<span class="en">${esc(p.cc_name)}</span></td><td>${esc(p.text)}${p.header_text ? `<span class="en">${esc(p.header_text)}</span>` : ''}${p.kind === 'Adj' ? ' <span class="tag-ek">Adj</span>' : ''}</td><td class="num">${LOC(p.amount, '')}</td><td class="num">${USD(p.usd)}</td></tr>`).join('') : '<tr><td colspan="7" class="hint">None — this GL is not in the Finance IT control (e.g. personnel cost is controlled by HR, or posted to another PIC).</td></tr>')
+          + `</tbody></table></div></div><div style="margin-top:10px"><b>Turkey report lines</b> <span class="hint">(${x.tr.length})</span><div class="bdg-scroll"><table class="lt"><thead><tr><th>Item</th><th>PYP</th>${MON.slice(0, M).map(m => `<th class="num">${m}</th>`).join('')}</tr></thead><tbody>`
+          + (x.tr.length ? x.tr.map(i => `<tr class="line" data-id="${i.id}"><td>${itemLabel(i)}</td><td>${pypCode(i) ? `<code>${esc(pypCode(i))}</code>` : ''}</td>${i.actual.slice(0, M).map(v => `<td class="num">${cellV(v)}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${M + 2}" class="hint">None — not mapped to IT in the Turkey report.</td></tr>`)
+          + '</tbody></table></div></div></div></td></tr>';
+      }
+      return h;
+    }).join('');
+  const t2 = `<div class="bdg-scroll"><table class="mgrid"><thead><tr><th>S4 GL (Masraf Çeşidi)</th>${MON.slice(0, M).map(m => `<th class="num">${m} Δ</th>`).join('')}<th class="num">Finance</th><th class="num">Turkey report</th><th class="num">Δ</th><th>Status</th></tr></thead><tbody>${recRows}`
+    + `<tr class="tot"><td>Total Opex ${MON[0]}–${MON[M - 1]}</td>${MON.slice(0, M).map(() => '<td></td>').join('')}<td class="num">${USD(sf)}</td><td class="num">${USD(stt)}</td><td class="num ${cls(sf - stt)}">${(sf - stt > 0 ? '+' : '') + USD(sf - stt)}</td><td></td></tr></tbody></table></div>`;
+
+  return `<div style="margin-bottom:18px">
+    <div class="src-strip" style="margin:0 0 10px"><span class="src-pill finance">${COUNTRY_FLAG[country]} <b>${country} ${st.year}</b> · Finance control · actual Jan–${MON[am - 1]} · ${fin.length} rows · ${rate ? `rate ${rate.toLocaleString('en-US')} ${esc(cur)}/USD` : ''} · ${esc(src.source_file || '')}</span></div>
+    <h4 class="fin-h">Finance view — budget vs actual by local cost type <span class="hint">(PIC = IT · Opex · ${loc ? esc(cur) : 'USD'}${!loc ? ' · budget converted at ' + rate.toLocaleString('en-US') : ''} · hover a month for its budget)</span></h4>${t1}
+    <h4 class="fin-h" style="margin-top:16px">Reconciliation with the Turkey report — by S4 GL <span class="hint">(USD · Opex · actual ${MON[0]}–${MON[M - 1]} · Δ = Finance − Turkey · ✓ = same · click a row for the postings)</span></h4>
+    ${trItems.length ? t2 : '<p class="hint">No Turkey B-F report loaded for this country/year to compare with.</p>'}
+  </div>`;
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -576,6 +678,7 @@ function renderAll() {
   renderSummary(items, a, b);
   renderMonthly(items, a, b);
   renderYoy();
+  renderFinance();
   renderLines(items, a, b);
   renderSourceTable();
 }
