@@ -56,6 +56,9 @@
   </header>
 
   <main class="content">
+    <div class="si-tabs"><button class="on" data-t="phys">🖥 Servers &amp; network devices</button><button data-t="vm">☁ Virtual servers <span class="na-cnt" id="vm-cnt"></span></button></div>
+    <div id="si-vm" hidden></div>
+    <div id="si-phys">
     <div class="stat-grid" id="summary-grid" style="margin-bottom:18px"></div>
     <div class="card">
       <div class="card-header" style="flex-wrap:wrap;gap:10px">
@@ -88,6 +91,7 @@
         <div style="flex:1"></div>
         <div class="pagination" id="pagination"></div>
       </div>
+    </div>
     </div>
   </main>
 </div>
@@ -173,5 +177,6 @@
 <script src="/js/device-specs.js?v=20261117a"></script>
 <script src="/js/server-attention.js?v=20261117a"></script>
 <script src="/js/server-inventory.js?v=20261117e"></script>
+<script src="/js/virtual-servers.js?v=20261117a"></script>
 </body>
 </html>

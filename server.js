@@ -28,6 +28,7 @@ app.use(require('./lib/activity').activityLog);
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/assets',    require('./routes/assets'));
 app.use('/api/servers',   require('./routes/servers'));
+app.use('/api/virtual-servers', require('./routes/virtual-servers'));
 app.use('/api/users',     require('./routes/users'));
 app.use('/api/personnel', require('./routes/personnel'));
 app.use('/api/maintenance', require('./routes/maintenance'));
@@ -43,6 +44,7 @@ app.use('/api/stocktake', require('./routes/stocktake'));
 app.use('/api/m365', require('./routes/m365'));
 app.use('/api/leavers', require('./routes/leavers'));
 app.use('/api/kpi', require('./routes/kpi'));
+app.use('/api/netmap/workbook', require('./routes/netmap-workbook'));
 app.use('/api/netmap', require('./routes/netmap'));
 app.use('/api/confirm-forms', require('./routes/confirm').forms);
 app.use('/api/confirm', require('./routes/confirm').admin);
@@ -84,6 +86,12 @@ app.get('/vendor/jsQR.js', (req, res) => {
 app.get('/vendor/jszip.min.js', (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.sendFile(path.join(__dirname, 'node_modules', 'jszip', 'dist', 'jszip.min.js'));
+});
+
+// .xlsx reader for the Network map "Factory Info" workbook import (read in the browser, not uploaded).
+app.get('/vendor/xlsx.full.min.js', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'node_modules', 'xlsx', 'dist', 'xlsx.full.min.js'));
 });
 
 // Static files (served after the gate above)

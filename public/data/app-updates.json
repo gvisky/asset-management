@@ -1,6 +1,20 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: import the Factory Info workbook (Palo Alto, APs, racks, VLANs, VMs, printers)",
+    "items": [
+      "Network map → ⬆ Import Factory Info (.xlsx) (admins): the workbook is read in your browser and compared with the map, Server Inventory and the virtual-server list. You see every difference, grouped, and tick what to apply. Blank cells never clear what is already there.",
+      "Topology: the two Palo Alto PA-440 WAN firewalls (VNFCTPALWAN01 / 02, 10.84.8.252 / .253, MAIN RACK 04) are added with their links to ASW-06 / ASW-07. The old VFW-01 / VFW-02 nodes are marked Retired: they stay in their rack but are hidden from the topology. Any device can be set to Retired / In use in ✏️ Device.",
+      "Other link changes from the SWPORT sheets: the DD-6300 now uses its 10G ports to CSW-01 / CSW-02 (the copper ports are marked unplugged), the DSW uplinks to ASW-03 / ASW-04 are swapped, SR-07/ASW-11 is now a C9200L-48P, and there are 3 new card-reader switches and the Viettel VNTT line. Card readers, OT kiosks, Moxa gateways, printers and PXE ports appear in the port notes.",
+      "Access points: the 57 APs of the AP list become map devices, cabled to their switch port. Where the AP list and the port sheet name different ports, both are shown for you to choose (not ticked).",
+      "Racks are rebuilt from RACK LAYOUT with real U positions: MR-01 to MR-04 (including the CCTV switches and the ODF trays in MR-02) and all 35 factory cabinets with ODF, patch panel, switch and PDU.",
+      "VLAN tab: VLAN name, description and DHCP range, the new VLANs (131–133, ISP 600 / 601 / 35), VLANs used on ports but missing from the list (e.g. 134 PXE), and the devices whose IP is in each VLAN.",
+      "Server Inventory: hostname, IP, location and MAC / switch port are filled from the equipment list and the AP list (empty fields only — a different value is shown as a conflict to check, e.g. the two DSW serials). New tab ☁ Virtual servers: the 20 VMs and 4 ESXi hosts (linked to the VxRail nodes), with what each is for — editable.",
+      "Printers of the PRINTER sheet are on the map with their IP, location and print server. IP phones and the phone request list are not imported."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: the page stays still when you click a device",
     "items": [
       "Clicking a device on the map, in the list or in a rack no longer scrolls the page down to the device panel — the topology stays in view; scroll down yourself to see the ports."

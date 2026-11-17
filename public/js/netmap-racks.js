@@ -33,7 +33,7 @@ const NMRacks = (() => {
     else if (d) { const sfp = /SFP|N3K|3548|3524/i.test(d.model);
       body = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="${sfp ? '#1e293b' : '#e4e4e7'}" stroke="#18181b"/>${ports(24, sfp ? '#94a3b8' : '#27272a', x + 30, y + 2.5)}${ports(24, sfp ? '#94a3b8' : '#27272a', x + 30, y + h - 7)}`; }
     else body = `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#71717a" stroke="#27272a"/>`;
-    const lbl = d ? d.hostname : it.label;
+    const lbl = d ? d.hostname + (d.state === 'retired' ? ' (retired)' : '') : it.label;
     const tag = lbl ? `<rect x="${x + w / 2 - Math.min(w - 20, lbl.length * 6.4 + 10) / 2}" y="${y + h / 2 - 6.5}" width="${Math.min(w - 20, lbl.length * 6.4 + 10)}" height="13" rx="2" fill="#000" opacity=".85"/>
       <text x="${x + w / 2}" y="${y + h / 2 + 3.6}" class="rk-lbl">${esc(lbl)}</text>` : '';
     return `<g class="rk-item${it.device_id ? ' dev' : ''}" data-id="${it.id}"><title>${esc(lbl || it.kind)} · U${it.u}${it.height > 1 ? '–' + (it.u + it.height - 1) : ''}${d ? ' · ' + d.model : ''}</title>${body}${tag}</g>`;
@@ -62,7 +62,7 @@ const NMRacks = (() => {
     main.forEach((r, i) => { svg += rackSvg(r, GAP + i * (RW + GAP), TOP + 20); });
     if (cab.length) { svg += `<text x="${GAP}" y="${H1 + 40}" class="rk-area">FACTORY CABINETS</text>`;
       cab.forEach((r, i) => { const c = i % per, row = Math.floor(i / per); svg += rackSvg(r, GAP + c * (RW + GAP), H1 + 70 + row * (12 * UH + 80)); }); }
-    const unplaced = D().devices.filter(d => !R.items.some(i => i.device_id === d.id));
+    const unplaced = D().devices.filter(d => !R.items.some(i => i.device_id === d.id) && !['Access point', 'Printer'].includes(d.role) && d.state !== 'retired');
     const rackDraw = drawings.filter(d => /rack/i.test(d.category + ' ' + d.name));
     box.innerHTML = `<div class="rk-bar">${D().can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.addItem()">+ Item (patch panel, PDU …)</button><button class="btn btn-ghost btn-sm" onclick="NMRacks.addRack()">+ Rack / cabinet</button>` : ''}
         ${D().can.admin ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.build(false)" title="Place devices that are not in a rack yet">⚙ Place new devices</button>` : ''}

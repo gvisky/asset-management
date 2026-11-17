@@ -1284,6 +1284,22 @@ async function migrate() {
       mime TEXT DEFAULT 'image/png', size INTEGER DEFAULT 0, data_b64 TEXT DEFAULT '', pins TEXT DEFAULT '',
       uploaded_by TEXT DEFAULT '', uploaded_at TEXT DEFAULT (datetime('now')));`);
 
+  // Factory Info workbook import: retired devices (still in the rack, no longer in use), VLAN description / DHCP range.
+  const ndcols2 = (await backend.all('PRAGMA table_info(net_devices)')).map(c => c.name);
+  if (!ndcols2.includes('state')) await backend.run("ALTER TABLE net_devices ADD COLUMN state TEXT DEFAULT ''");
+  if (!ndcols2.includes('source')) await backend.run("ALTER TABLE net_devices ADD COLUMN source TEXT DEFAULT ''");
+  const nvcols = (await backend.all('PRAGMA table_info(net_vlans)')).map(c => c.name);
+  for (const col of ['description', 'dhcp']) if (!nvcols.includes(col)) await backend.run(`ALTER TABLE net_vlans ADD COLUMN ${col} TEXT DEFAULT ''`);
+  // Virtual servers (VMs and the hypervisor hosts they run on), Server Inventory → Virtual servers tab.
+  await backend.script(`CREATE TABLE IF NOT EXISTS virtual_servers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, country TEXT NOT NULL DEFAULT 'Vietnam', hostname TEXT NOT NULL, ref_key TEXT DEFAULT '',
+      status TEXT DEFAULT 'Active', kind TEXT DEFAULT 'Virtual', ip TEXT DEFAULT '', infra_ip TEXT DEFAULT '', farm TEXT DEFAULT '',
+      system_type TEXT DEFAULT '', it_ot TEXT DEFAULT '', platform TEXT DEFAULT '', os TEXT DEFAULT '', os_version TEXT DEFAULT '',
+      domain TEXT DEFAULT '', sap TEXT DEFAULT '', usage TEXT DEFAULT '', description TEXT DEFAULT '', impact TEXT DEFAULT '',
+      backup TEXT DEFAULT '', host_model TEXT DEFAULT '', serial TEXT DEFAULT '', cpu TEXT DEFAULT '', memory TEXT DEFAULT '',
+      location TEXT DEFAULT '', notes TEXT DEFAULT '', server_id INTEGER DEFAULT NULL,
+      created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')), UNIQUE(country, hostname));`);
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");
