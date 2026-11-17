@@ -90,7 +90,7 @@ const NMRacks = (() => {
     });
     svg.addEventListener('pointerup', async (e) => {
       const d = drag; drag = null; if (!d) return;
-      if (!d.moved) { d.g.removeAttribute('transform'); if (d.it.device_id) { NM.select(d.it.device_id); } else if (D().can.edit) editItem(d.it.id); return; }
+      if (!d.moved) { d.g.removeAttribute('transform'); if (d.it.device_id) { NM.select(d.it.device_id); } else if (d.it.kind === 'patch' && self.NMFaces && NMFaces.panelName(d.it.label) && NMFaces.panel(d.it.label)) { /* patch panel window */ } else if (D().can.edit) editItem(d.it.id); return; }
       // Which rack / U was it dropped on?
       const p = pt(e); let target = null;
       for (const g of svg.querySelectorAll('.rk')) { const b = g.getBBox(); if (p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height) target = R.racks.find(r => r.id === Number(g.dataset.rack)); }

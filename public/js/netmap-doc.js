@@ -38,6 +38,7 @@
     const doc = new DOMParser().parseFromString(xml, 'application/xml');
     const body = doc.getElementsByTagNameNS(W, 'body')[0];
     const devices = new Map(), ports = [], vlans = [];
+    const patches = [];   // 8.1 patch panels: { panel: 'MR01/PP01', port: 7, outlet: 'D07' }
     const ipInfo = [];   // { host, ip, name, gateway, service, serial, service_tag } from 7.1 IP MGMT / System (never user names / passwords)
     let section = '';
     for (const el of body.childNodes) {
@@ -72,6 +73,20 @@
           ports.push({ device: host, port, peer_host: dst, peer_port: dst ? dport : '', patch: dst ? '' : dport, cable: col(r, /cable/),
             mode: col(r, /switchport/) || '', vlan: col(r, /vlan/), grp: col(r, /group|number/) });
         }
+        continue;
+      }
+      // 8.1 Patch panel: "MR01/PP01 | D01 … D12" / "1 … 12" / "13 … 24" / "D13 … D24"
+      if (rows.some(r => /^MR\d+\/PP\d+$/i.test((r[0] || '').trim()))) {
+        let panel = '', block = [];
+        const flush = () => { if (!panel || block.length < 4) return;
+          const [top, n1, n2, bot] = block;
+          top.slice(1).forEach((o, i) => { const n = Number(n1[i + 1]); if (o && n && o !== '-') patches.push({ panel, port: n, outlet: o.trim() }); });
+          bot.slice(1).forEach((o, i) => { const n = Number(n2[i + 1]); if (o && n && o !== '-') patches.push({ panel, port: n, outlet: o.trim() }); }); };
+        for (const r of rows) {
+          if (/^MR\d+\/PP\d+$/i.test((r[0] || '').trim())) { flush(); panel = r[0].trim().toUpperCase(); block = [r]; }
+          else if (panel && r.some(c => c.trim())) block.push(r);
+        }
+        flush();
         continue;
       }
       // 7.1.2 System: No | Roles | Devices | Service Tag | Serial Number | Hostname | Function | IP MGMT (hostname only on a host's first row)
@@ -116,21 +131,22 @@
     const byKey = new Map([...devices.keys()].map(h => [key(h), h]));
     for (const p of ports) if (p.peer_host && !devices.has(p.peer_host) && byKey.has(key(p.peer_host))) p.peer_host = byKey.get(key(p.peer_host));
     // Far port spelled differently ("T1/1/1" for "T 1/1/1") → the device's own port name.
-    const pkey = (x) => String(x).replace(/\s+/g, '').toUpperCase();
+    // "PORT 1 (LAN)" = "PORT 1" = "PORT 01", "T1/1/1" = "T 1/1/1"
+    const pkey = (x) => String(x).toUpperCase().replace(/\(.*?\)/g, '').replace(/\s+/g, '').replace(/\d+/g, (n) => String(Number(n)));
     const portNames = new Map();
     for (const p of ports) { if (!portNames.has(p.device)) portNames.set(p.device, new Map()); portNames.get(p.device).set(pkey(p.port), p.port); }
     for (const p of ports) if (p.peer_host && p.peer_port && portNames.has(p.peer_host)) { const n = portNames.get(p.peer_host).get(pkey(p.peer_port)); if (n) p.peer_port = n; }
     // A link written on one side only → fill the other side's empty port.
     const at = new Map(ports.map(p => [p.device + '|' + p.port, p]));
-    for (const p of ports) if (p.peer_host && p.peer_port) { const o = at.get(p.peer_host + '|' + p.peer_port); if (o && !o.peer_host) { o.peer_host = p.device; o.peer_port = p.port; o.cable = o.cable || p.cable; o.grp = o.grp || p.grp; } }
+    for (const p of ports) if (p.peer_host && p.peer_port) { const o = at.get(p.peer_host + '|' + p.peer_port); if (o && !o.peer_host) { o.peer_host = p.device; o.peer_port = p.port; o.cable = o.cable || p.cable; o.grp = o.grp || p.grp; if (/^(E|GE|T|TE)\s*\d/i.test(o.patch)) o.patch = ''; } }
     // Far ends that have no table of their own (ISP routers, …) become devices too.
     for (const p of ports) if (p.peer_host && !devices.has(p.peer_host)) devices.set(p.peer_host, { hostname: p.peer_host, role: guessRole(p.peer_host), alias: '', model: '', serial: '', mgmt_ip: '', location: '' });
     // …with the ports other devices point at.
-    const have = new Set(ports.map(p => p.device + '|' + p.port));
+    const have = new Set(ports.map(p => p.device + '|' + pkey(p.port)));
     for (const p of [...ports]) {
-      if (p.peer_host && p.peer_port && !have.has(p.peer_host + '|' + p.peer_port)) {
+      if (p.peer_host && p.peer_port && !have.has(p.peer_host + '|' + pkey(p.peer_port))) {
         ports.push({ device: p.peer_host, port: p.peer_port, peer_host: p.device, peer_port: p.port, cable: p.cable, mode: '', vlan: '', grp: p.grp, patch: '' });
-        have.add(p.peer_host + '|' + p.peer_port);
+        have.add(p.peer_host + '|' + pkey(p.peer_port));
       }
     }
     // Attach the IP information to the devices (same name, the other spelling, or the same management IP).
@@ -150,7 +166,7 @@
       if (x.model && !d.model && !/LEASE|LINE/i.test(x.model)) d.model = x.model;
       if (x.title && /LEASE LINE|FTTH/.test(x.title)) d.alias = d.alias || x.title;
     }
-    return { devices: [...devices.values()], ports, vlans, counts: { devices: devices.size, ports: ports.length, links: ports.filter(p => p.peer_host).length, vlans: vlans.length } };
+    return { devices: [...devices.values()], ports, vlans, patches, counts: { patches: patches.length, devices: devices.size, ports: ports.length, links: ports.filter(p => p.peer_host).length, vlans: vlans.length } };
   }
   window.NetmapDoc = { read };
 })();
