@@ -53,7 +53,7 @@ async function loadFilters() {
 async function loadServers(page = 1) {
   sCurrentPage = page;
   const qs = new URLSearchParams();
-  qs.set('page', page); qs.set('limit', 25);
+  qs.set('page', 1); qs.set('limit', 5000);   // all at once: the list is grouped by category
   const s = document.getElementById('search-input').value.trim();
   const c = document.getElementById('filter-country').value;
   const st = document.getElementById('filter-status').value;
@@ -67,22 +67,23 @@ async function loadServers(page = 1) {
   try {
     const result = await apiGet(`${SAPI}?${qs}`);
     renderTable(result.data);
-    renderPagination(result.total, result.page, result.limit);
+    document.getElementById('pagination').innerHTML = '';
+    document.getElementById('page-info').textContent = `${result.total} device${result.total === 1 ? '' : 's'} · categories with more than 4 devices are grouped — click to open`;
     document.getElementById('total-label').textContent = `${result.total} server(s)`;
   } catch (e) {
     document.getElementById('servers-tbody').innerHTML = '<tr><td colspan="12" class="empty-state">Failed to load.</td></tr>';
   }
 }
 
-function renderTable(rows) {
-  const tbody = document.getElementById('servers-tbody');
-  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty-state">No servers found.</td></tr>'; return; }
-  tbody.innerHTML = rows.map(s => `
-    <tr class="${s.fields_locked ? 'row-locked' : ''}">
+// Categories with more than 4 devices (Switch, Access Point …) are grouped (closed until clicked).
+const sOpenGroups = new Set();
+function rowHtml(s, inGroup) {
+  return `
+    <tr class="${s.fields_locked ? 'row-locked' : ''}${inGroup ? ' sg-in' : ''}">
       <td class="text-muted text-sm">${s.id}</td>
       <td>${s.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}<code style="font-size:12px;color:var(--brand)">${sEsc(s.asset_code) || '—'}</code></td>
       <td><strong>${sEsc(s.hostname) || '—'}</strong></td>
-      <td>${sEsc(s.brand_model) || '—'}</td>
+      <td>${sEsc(s.brand_model) || '—'} ${DeviceSpecs.btn(s.brand_model, s.category)}</td>
       <td class="text-muted text-sm">${sEsc(s.producer) || '—'}</td>
       <td>${s.category ? `<span class="badge badge-office">${sEsc(s.category)}</span>` : '—'}</td>
       <td class="text-muted text-sm">${sEsc(s.ip_address) || '—'}</td>
@@ -97,8 +98,31 @@ function renderTable(rows) {
           <button class="btn btn-danger btn-sm" onclick="onDelete(${s.id}, '${sAttr(s.hostname || s.asset_code)}')" title="Delete"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
         </div>
       </td>
-    </tr>`).join('');
+    </tr>`;
 }
+let sRows = [];
+function renderTable(rows) {
+  sRows = rows;
+  const tbody = document.getElementById('servers-tbody');
+  if (!rows.length) { tbody.innerHTML = '<tr><td colspan="12" class="empty-state">No servers found.</td></tr>'; return; }
+  const by = new Map();
+  for (const s of rows) { const k = s.category || 'Uncategorised'; if (!by.has(k)) by.set(k, []); by.get(k).push(s); }
+  const groups = [...by.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
+  let html = '';
+  for (const [cat, list] of groups) {
+    if (list.length <= 4) { html += list.map(s => rowHtml(s, false)).join(''); continue; }
+    const open = sOpenGroups.has(cat);
+    const models = [...list.reduce((m, s) => m.set(s.brand_model || '—', (m.get(s.brand_model || '—') || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
+    const st = list.reduce((m, s) => { m[s.status] = (m[s.status] || 0) + 1; return m; }, {});
+    html += `<tr class="sg-grp" onclick="toggleSGroup(${jsArg(cat)})"><td colspan="12">
+      <span class="lg-caret">${open ? '▾' : '▸'}</span> <b>${sEsc(cat)}</b> <span class="sg-cnt">${list.length}</span>
+      <span class="sg-models">${models.map(([m, n]) => `<span class="sg-model">${sEsc(m)} <b>×${n}</b> ${DeviceSpecs.btn(m, cat)}</span>`).join('')}</span>
+      <span class="sg-st">${Object.entries(st).map(([k, n]) => `${statusBadge(k)} ${n}`).join(' ')}</span></td></tr>`;
+    if (open) html += list.map(s => rowHtml(s, true)).join('');
+  }
+  tbody.innerHTML = html;
+}
+function toggleSGroup(cat) { sOpenGroups.has(cat) ? sOpenGroups.delete(cat) : sOpenGroups.add(cat); renderTable(sRows); }
 
 function renderPagination(total, page, limit) {
   const totalPages = Math.ceil(total / limit);

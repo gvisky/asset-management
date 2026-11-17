@@ -43,6 +43,7 @@ app.use('/api/stocktake', require('./routes/stocktake'));
 app.use('/api/m365', require('./routes/m365'));
 app.use('/api/leavers', require('./routes/leavers'));
 app.use('/api/kpi', require('./routes/kpi'));
+app.use('/api/netmap', require('./routes/netmap'));
 app.use('/api/confirm-forms', require('./routes/confirm').forms);
 app.use('/api/confirm', require('./routes/confirm').admin);
 app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff confirm their devices with a personal link
@@ -77,6 +78,12 @@ app.use(async (req, res, next) => {
 app.get('/vendor/jsQR.js', (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.sendFile(path.join(__dirname, 'node_modules', 'jsqr', 'dist', 'jsQR.js'));
+});
+
+// .docx reader for the Network map import (the implementation document is read in the browser).
+app.get('/vendor/jszip.min.js', (req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'node_modules', 'jszip', 'dist', 'jszip.min.js'));
 });
 
 // Static files (served after the gate above)

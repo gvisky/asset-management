@@ -116,6 +116,7 @@ function renderUserChrome() {
   };
   const ico = (d) => `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${d}</svg>`;
   navAdd('nav-stocktake', '/stocktake.html', ico('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>') + ' Stocktake', '#nav-maintenance', u.asset_access !== 0);
+  navAdd('nav-netmap', '/network-map.html', ico('<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>') + ' Network map', '#nav-servers', u.asset_access !== 0);
   navAdd('nav-kpi', '/kpi.html', ico('<polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/>') + ' KPIs', '#nav-reports', u.asset_access !== 0);
 
   // System Health link — IT team only, right after Devices.
@@ -211,7 +212,7 @@ function applyAssetGating() {
 
   const assetPages = ['/', '/index.html', '/inventory.html',
     '/server-inventory.html', '/devices.html', '/maintenance.html', '/licenses.html', '/reports.html', '/alerts.html',
-    '/stocktake.html', '/scan.html', '/labels.html', '/kpi.html'];
+    '/stocktake.html', '/scan.html', '/labels.html', '/kpi.html', '/network-map.html'];
   if (assetPages.includes(window.location.pathname)) {
     window.location.href = '/user-inventory.html';
   }
