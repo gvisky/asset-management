@@ -1,22 +1,31 @@
-// Build db/budget-seed.json from budget 2026.xlsx → Sheet1 using the shared
-// parser (lib/budget-parse.js) — same logic the in-app import uses.
-// Run: node scripts/build-budget-seed.js  [optional path to .xlsx]
-const path = require('path');
+// Load corporate budget workbooks into the database configured for this
+// machine (local SQLite, or Turso when TURSO_DATABASE_URL is set). Same parser
+// and replace rules as the Budget page import (public/js/budget-core.js +
+// routes/budget.js importRows). Financial data never goes into Git.
+//
+// Run:  node scripts/build-budget-seed.js [--dry-run] <file.xlsx> [more.xlsx …]
+//   e.g. "2027_BUDGET_10.11.2026 - Vietnam.xlsx" (approved budget) and
+//        "DT_…_B-F_RAPOR … - Vietnam.xlsx" (monthly budget vs actual report).
 const fs = require('fs');
+const path = require('path');
 const XLSX = require('xlsx');
-const { parseBudgetWorkbook } = require('../lib/budget-parse');
+const core = require('../public/js/budget-core');
+const { importRows } = require('../routes/budget');
 
-const SRC = process.argv[2] ||
-  "C:\\Users\\vietnguyen\\OneDrive - HAYAT HOLDING\\Desktop\\Code\\Asset control\\budget 2026.xlsx";
-const OUT = path.join(__dirname, '..', 'db', 'budget-seed.json');
+const args = process.argv.slice(2);
+const dryRun = args.includes('--dry-run');
+const files = args.filter(a => a !== '--dry-run');
+if (!files.length) { console.error('Usage: node scripts/build-budget-seed.js [--dry-run] <file.xlsx> [...]'); process.exit(1); }
 
-if (!fs.existsSync(SRC)) { console.error('Source not found:', SRC); process.exit(1); }
-const lines = parseBudgetWorkbook(XLSX.readFile(SRC));
-fs.writeFileSync(OUT, JSON.stringify(lines));
-const t = {};
-for (const x of lines) {
-  t[x.country] = t[x.country] || { lines: 0, b2026: 0, jaB: 0, jaA: 0 };
-  t[x.country].lines++; t[x.country].b2026 += x.y2026_budget; t[x.country].jaB += x.ja_budget; t[x.country].jaA += x.ja_actual;
-}
-console.log('line items:', lines.length);
-Object.keys(t).forEach(c => console.log(' ', c, 'lines', t[c].lines, '| 2026 Budget', Math.round(t[c].b2026), '| Jan-Apr B', Math.round(t[c].jaB), 'A', Math.round(t[c].jaA)));
+(async () => {
+  for (const f of files) {
+    if (!fs.existsSync(f)) { console.error('Not found:', f); continue; }
+    const name = path.basename(f).replace(/^[0-9a-f]{8}-/, '');
+    const { items, sheets } = core.parseWithXLSX(XLSX, fs.readFileSync(f), 'buffer', name);
+    const d = await importRows(items, name, { id: null, username: 'script' }, dryRun);
+    console.log(`${name} · sheet ${sheets.join(', ')}${dryRun ? ' · DRY RUN' : ''}`);
+    d.plan.forEach(p => console.log(`  ${p.country} ${p.year} [${p.kind}] ${p.action}${p.reason ? ' (' + p.reason + ')' : ''}: ` +
+      `${p.lines} lines · budget $${Math.round(p.budget).toLocaleString('en-US')} · A+F $${Math.round(p.actual).toLocaleString('en-US')}`));
+  }
+  process.exit(0);
+})().catch(e => { console.error(e); process.exit(1); });

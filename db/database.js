@@ -161,6 +161,7 @@ async function setup() {
   await applyPtSerialFill();
   await applyTlTabletFill();
   await seedBudget();
+  await migrateBudgetItems();
   await seedGlMap();
 }
 
@@ -216,6 +217,33 @@ async function seedBudget() {
   }
   await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `inserted=${n}`]);
   console.log(`[seed] budget_line: ${n} rows (v3)`);
+}
+
+// One-time copy of the legacy 2026 budget_line rows (budget 2026.xlsx, actual
+// Jan–Apr) into budget_item, so the existing data shows on the new multi-year
+// page until the B-F report for that country is imported.
+async function migrateBudgetItems() {
+  const META_KEY = 'budget_item_v1';
+  if (await backend.get('SELECT value FROM app_meta WHERE key = ?', [META_KEY])) return;
+  const have = await backend.get('SELECT COUNT(*) AS n FROM budget_item');
+  let n = 0;
+  if (!(have && Number(have.n))) {
+    const rows = await backend.all('SELECT * FROM budget_line');
+    const arr = (t) => { try { const a = JSON.parse(t || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
+    for (const r of rows) {
+      await backend.run(`INSERT INTO budget_item (country, year, kind, company, department, proj_group, proj_category,
+        program, project, sub_project, oc, gl_no, gl_name, proje_no, proje_name, pyp_ecc, pyp_ecc_name,
+        m_budget, m_actual, actual_months, source_file, imported_at)
+        VALUES (?, 2026, 'legacy', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 4, 'budget 2026.xlsx', ?)`,
+      [r.country, r.company || '', r.department || '', r.proj_group || '', r.proj_category || '', r.program || '',
+        r.project || '', r.sub_project || '', r.oc || '', r.gl_tr_no || '', r.gl_tr_name || '', r.proje_no || '',
+        r.proje_name || '', r.wbs || '', r.pyp_name || '', JSON.stringify(arr(r.m2026_budget)),
+        JSON.stringify(arr(r.m2026_af)), new Date().toISOString()]);
+      n++;
+    }
+  }
+  await backend.run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [META_KEY, `copied=${n}`]);
+  if (n) console.log(`[migrate] budget_item: copied ${n} legacy 2026 rows`);
 }
 
 // One-time fill from tl.xlsx (tl-fill-seed.json). Each row is a Tablet asset.
@@ -650,6 +678,48 @@ async function initSchema() {
       m2026_af         TEXT    DEFAULT '[]'          -- JSON[12] actual(Jan-Apr)+forecast
     );
     CREATE INDEX IF NOT EXISTS idx_budget_line_country ON budget_line(country);
+
+    -- Budget v2 (multi-year): one row per budget line per (country, year).
+    -- Sources: approved budget files (2027_BUDGET_… → "2027 Vietnam"), the
+    -- monthly B-F report (DT_…_B-F_RAPOR → "RAPOR_HEPSİ": budget + actual +
+    -- forecast + comments) and the legacy budget 2026.xlsx. Amounts in USD.
+    -- m_actual = actual for the first actual_months months, forecast after.
+    -- PYP: pyp_ecc = old ECC "PYP No" · pyp_s4 = new S/4HANA "PYP öğesi (Yeni Yapı)".
+    CREATE TABLE IF NOT EXISTS budget_item (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      country       TEXT    NOT NULL DEFAULT '',
+      year          INTEGER NOT NULL DEFAULT 0,
+      kind          TEXT    DEFAULT '',     -- approved | report | legacy
+      status        TEXT    DEFAULT '',     -- DURUM (e.g. FİİLİ_EK = unbudgeted actual)
+      company       TEXT    DEFAULT '',
+      department    TEXT    DEFAULT '',
+      owner         TEXT    DEFAULT '',
+      proj_group    TEXT    DEFAULT '',
+      proj_category TEXT    DEFAULT '',
+      program       TEXT    DEFAULT '',
+      project       TEXT    DEFAULT '',
+      sub_project   TEXT    DEFAULT '',
+      oc            TEXT    DEFAULT '',     -- OPEX / CAPEX
+      gl_no         TEXT    DEFAULT '',     -- Masraf Çeşidi / MÇ No (Turkish GL)
+      gl_name       TEXT    DEFAULT '',
+      cc_no         TEXT    DEFAULT '',     -- MY No (cost center)
+      cc_name       TEXT    DEFAULT '',
+      proje_no      TEXT    DEFAULT '',
+      proje_name    TEXT    DEFAULT '',
+      pyp_ecc       TEXT    DEFAULT '',
+      pyp_ecc_name  TEXT    DEFAULT '',
+      pyp_s4        TEXT    DEFAULT '',
+      pyp_s4_name   TEXT    DEFAULT '',
+      m_budget      TEXT    DEFAULT '[]',   -- JSON[12]
+      m_actual      TEXT    DEFAULT '[]',   -- JSON[12]
+      actual_months INTEGER NOT NULL DEFAULT 0,
+      comment       TEXT    DEFAULT '',     -- from the report (Açıklama)
+      note          TEXT    DEFAULT '',     -- IT team's own note (edited in the app)
+      source_file   TEXT    DEFAULT '',
+      imported_at   TEXT    DEFAULT '',
+      imported_by   TEXT    DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_budget_item_cy ON budget_item(country, year);
 
     -- Turkish GL (MÇ No) → Local GL mapping (from GL.xlsx).
     CREATE TABLE IF NOT EXISTS gl_map (
