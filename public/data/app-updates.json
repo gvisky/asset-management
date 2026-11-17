@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Server Inventory: check against the document · Nexus not grouped",
+    "items": [
+      "Groups now hold only models with more than 4 devices (C9200L ×22, 3560-CX ×10, APs); models with 1–4 devices (the 2 + 2 Nexus switches) show as normal rows.",
+      "🧮 Check vs document: for every model the quantity in the document's equipment list, the devices in its port tables and the Server Inventory records (active / stock) — ✓ matches, ✗ missing or ＋ more. Today every model matches (Palo Alto PA-440 is not in this project).",
+      "Records to check: no serial, the same serial twice, a serial different from the document (e.g. the voice routers FDO2443M07Q vs FDO24410HDF in the document), or a device that is not in the document's port tables (spares) — with 👁 and ✏️ Add info to fix it there. Also listed: devices of the document whose serial is not in Server Inventory.",
+      "Import fix: importing the document again (replace) keeps the devices that are still in it — rack places, map positions and Server Inventory links are no longer lost; devices are linked to Server Inventory by hostname too. The equipment list (section 2) is now imported."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Budget: combine PYP / GL / Category, year-over-year changes",
     "items": [
       "Budget lines: tick any PYP, GL or Category group (switch the grouping to mix them) — the Combined selection panel adds them up: CAPEX / OPEX / total, the 12 months and the lines. Untick or ✕ to remove; each line is counted once.",

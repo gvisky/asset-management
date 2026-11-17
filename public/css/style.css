@@ -1303,3 +1303,7 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .pl-pin:hover .pl-lbl { outline: 2px solid #fde047; }
 .dw-pins { font-size: 11.5px; color: #0e7490; font-weight: 600; }
 .rk.rk-hl > rect:first-of-type { stroke: #facc15; stroke-width: 6; }
+.ic-tbl { width: 100%; border-collapse: collapse; font-size: 13px; } .ic-tbl th, .ic-tbl td { padding: 7px 8px; border-bottom: 1px solid #eef2f7; text-align: left; vertical-align: top; }
+.ic-tbl th { background: #f8fafc; } .ic-row-bad td { background: #fff7ed; }
+.ic-ok { color: #15803d; font-weight: 600; } .ic-bad { color: #b91c1c; font-weight: 700; } .ic-warn { color: #b45309; font-weight: 700; }
+.ic-fam { font-weight: 700; margin: 12px 0 2px; color: #334155; } .ic-p { color: #b45309; } .ic-note { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 8px 10px; font-size: 13px; }

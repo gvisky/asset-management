@@ -38,6 +38,7 @@
     const doc = new DOMParser().parseFromString(xml, 'application/xml');
     const body = doc.getElementsByTagNameNS(W, 'body')[0];
     const devices = new Map(), ports = [], vlans = [];
+    const equipment = [];   // section 2: { part, desc, qty } of the devices bought (network list) / server groups (system list)
     const patches = [];   // 8.1 patch panels: { panel: 'MR01/PP01', port: 7, outlet: 'D07' }
     const ipInfo = [];   // { host, ip, name, gateway, service, serial, service_tag } from 7.1 IP MGMT / System (never user names / passwords)
     let section = '';
@@ -72,6 +73,19 @@
           const dst = col(r, /dest/).toUpperCase(), dport = (r[portCols[1]] || '').trim();
           ports.push({ device: host, port, peer_host: dst, peer_port: dst ? dport : '', patch: dst ? '' : dport, cable: col(r, /cable/),
             mode: col(r, /switchport/) || '', vlan: col(r, /vlan/), grp: col(r, /group|number/) });
+        }
+        continue;
+      }
+      // 2. Equipment list: group rows "1 | Backbone switch | | 1" with part rows "| N3K-C3548P-XL | Nexus 3548-XL … | 2".
+      if (/part number|description/i.test((rows[0] || []).join(' ')) && /qty/i.test((rows[0] || []).join(' ')) || rows.some(r => /^\d+$/.test((r[0] || '').trim()) && /Cung cấp|Provide/i.test(r[1] || ''))) {
+        let grp = null;
+        const qtyOf = (r) => { for (let i = r.length - 1; i >= 1; i--) { const v = (r[i] || '').trim(); if (/^\d+$/.test(v)) return Number(v); } return 0; };
+        for (const r of rows) {
+          const c0 = (r[0] || '').trim(), part = (r[1] || '').trim(), desc = (r[2] || '').trim();
+          if (/^\d+$/.test(c0)) { grp = { title: part, qty: qtyOf(r), lines: [] }; if (/Cung cấp|Provide|server|storage|hội tụ/i.test(part)) equipment.push(grp); continue; }
+          if (!grp || !part) continue;
+          if (/^(N3K-C|C9200L-|WS-C\d|ISR\d|AIR-CT\d+-(\d+-)?K9$|AIR-AP\d)/i.test(part) && !/ACC|KIT|NW-E|DNA|LIC|-SW-/i.test(part)) equipment.push({ part, desc, qty: qtyOf(r) });
+          else if (grp.lines && grp.lines.length < 6) grp.lines.push(`${part} ${desc}`);
         }
         continue;
       }
@@ -166,7 +180,8 @@
       if (x.model && !d.model && !/LEASE|LINE/i.test(x.model)) d.model = x.model;
       if (x.title && /LEASE LINE|FTTH/.test(x.title)) d.alias = d.alias || x.title;
     }
-    return { devices: [...devices.values()], ports, vlans, patches, counts: { patches: patches.length, devices: devices.size, ports: ports.length, links: ports.filter(p => p.peer_host).length, vlans: vlans.length } };
+    const equip = equipment.map(e => (e.lines ? { part: e.title, desc: e.lines.join(' | '), qty: e.qty } : e)).filter(e => e.qty);
+    return { devices: [...devices.values()], ports, vlans, patches, equipment: equip, counts: { patches: patches.length, devices: devices.size, ports: ports.length, links: ports.filter(p => p.peer_host).length, vlans: vlans.length } };
   }
   window.NetmapDoc = { read };
 })();

@@ -393,7 +393,7 @@ const NM = (() => {
     const site = prompt(`Found ${r.counts.devices} devices, ${r.counts.ports} ports (${r.counts.links} cabled to a device or user point) and ${r.counts.vlans} VLANs.\n\nSite name for this map:`, D.site || 'Vietnam factory');
     if (site == null) return;
     const replace = D.sites.some(s => s.site === site.trim()) ? confirm(`"${site}" already has a map. OK = replace it with the document, Cancel = add / update only.`) : true;
-    try { const x = await apiPost('/api/netmap/import', { site: site.trim(), devices: r.devices, ports: r.ports, vlans: r.vlans, patches: r.patches, replace });
+    try { const x = await apiPost('/api/netmap/import', { site: site.trim(), devices: r.devices, ports: r.ports, vlans: r.vlans, patches: r.patches, equipment: r.equipment, replace });
       showToast(`Imported ${x.devices} devices, ${x.ports} ports, ${x.vlans} VLANs, ${x.patches} patch-panel ports`); await load(x.site); autoPlace(true); renderTopo(); fit();
       if (D.can.edit) savePositions(D.devices);
     } catch (e) { showToast(errText(e, 'Import failed'), 'error'); }
