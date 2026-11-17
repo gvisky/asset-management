@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: floor plans with pins",
+    "items": [
+      "🖼 Drawings → click any picture (fiber layout, AP layouts of Production / Hygiene / Transformer / Office floors, topology, racks) to open it full screen with zoom.",
+      "📍 Edit pins (editors): click the picture to add a pin — 🗄 cabinet / rack, 📶 access point, 🔷 network device or 📝 note — drag to move, click to change or remove, then Save pins.",
+      "Click a cabinet pin to jump to that cabinet in the Racks tab; a device pin opens its ports. Each picture shows how many pins it has."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: topology views like the document",
     "items": [
       "Topology → choose the view: Layers (click a device to focus), Logical, Physical or System.",
