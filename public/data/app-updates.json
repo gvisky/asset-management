@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Budget import: older files can't overwrite newer data",
+    "items": [
+      "Import now skips a country/year when the loaded data has more actual months (e.g. a 2025 mid-year file with actuals to April over a report with actuals to August, or a budget-only draft over a year with actuals). The preview shows the reason.",
+      "Files with two comment columns for the same year (mid-year + yearly explanation, e.g. TECH_66 Budget files) keep both comments.",
+      "The 2025 TECH_66 Budget files can add 2024 full-year actuals; their 2025 / 2026 parts are skipped because newer data is loaded."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: the page stays still when you click a device",
     "items": [
       "Clicking a device on the map, in the list or in a rack no longer scrolls the page down to the device panel — the topology stays in view; scroll down yourself to see the ports."

@@ -83,8 +83,9 @@
       if (DIM[n] && dim[DIM[n]] === undefined) { dim[DIM[n]] = i; return; }
       if (n === '2025 a usd' || n === '2025 actual') { if (y2025total < 0) y2025total = i; return; }
       if (/aciklama|comment/.test(n)) {
+        if (/\ben$/.test(n)) return;                                  // our export's English copy
         const m = String(h).match(/(20\d\d)/);
-        if (m && comments[+m[1]] === undefined) comments[+m[1]] = i;
+        if (m) (comments[+m[1]] = comments[+m[1]] || []).push(i);   // several per year (mid-year + yearly) → joined
         return;
       }
       const m = n.match(/^([baf]) ([a-z]{3}) (\d\d)(?: (usd|try|eur|bpb))?$/);
@@ -146,7 +147,7 @@
         const budget = Y.b.map(c => r2(at(r, c)));
         const actual = Y.a.map((c, k) => r2(c >= 0 ? at(r, c) : at(r, Y.f[k])));
         const actual_months = Y.a.reduce((n, c, k) => (c >= 0 ? k + 1 : n), 0);
-        const comment = comments[y] !== undefined ? txt(at(r, comments[y])) : '';
+        const comment = (comments[y] || []).map(c => txt(at(r, c))).filter((v, k, a) => v && a.indexOf(v) === k).join(' · ');
         const hasNums = budget.some(v => v) || actual.some(v => v);
         if (!hasNums && !comment) continue;
         out.push(Object.assign({}, base, { year: y, kind, budget, actual, actual_months, comment }));
