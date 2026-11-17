@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: Racks and Drawings",
+    "items": [
+      "🗄 Racks tab: the server room (MR-01 … MR-04, 42 U) and the factory cabinets (IT-KABIN2 … HARICI-KABIN12, 12 U) drawn from where each device is ('MAIN RACK - 03 (U29)'), with patch panels (MR01/PP01–PP10), cable managers and PDUs, and 'x / 42 U used' per rack.",
+      "Click a device in a rack to see its ports; editors drag items to another U or rack, add patch panels / PDUs / UPS / blanks, or add racks. Admins: ⚙ Build racks / Place new devices.",
+      "🖼 Drawings tab: upload the document's pictures (racks, topology, AP / floor plans, fiber layout) — tick 'Show the document's rack drawing' to compare with the live racks."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Server Inventory ← implementation document",
     "items": [
       "Network map import now also reads the IP MGMT and System tables: every device gets its IP list (VxRail: iDRAC, vMotion, vSAN, ESXi; cluster VXR-MGMT, vCenter, PS), services (SSH, https 4444 …) and service tag — never user names or passwords.",

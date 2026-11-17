@@ -364,7 +364,9 @@ const NM = (() => {
   }
   function tab(v) {
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-    ['topo', 'vlan', 'log'].forEach(k => { $('nm-view-' + k).hidden = k !== v; });
+    ['topo', 'rack', 'draw', 'vlan', 'log'].forEach(k => { $('nm-view-' + k).hidden = k !== v; });
+    document.querySelector('.nm-legend').style.display = v === 'topo' ? '' : 'none'; $('nm-fit').style.display = $('nm-auto').style.display = v === 'topo' ? '' : 'none'; $('nm-focus').style.display = v === 'topo' ? '' : 'none';
+    if (v === 'rack' || v === 'draw') NMRacks.show(v);
     if (v === 'vlan') renderVlans();
     if (v === 'log' && !$('nm-view-log').innerHTML.trim()) showLog();
   }
@@ -407,7 +409,7 @@ const NM = (() => {
     load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
+  return { data: () => D, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };
 })();

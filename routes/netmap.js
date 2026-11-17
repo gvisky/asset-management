@@ -274,4 +274,141 @@ router.post('/inventory-sync', wrap(async (req, res) => {
   res.json({ ok: true, updated, added });
 }));
 
+// ── Racks ───────────────────────────────────────────────────────────────────────
+//   GET  /api/netmap/racks?site=          { racks, items }
+//   POST /api/netmap/racks/build          { site, replace }  racks + items from the devices' locations ("MAIN RACK - 03 (U29)", "IT-KABIN5")
+//   POST /api/netmap/rack · PUT/DELETE /api/netmap/rack/:id · POST /api/netmap/rack-item · PUT/DELETE /api/netmap/rack-item/:id
+const HEIGHT = (m) => (/R740|DD-?6300|DATA DOMAIN/i.test(m) ? 2 : 1);
+function parseLoc(loc) {
+  const L = String(loc || '').toUpperCase();
+  let m = L.match(/MAIN RACK\s*-?\s*0?(\d+)/);
+  const name = m ? `MR-0${m[1]}` : (L.match(/(?:IT[- ]?|HARICI[- ]?)KABIN\s*\d+/) || [''])[0].replace(/\s+/g, '-').replace('HARICI-', 'HARICI-');
+  const u = L.match(/\(\s*U?(\d+)(?:\s*-\s*U?(\d+))?\s*\)/);
+  return { rack: name, cabinet: !m && !!name, lo: u ? Math.min(Number(u[1]), Number(u[2] || u[1])) : null, hi: u ? Math.max(Number(u[1]), Number(u[2] || u[1])) : null };
+}
+router.get('/racks', wrap(async (req, res) => {
+  const site = str(req.query.site, 80);
+  const racks = await all('SELECT * FROM net_racks WHERE site = ? ORDER BY sort, name', [site]);
+  const items = racks.length ? await all(`SELECT i.* FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id WHERE r.site = ? ORDER BY i.rack_id, i.u DESC`, [site]) : [];
+  res.json({ racks, items });
+}));
+router.post('/racks/build', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  const site = str(req.body.site, 80);
+  if (req.body.replace) await batch([{ sql: 'DELETE FROM net_rack_items WHERE rack_id IN (SELECT id FROM net_racks WHERE site = ?)', args: [site] }, { sql: 'DELETE FROM net_racks WHERE site = ?', args: [site] }]);
+  const devs = await all('SELECT id, hostname, model, location, role FROM net_devices WHERE site = ?', [site]);
+  const racks = new Map((await all('SELECT * FROM net_racks WHERE site = ?', [site])).map(r => [r.name, r]));
+  const ensure = async (name, cabinet) => {
+    if (racks.has(name)) return racks.get(name);
+    const n = cabinet ? Number((name.match(/\d+/) || [0])[0]) + 100 : Number((name.match(/\d+/) || [0])[0]);
+    await run('INSERT OR IGNORE INTO net_racks (site, name, kind, units, sort, area) VALUES (?, ?, ?, ?, ?, ?)', [site, name, cabinet ? 'cabinet' : 'rack', cabinet ? 12 : 42, n, cabinet ? 'Factory' : 'Server room']);
+    const r = await get('SELECT * FROM net_racks WHERE site = ? AND name = ?', [site, name]); racks.set(name, r); return r;
+  };
+  for (const n of ['MR-01', 'MR-02', 'MR-03', 'MR-04']) await ensure(n, false);   // the server room always has 4 racks (MR-02: patch panels)
+  const placed = new Set((await all('SELECT device_id FROM net_rack_items WHERE device_id IS NOT NULL')).map(r => r.device_id));
+  const stmts = [];
+  // ISP lease-line routers have no location in the port tables; the rack drawing shows them at the top of MR-03.
+  let ispU = 38;
+  for (const d of devs) {
+    if (placed.has(d.id)) continue;
+    let p = parseLoc(d.location);
+    if (!p.rack && /ISP/i.test(d.role)) { p = { rack: 'MR-03', cabinet: false, lo: ispU, hi: ispU }; ispU -= 3; }
+    if (!p.rack) continue;
+    const r = await ensure(p.rack, p.cabinet);
+    const h = p.lo && p.hi > p.lo ? p.hi - p.lo + 1 : HEIGHT(d.model);
+    const u = p.lo || (p.cabinet ? 8 : null);
+    if (!u) continue;
+    stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, device_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, ?, ?, 1)', args: [r.id, d.id, 'device', d.hostname, u, h] });
+  }
+  // Cabinets as in the drawing: patch panels + cable managers on top, the switch, the PDU at the bottom.
+  for (const r of racks.values()) {
+    if (r.kind !== 'cabinet') continue;
+    if ((await get('SELECT COUNT(*) AS n FROM net_rack_items WHERE rack_id = ? AND kind <> ?', [r.id, 'device'])).n) continue;
+    for (const [kind, label, u] of [['patch', 'Patch panel 24', 12], ['cable', 'Cable manager', 11], ['patch', 'Patch panel 24', 10], ['cable', 'Cable manager', 9], ['pdu', 'PDU', 1]])
+      stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, 1, 1)', args: [r.id, kind, label, u] });
+  }
+  // MR-01: data patch panels PP01–PP05 above the access switches; MR-02: voice patch panels PP06–PP10.
+  const mr1 = racks.get('MR-01'), mr2 = racks.get('MR-02');
+  if (mr1 && !(await get("SELECT COUNT(*) AS n FROM net_rack_items WHERE rack_id = ? AND kind = 'patch'", [mr1.id])).n) {
+    const sw = (await all("SELECT u FROM net_rack_items WHERE rack_id = ? AND kind = 'device' ORDER BY u DESC", [mr1.id])).map(x => x.u);
+    const tops = sw.length ? sw : [38, 32, 26, 20, 14];
+    tops.slice(0, 5).forEach((u, i) => { stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, 2, 1)', args: [mr1.id, 'patch', `MR01/PP0${i + 1} (D)`, u + 1] });
+      stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, 1, 1)', args: [mr1.id, 'cable', 'Cable manager', u - 1] }); });
+  }
+  if (mr2 && !(await get("SELECT COUNT(*) AS n FROM net_rack_items WHERE rack_id = ?", [mr2.id])).n) {
+    [6, 7, 8, 9, 10].forEach((n, i) => stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, 2, 1)', args: [mr2.id, 'patch', `MR01/PP${String(n).padStart(2, '0')} (T)`, 40 - i * 3] }));
+  }
+  await batch(stmts);
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": racks built from device locations (${stmts.length} items)`);
+  res.json({ ok: true, items: stmts.length });
+}));
+router.post('/rack', wrap(async (req, res) => {
+  if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
+  const site = str(req.body.site, 80), name = str(req.body.name, 40); if (!name) return res.status(400).json({ error: 'Name is required' });
+  await run('INSERT INTO net_racks (site, name, kind, units, sort, area) VALUES (?, ?, ?, ?, ?, ?)', [site, name, req.body.kind === 'cabinet' ? 'cabinet' : 'rack', Math.min(52, Math.max(4, Number(req.body.units) || 42)), Number(req.body.sort) || 50, str(req.body.area, 60)]);
+  res.json(await get('SELECT * FROM net_racks WHERE site = ? AND name = ?', [site, name]));
+}));
+router.put('/rack/:id', wrap(async (req, res) => {
+  if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
+  await run('UPDATE net_racks SET name = ?, units = ?, area = ?, notes = ? WHERE id = ?', [str(req.body.name, 40), Math.min(52, Math.max(4, Number(req.body.units) || 42)), str(req.body.area, 60), str(req.body.notes, 300), Number(req.params.id)]);
+  res.json({ ok: true });
+}));
+router.delete('/rack/:id', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  await batch([{ sql: 'DELETE FROM net_rack_items WHERE rack_id = ?', args: [Number(req.params.id)] }, { sql: 'DELETE FROM net_racks WHERE id = ?', args: [Number(req.params.id)] }]);
+  res.json({ ok: true });
+}));
+const KINDS = ['device', 'patch', 'cable', 'pdu', 'blank', 'shelf', 'ups', 'other'];
+router.post('/rack-item', wrap(async (req, res) => {
+  if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
+  const b = req.body;
+  await run('INSERT INTO net_rack_items (rack_id, device_id, kind, label, u, height) VALUES (?, ?, ?, ?, ?, ?)',
+    [Number(b.rack_id), b.device_id ? Number(b.device_id) : null, KINDS.includes(b.kind) ? b.kind : 'other', str(b.label, 60), Math.max(1, Number(b.u) || 1), Math.min(10, Math.max(1, Number(b.height) || 1))]);
+  res.json({ ok: true });
+}));
+router.put('/rack-item/:id', wrap(async (req, res) => {
+  if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
+  const it = await get('SELECT * FROM net_rack_items WHERE id = ?', [Number(req.params.id)]); if (!it) return res.status(404).json({ error: 'Not found' });
+  const b = req.body;
+  await run('UPDATE net_rack_items SET rack_id = ?, u = ?, height = ?, label = ?, kind = ?, auto = 0 WHERE id = ?',
+    [Number(b.rack_id || it.rack_id), Math.max(1, Number(b.u || it.u)), Math.min(10, Math.max(1, Number(b.height || it.height))), b.label != null ? str(b.label, 60) : it.label, KINDS.includes(b.kind) ? b.kind : it.kind, it.id]);
+  res.json({ ok: true });
+}));
+router.delete('/rack-item/:id', wrap(async (req, res) => {
+  if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
+  await run('DELETE FROM net_rack_items WHERE id = ?', [Number(req.params.id)]); res.json({ ok: true });
+}));
+
+// ── Drawings (pictures of the document: racks, topology, floor plans) ─────────
+router.get('/drawings', wrap(async (req, res) => {
+  res.json(await all('SELECT id, site, name, category, mime, size, pins, uploaded_by, uploaded_at FROM net_drawings WHERE site = ? ORDER BY category, name', [str(req.query.site, 80)]));
+}));
+router.get('/drawing/:id', wrap(async (req, res) => {
+  const d = await get('SELECT mime, data_b64 FROM net_drawings WHERE id = ?', [Number(req.params.id)]);
+  if (!d) return res.status(404).end();
+  res.setHeader('Content-Type', d.mime || 'image/png'); res.setHeader('Cache-Control', 'private, max-age=600');
+  res.send(Buffer.from(d.data_b64 || '', 'base64'));
+}));
+router.post('/drawings', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  const mime = str(req.body.mime, 40);
+  if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(mime)) return res.status(400).json({ error: 'PNG, JPG, SVG or WebP only' });
+  const data = String(req.body.data_b64 || ''); if (data.length > 20 * 1024 * 1024) return res.status(413).json({ error: 'Picture too large (max ≈15 MB)' });
+  const site = str(req.body.site, 80), name = str(req.body.name, 100) || 'Drawing';
+  await run('INSERT INTO net_drawings (site, name, category, mime, size, data_b64, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)', [site, name, str(req.body.category, 40), mime, Math.round(data.length * 0.75), data, req.user.username]);
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": drawing "${name}" uploaded`);
+  res.json({ ok: true });
+}));
+router.put('/drawing/:id', wrap(async (req, res) => {
+  if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
+  const b = req.body;
+  if ('pins' in b) await run('UPDATE net_drawings SET pins = ? WHERE id = ?', [JSON.stringify((Array.isArray(b.pins) ? b.pins : []).slice(0, 500).map(p => ({ x: Number(p.x) || 0, y: Number(p.y) || 0, label: str(p.label, 60), kind: str(p.kind, 20), ref: str(p.ref, 80) }))), Number(req.params.id)]);
+  if ('name' in b) await run('UPDATE net_drawings SET name = ?, category = ? WHERE id = ?', [str(b.name, 100), str(b.category, 40), Number(req.params.id)]);
+  res.json({ ok: true });
+}));
+router.delete('/drawing/:id', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  await run('DELETE FROM net_drawings WHERE id = ?', [Number(req.params.id)]); res.json({ ok: true });
+}));
+
 module.exports = router;
