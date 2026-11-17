@@ -1189,6 +1189,14 @@ async function migrate() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT DEFAULT '', device TEXT DEFAULT '', port TEXT DEFAULT '',
       before TEXT DEFAULT '', after TEXT DEFAULT '', by_user TEXT DEFAULT '', at TEXT DEFAULT (datetime('now')));`);
 
+  // Network map ↔ Server Inventory: IPs per function (iDRAC, vMotion, ESXi …), services, service tag, link.
+  const ndcols = (await backend.all('PRAGMA table_info(net_devices)')).map(c => c.name);
+  for (const [col, type] of [['ips', "TEXT DEFAULT ''"], ['services', "TEXT DEFAULT ''"], ['service_tag', "TEXT DEFAULT ''"], ['server_id', 'INTEGER DEFAULT NULL']]) {
+    if (!ndcols.includes(col)) await backend.run(`ALTER TABLE net_devices ADD COLUMN ${col} ${type}`);
+  }
+  const svcols = (await backend.all('PRAGMA table_info(servers)')).map(c => c.name);
+  if (!svcols.includes('net_info')) await backend.run("ALTER TABLE servers ADD COLUMN net_info TEXT DEFAULT ''");
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");

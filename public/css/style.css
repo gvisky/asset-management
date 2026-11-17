@@ -1250,3 +1250,8 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .nm-focus { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
 .nm-zone { font: 600 13px system-ui, sans-serif; fill: #94a3b8; text-anchor: middle; letter-spacing: .03em; }
 .nm-node.far { opacity: .6; }
+.nm-ips { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 12.5px; }
+.nm-ips i { font-style: normal; color: #64748b; margin-right: 2px; }
+.ns-tbl { width: 100%; border-collapse: collapse; font-size: 13px; } .ns-tbl th, .ns-tbl td { padding: 7px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top; text-align: left; }
+.ns-tbl tr.ns-add td { background: #f0fdf4; }
+.ns-warn { color: #b45309; font-size: 12px; margin-top: 4px; max-width: 280px; }

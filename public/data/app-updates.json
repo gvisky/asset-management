@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Server Inventory ← implementation document",
+    "items": [
+      "Network map import now also reads the IP MGMT and System tables: every device gets its IP list (VxRail: iDRAC, vMotion, vSAN, ESXi; cluster VXR-MGMT, vCenter, PS), services (SSH, https 4444 …) and service tag — never user names or passwords.",
+      "Server Inventory → 🔄 Update from network map (admins): a preview that fills hostname, management IP, rack location (MAIN RACK - 03 (U29)), role / name and the IP list into each record, matched by serial / service tag.",
+      "Devices whose serial in the document differs from the record (or has none) are matched by model and shown with ⚠ and not ticked — pick the right record in the list. Devices missing from Server Inventory (the VNPT and Viettel lease-line routers) can be added.",
+      "🗺 next to a hostname opens the device on the network map; the network map shows its IP list and a link to the Server Inventory record."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: click a device to see only what is cabled to it",
     "items": [
       "Clicking a device now shows only that device and the devices cabled to it: ▲ in front (towards firewall / core) above, ▼ behind (towards access / servers) below, same layer left and right.",
