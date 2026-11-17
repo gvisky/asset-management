@@ -87,6 +87,7 @@ router.get('/', wrap(async (req, res) => {
   if (q) { where.push('(v.hostname LIKE ? OR v.ip LIKE ? OR v.os LIKE ? OR v.usage LIKE ? OR v.description LIKE ? OR v.farm LIKE ?)'); args.push(...Array(6).fill(`%${q}%`)); }
   if (req.query.kind) { where.push('v.kind = ?'); args.push(str(req.query.kind, 20)); }
   if (req.query.it_ot) { where.push('v.it_ot = ?'); args.push(str(req.query.it_ot, 10)); }
+  if (req.query.status) { where.push("COALESCE(NULLIF(v.status, ''), 'Active') = ?"); args.push(str(req.query.status, 30)); }
   const rows = await all(`SELECT v.*, s.hostname AS server_hostname, s.brand_model AS server_model FROM virtual_servers v LEFT JOIN servers s ON s.id = v.server_id AND s.deleted_at IS NULL
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY v.kind DESC, v.hostname`, args);
   // Last backup job per server, the last image (whole VM) backup, and failed jobs in the 7 days before the newest report.
