@@ -11,6 +11,17 @@
     ]
   },
   {
+    "date": "2026-11-17",
+    "title": "Network map · Server Inventory groups · device specs",
+    "items": [
+      "New page Network map (menu, after Server Inventory): the site's topology like a Cisco lab — firewalls, routers, core / distribution / access switches, WLC, servers and storage in layers; orange = fiber / SFP, blue = copper, dashed = port-channel. Drag devices, zoom with the wheel, hover a link to see its ports.",
+      "Click a device: its front panel (green = to another network device, cyan = to users / patch panel, grey = free) and the full port list. Click any port to change what it connects to (device + port, cable, access / trunk, VLAN, port-channel, patch panel, note) — the other device's port is updated too. ⇄ Move swaps a cable to another port.",
+      "⬆ Import implementation doc (admins): the .docx is read in your browser — devices, switch-port assignments and the VLAN – IP table come in (the Vietnam factory document: 41 devices, 1,161 ports, 84 links, 23 VLANs). VLANs tab, Port changes history (who / when / before → after), ⬇ Export to Excel (CSV).",
+      "Server Inventory: categories with more than 4 devices (Access Point, Switch, Outdoor AP) are one line each — models and counts, click to open.",
+      "(i) next to every model: a popup with a drawing of the device and its main specifications (ports, throughput, PoE, capacity …) researched from vendor datasheets."
+    ]
+  },
+  {
     "date": "2026-11-13",
     "title": "My devices: Active devices only",
     "items": [

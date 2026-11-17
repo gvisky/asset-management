@@ -1220,6 +1220,45 @@ async function migrate() {
   const clcols = (await backend.all('PRAGMA table_info(confirm_links)')).map(c => c.name);
   if (!clcols.includes('campaign_id')) await backend.run('ALTER TABLE confirm_links ADD COLUMN campaign_id INTEGER DEFAULT NULL');
 
+  // Network map (routes/netmap.js): devices of a site, every port with what it connects to, VLANs, change log.
+  await backend.script(`CREATE TABLE IF NOT EXISTS net_devices (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      site      TEXT NOT NULL DEFAULT '',
+      hostname  TEXT NOT NULL,
+      alias     TEXT DEFAULT '',
+      role      TEXT DEFAULT '',
+      model     TEXT DEFAULT '',
+      serial    TEXT DEFAULT '',
+      mgmt_ip   TEXT DEFAULT '',
+      location  TEXT DEFAULT '',
+      notes     TEXT DEFAULT '',
+      x         REAL DEFAULT NULL,
+      y         REAL DEFAULT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(site, hostname));
+    CREATE TABLE IF NOT EXISTS net_ports (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      device_id INTEGER NOT NULL,
+      port      TEXT NOT NULL,
+      sort      INTEGER DEFAULT 0,
+      peer_host TEXT DEFAULT '',
+      peer_port TEXT DEFAULT '',
+      cable     TEXT DEFAULT '',
+      mode      TEXT DEFAULT '',
+      vlan      TEXT DEFAULT '',
+      grp       TEXT DEFAULT '',
+      patch     TEXT DEFAULT '',
+      note      TEXT DEFAULT '',
+      updated_at TEXT DEFAULT (datetime('now')),
+      updated_by TEXT DEFAULT '',
+      UNIQUE(device_id, port));
+    CREATE TABLE IF NOT EXISTS net_vlans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT NOT NULL DEFAULT '', vlan TEXT NOT NULL, name TEXT DEFAULT '',
+      network TEXT DEFAULT '', gateway TEXT DEFAULT '', UNIQUE(site, vlan));
+    CREATE TABLE IF NOT EXISTS net_port_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT DEFAULT '', device TEXT DEFAULT '', port TEXT DEFAULT '',
+      before TEXT DEFAULT '', after TEXT DEFAULT '', by_user TEXT DEFAULT '', at TEXT DEFAULT (datetime('now')));`);
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");
