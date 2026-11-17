@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Budget: group by several fields, year-over-year item details",
+    "items": [
+      "Budget lines: Group by is now on/off buttons — switch on 1 or more of PYP, Category and GL; lines are grouped by them in the order you click (e.g. ① PYP ② GL = each PYP split by GL) with subtotals at every level. No grouping = flat list.",
+      "The tick-box Combined selection is removed (replaced by the multi-level grouping).",
+      "Year over year: click a row ▸ to see the items behind it (program › project › sub-project, with PYP), each with its yearly amounts and ± change, biggest change first."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Server Inventory: check against the document · Nexus not grouped",
     "items": [
       "Groups now hold only models with more than 4 devices (C9200L ×22, 3560-CX ×10, APs); models with 1–4 devices (the 2 + 2 Nexus switches) show as normal rows.",

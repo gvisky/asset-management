@@ -25,8 +25,10 @@ const KIND_LABEL = {
 const OCS = ['CAPEX', 'OPEX'];
 
 let DATA = { items: [], glMap: {}, meta: { years: [], sources: [] } };
-const st = Object.assign({ sel: [], yoyDiff: false, year: 0, country: '', period: 'fy', pyp: 's4', oc: '', q: '', group: 'pyp', cols: 'sum', ek: true, hideZero: false },
+const st = Object.assign({ groups: ['pyp'], yoyDiff: false, yoyOpen: [], year: 0, country: '', period: 'fy', pyp: 's4', oc: '', q: '', group: 'pyp', cols: 'sum', ek: true, hideZero: false },
   (() => { try { return JSON.parse(localStorage.getItem('budget.v2') || '{}'); } catch (e) { return {}; } })());
+if (!Array.isArray(st.groups)) st.groups = st.group && st.group !== 'none' ? [st.group] : [];
+delete st.group; delete st.sel;
 const save = () => { try { localStorage.setItem('budget.v2', JSON.stringify(st)); } catch (e) {} };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -112,7 +114,16 @@ function buildToolbar() {
     st.country, v => { st.country = v; renderAll(); });
   seg('seg-pyp', null, st.pyp, v => { st.pyp = v; renderAll(); });
   seg('seg-oc', null, st.oc, v => { st.oc = v; renderAll(); });
-  seg('seg-group', null, st.group, v => { st.group = v; renderAll(); });
+  // Grouping: toggle buttons, several at once (nested in the order switched on).
+  const gEl = document.getElementById('seg-group');
+  gEl.innerHTML = Object.keys(GROUP_DIMS).map(d => { const i = st.groups.indexOf(d); return `<button data-v="${d}" class="${i >= 0 ? 'on' : ''}" title="Click to ${i >= 0 ? 'remove' : 'add'} this grouping">${i >= 0 ? `<span class="gnum">${i + 1}</span>` : '+ '}${GROUP_DIMS[d]}</button>`; }).join('')
+    + `<button data-v="" class="${st.groups.length ? '' : 'on'}">No grouping</button>`;
+  gEl.querySelectorAll('button').forEach(btn => btn.onclick = () => {
+    const d = btn.dataset.v;
+    if (!d) st.groups = [];
+    else st.groups = st.groups.includes(d) ? st.groups.filter(x => x !== d) : st.groups.concat(d);
+    renderAll();
+  });
   seg('seg-cols', null, st.cols, v => { st.cols = v; renderAll(); });
   const am = yearActualMonths();
   const opts = [['fy', `Full year ${st.year}`]];
@@ -278,7 +289,8 @@ function renderYoy() {
     }
   });
   h += (prev ? `<th class="num">${last} B vs ${prev} ${yHasA[prev] ? 'A+F' : 'B'}</th>` : '') + '</tr></thead><tbody>';
-  const line = (label, oc, list, strong) => {
+  const ncols = 2 + years.reduce((n, y, i) => n + 1 + (diff && i > 0 ? 1 : 0) + (yHasA[y] ? 1 + (diff && i > 0 && yHasA[years[i - 1]] ? 1 : 0) : 0), 0) + (prev ? 1 : 0);
+  const cellsFor = (list) => {
     const per = {}; years.forEach(y => { per[y] = fy(list.filter(i => i.year === y)); });
     let cells = '';
     years.forEach((y, i) => {
@@ -290,24 +302,55 @@ function renderYoy() {
         if (diff && i > 0 && yHasA[years[i - 1]]) cells += dcell(m.AF, p.AF);
       }
     });
-    let d = '';
-    if (prev) d = dcell(per[last].B, yHasA[prev] ? per[prev].AF : per[prev].B, 'last');
-    return `<tr${strong ? ' style="font-weight:700;border-top:1px solid #cbd5e1"' : ''}><td>${label}</td><td>${oc ? ocTag(oc) : 'Total'}</td>${cells}${d}</tr>`;
+    const lastD = prev ? per[last].B - (yHasA[prev] ? per[prev].AF : per[prev].B) : 0;
+    if (prev) cells += dcell(per[last].B, yHasA[prev] ? per[prev].AF : per[prev].B, 'last');
+    return { cells, lastD, any: years.some(y => per[y].B || per[y].AF) };
+  };
+  // Items behind a row: grouped by program › project › sub-project (+ Opex/Capex),
+  // biggest change (last column) first.
+  const details = (list) => {
+    const g = new Map();
+    list.forEach(it => {
+      const k = [it.oc, it.program, it.project, it.sub_project].join('|');
+      if (!g.has(k)) g.set(k, { it, items: [] });
+      g.get(k).items.push(it);
+    });
+    const rows = [...g.values()].map(x => ({ x, c: cellsFor(x.items) })).filter(r => r.c.any)
+      .sort((p, q) => Math.abs(q.c.lastD) - Math.abs(p.c.lastD));
+    if (!rows.length) return `<tr class="yoy-d"><td colspan="${ncols}" class="hint">No items.</td></tr>`;
+    return rows.map(({ x, c }) => {
+      const it = x.it, parts = [it.program, it.project, it.sub_project].filter((v, i, a) => v && a.indexOf(v) === i);
+      const en = parts.map(p => EN(p) || p).join(' › ');
+      const pyps = [...new Set(x.items.map(pypCode).filter(Boolean))];
+      return `<tr class="yoy-d"><td>${esc(parts.join(' › ') || it.proj_category)}${en !== parts.join(' › ') ? `<span class="en">${esc(en)}</span>` : ''}${pyps.length ? `<span class="en">PYP ${esc(pyps.slice(0, 2).join(', '))}${pyps.length > 2 ? ' …' : ''}</span>` : ''}</td><td>${ocTag(it.oc)}</td>${c.cells}</tr>`;
+    }).join('');
+  };
+  const open = new Set(st.yoyOpen || []);
+  const line = (label, oc, list, strong, id) => {
+    const c = cellsFor(list), isOpen = open.has(id);
+    return `<tr class="yoy-tg" data-id="${esc(id)}" title="Click to ${isOpen ? 'hide' : 'show'} the items behind this row"${strong ? ' style="font-weight:700;border-top:1px solid #cbd5e1"' : ''}><td><span class="car">${isOpen ? '▾' : '▸'}</span>${label}</td><td>${oc ? ocTag(oc) : 'Total'}</td>${c.cells}</tr>`
+      + (isOpen ? details(list) : '');
   };
   countries.forEach(c => {
     const ci = items.filter(i => i.country === c);
-    ocs.forEach(o => { h += line(`${COUNTRY_FLAG[c]} ${c}`, o, ci.filter(i => i.oc === o)); });
-    if (ocs.length > 1) h += line(`${COUNTRY_FLAG[c]} ${c}`, '', ci, true);
+    ocs.forEach(o => { h += line(`${COUNTRY_FLAG[c]} ${c}`, o, ci.filter(i => i.oc === o), false, c + '|' + o); });
+    if (ocs.length > 1) h += line(`${COUNTRY_FLAG[c]} ${c}`, '', ci, true, c + '|');
   });
-  if (countries.length > 1) h += line('<b>All countries</b>', '', items, true);
+  if (countries.length > 1) h += line('<b>All countries</b>', '', items, true, 'ALL|');
   document.getElementById('yoy-table').innerHTML = h + '</tbody>';
+  document.querySelectorAll('#yoy-table tr.yoy-tg').forEach(tr => tr.addEventListener('click', () => {
+    const id = tr.dataset.id, o = new Set(st.yoyOpen || []);
+    if (o.has(id)) o.delete(id); else o.add(id);
+    st.yoyOpen = [...o]; save(); renderYoy();
+  }));
 }
 
 // ── Lines (grouped by PYP / category / GL) ───────────────────────────────────
-function groupOf(it) {
-  if (st.group === 'pyp') { const c = pypCode(it); return { key: c || '~', text: c ? `${c} ${pypName(it)}` : '(no PYP)', label: c ? `<code>${esc(c)}</code> ${biInline(pypName(it))}` : '<span class="text-muted">(no PYP)</span>' }; }
-  if (st.group === 'cat') return { key: it.proj_group + '|' + it.proj_category, text: `${it.proj_group} › ${it.proj_category}`, label: `${biInline(it.proj_group)} › ${biInline(it.proj_category)}` };
-  if (st.group === 'gl') return { key: it.gl_no || '~', text: it.gl_no ? `${it.gl_no} ${EN(it.gl_name) || it.gl_name}` : '(no GL)', label: it.gl_no ? `<code>${esc(it.gl_no)}</code> ${biInline(it.gl_name)}${DATA.glMap[it.gl_no] ? ` <span class="hint">· Local GL <code>${esc(DATA.glMap[it.gl_no])}</code></span>` : ''}` : '<span class="text-muted">(no GL)</span>' };
+const GROUP_DIMS = { pyp: 'PYP', cat: 'Category', gl: 'GL' };
+function groupOf(it, dim) {
+  if (dim === 'pyp') { const c = pypCode(it); return { key: c || '~', label: c ? `<span class="hint">PYP</span> <code>${esc(c)}</code> ${biInline(pypName(it))}` : '<span class="text-muted">(no PYP)</span>' }; }
+  if (dim === 'cat') return { key: it.proj_group + '|' + it.proj_category, label: `<span class="hint">Category</span> ${biInline(it.proj_group)} › ${biInline(it.proj_category)}` };
+  if (dim === 'gl') return { key: it.gl_no || '~', label: it.gl_no ? `<span class="hint">GL</span> <code>${esc(it.gl_no)}</code> ${biInline(it.gl_name)}${DATA.glMap[it.gl_no] ? ` <span class="hint">· Local GL <code>${esc(DATA.glMap[it.gl_no])}</code></span>` : ''}` : '<span class="text-muted">(no GL)</span>' };
   return { key: '', label: '' };
 }
 function itemLabel(it) {
@@ -342,88 +385,44 @@ function renderLines(items, a, b) {
     html += `<h3 style="margin:${html ? '22px' : '0'} 0 8px;font-size:14px;display:flex;align-items:center;gap:8px">${ocTag(o)} ${o === 'CAPEX' ? 'Capital expenditure · Yatırım' : 'Operating expenditure · İşletme gideri'}`
       + `<span class="hint" style="font-weight:400">${L.length} lines · budget ${USD(tot.B)}${hasA ? ` · A+F ${USD(tot.AF)} · var. ${USD(tot.V)}` : ''} · ${esc(periodLabel(st.period))}</span></h3>`;
     if (!L.length) { html += '<p class="hint">No lines.</p>'; return; }
-    const groups = new Map();
-    L.forEach(it => { const g = groupOf(it); if (!groups.has(g.key)) groups.set(g.key, { label: g.label, text: g.text, items: [] }); groups.get(g.key).items.push(it); });
-    const keys = [...groups.keys()].sort((x, y) => (x === '~') - (y === '~') || x.localeCompare(y));
-    let rows = '';
-    keys.forEach(k => {
-      const g = groups.get(k);
-      if (st.group !== 'none') {
-        const gt = g.items.reduce((t, it) => addM(t, metrics(it, a, b)), zeroM());
+    const ncolLead = (showCountry ? 1 : 0) + 3;
+    const lineRow = (it, depth) => {
+      const m = metrics(it, a, b);
+      const pyp = pypCode(it), alt = otherPyp(it);
+      const pypCell = `<td>${pyp ? `<code>${esc(pyp)}</code>` : '<span class="text-muted">—</span>'}${alt && alt !== pyp ? `<span class="en" title="${st.pyp === 'ecc' ? 'new S4' : 'old ECC'}">${st.pyp === 'ecc' ? 'S4' : 'ECC'}: ${esc(alt)}</span>` : ''}</td>`;
+      const glCell = `<td>${it.gl_no ? `<code>${esc(it.gl_no)}</code>` : ''}${it.gl_name ? `<span class="en">${esc(EN(it.gl_name) || it.gl_name)}</span>` : ''}</td>`;
+      const cmt = [it.comment ? `${esc(it.comment)}${EN(it.comment) ? `<span class="en">${esc(EN(it.comment))}</span>` : ''}` : '', it.note ? `<div class="note">📝 ${esc(it.note)}</div>` : ''].join('');
+      const pad = `style="padding-left:${18 + depth * 18}px"`;
+      return `<tr class="line" data-id="${it.id}">${showCountry ? `<td ${pad}>${COUNTRY_FLAG[it.country]} ${esc(it.country)}</td><td>` : `<td ${pad}>`}${itemLabel(it)}</td>${glCell}${pypCell}`
+        + (months ? monthCells(it) + `<td class="num"><b>${USD(C.sum(it.budget))}</b>${hasA ? `<span class="en">${USD(C.sum(it.actual))}</span>` : ''}</td>` : valsSum(m) + `<td class="cmt">${cmt}</td>`) + '</tr>';
+    };
+    // Group recursively by the selected dimensions, in the order they were switched on.
+    const dims = (st.groups || []).filter(d => GROUP_DIMS[d]);
+    const renderLevel = (its, depth) => {
+      if (depth >= dims.length) return its.map(it => lineRow(it, depth)).join('');
+      const groups = new Map();
+      its.forEach(it => { const g = groupOf(it, dims[depth]); if (!groups.has(g.key)) groups.set(g.key, { label: g.label, items: [] }); groups.get(g.key).items.push(it); });
+      const keys = [...groups.keys()].sort((x, y) => (x === '~') - (y === '~') || x.localeCompare(y));
+      return keys.map(k => {
+        const g = groups.get(k);
+        const head = `<td colspan="${ncolLead}" style="padding-left:${8 + depth * 18}px">${depth ? '↳ ' : ''}${g.label} <span class="hint">· ${g.items.length} line${g.items.length > 1 ? 's' : ''}</span></td>`;
+        let row;
         if (months) {
           const mb = Array(12).fill(0); g.items.forEach(it => it.budget.forEach((v, i) => { mb[i] += v || 0; }));
-          rows += `<tr class="grp${isSel(k) ? ' sel' : ''}"><td colspan="${(showCountry ? 1 : 0) + 3}">${selBox(k, g.text)}${g.label} <span class="hint">· ${g.items.length}</span></td>${mb.map(v => `<td class="num">${Math.abs(v) > 0.5 ? USD(v) : ''}</td>`).join('')}<td class="num">${USD(mb.reduce((s, v) => s + v, 0))}</td></tr>`;
+          row = `<tr class="grp lvl${depth}">${head}${mb.map(v => `<td class="num">${Math.abs(v) > 0.5 ? USD(v) : ''}</td>`).join('')}<td class="num">${USD(mb.reduce((s2, v) => s2 + v, 0))}</td></tr>`;
         } else {
-          rows += `<tr class="grp${isSel(k) ? ' sel' : ''}"><td colspan="${(showCountry ? 1 : 0) + 3}">${selBox(k, g.text)}${g.label} <span class="hint">· ${g.items.length}</span></td>${valsSum(gt)}<td></td></tr>`;
+          row = `<tr class="grp lvl${depth}">${head}${valsSum(g.items.reduce((t, it) => addM(t, metrics(it, a, b)), zeroM()))}<td></td></tr>`;
         }
-      }
-      g.items.forEach(it => {
-        const m = metrics(it, a, b);
-        const pyp = pypCode(it), alt = otherPyp(it);
-        const pypCell = `<td>${pyp ? `<code>${esc(pyp)}</code>` : '<span class="text-muted">—</span>'}${alt && alt !== pyp ? `<span class="en" title="${st.pyp === 'ecc' ? 'new S4' : 'old ECC'}">${st.pyp === 'ecc' ? 'S4' : 'ECC'}: ${esc(alt)}</span>` : ''}</td>`;
-        const glCell = `<td>${it.gl_no ? `<code>${esc(it.gl_no)}</code>` : ''}${it.gl_name ? `<span class="en">${esc(EN(it.gl_name) || it.gl_name)}</span>` : ''}</td>`;
-        const cmt = [it.comment ? `${esc(it.comment)}${EN(it.comment) ? `<span class="en">${esc(EN(it.comment))}</span>` : ''}` : '', it.note ? `<div class="note">📝 ${esc(it.note)}</div>` : ''].join('');
-        rows += `<tr class="line" data-id="${it.id}">${showCountry ? `<td>${COUNTRY_FLAG[it.country]} ${esc(it.country)}</td>` : ''}<td>${itemLabel(it)}</td>${glCell}${pypCell}`
-          + (months ? monthCells(it) + `<td class="num"><b>${USD(C.sum(it.budget))}</b>${hasA ? `<span class="en">${USD(C.sum(it.actual))}</span>` : ''}</td>` : valsSum(m) + `<td class="cmt">${cmt}</td>`) + '</tr>';
-      });
-    });
+        return row + renderLevel(g.items, depth + 1);
+      }).join('');
+    };
+    const rows = renderLevel(L, 0);
     html += `<div class="bdg-scroll"><table class="lt"><thead>${months ? headMon : headSum}</thead><tbody>${rows}</tbody></table></div>`;
   });
   if (months && hasA) html = '<p class="hint" style="margin:0 0 8px">Each month: <b>budget</b> on top, actual (amber) or <i>forecast (italic)</i> below.</p>' + html;
   document.getElementById('lines-body').innerHTML = html || '<p class="hint">No lines match.</p>';
   document.querySelectorAll('#lines-body tr.line').forEach(tr => tr.addEventListener('click', () => openDetail(+tr.dataset.id)));
-  document.querySelectorAll('#lines-body .sel-cb').forEach(cb => cb.addEventListener('change', () => toggleSel(cb.dataset.k, cb.dataset.t, cb.checked)));
-  renderCombo(items, a, b);
 }
-// ── Combine: tick PYP / GL / Category groups → one combined total ───────────
-// st.sel = [{ t: 'pyp'|'gl'|'cat', pc: 's4'|'ecc' (PYP only), key, text }]
-const SEL_TYPE = { pyp: 'PYP', gl: 'GL', cat: 'Category' };
-const selId = (t, pc, key) => t + '|' + (t === 'pyp' ? pc : '') + '|' + key;
-const isSel = (key) => (st.sel || []).some(x => selId(x.t, x.pc, x.key) === selId(st.group, st.pyp, key));
-const selBox = (key, text) => `<input type="checkbox" class="sel-cb" title="Tick to add to the combined total" data-k="${esc(key)}" data-t="${esc(text)}"${isSel(key) ? ' checked' : ''} style="margin-right:7px;vertical-align:-2px;cursor:pointer">`;
-function toggleSel(key, text, on) {
-  st.sel = (st.sel || []).filter(x => selId(x.t, x.pc, x.key) !== selId(st.group, st.pyp, key));
-  if (on) st.sel.push({ t: st.group, pc: st.group === 'pyp' ? st.pyp : '', key, text });
-  renderAll();
-}
-function matchSel(it, x) {
-  if (x.t === 'pyp') return (((x.pc === 'ecc' ? it.pyp_ecc : it.pyp_s4) || '~') === x.key);
-  if (x.t === 'gl') return ((it.gl_no || '~') === x.key);
-  if (x.t === 'cat') return (it.proj_group + '|' + it.proj_category) === x.key;
-  return false;
-}
-function renderCombo(items, a, b) {
-  const el = document.getElementById('combo');
-  const sel = st.sel || [];
-  if (!sel.length) { el.innerHTML = '<p class="hint" style="margin:0 0 10px">☑ Tick groups (PYP, GL or Category — switch the grouping to mix them) to see them combined here.</p>'; return; }
-  const hasA = yearHasActuals();
-  const L = items.filter(it => sel.some(x => matchSel(it, x)));   // union: each line counted once
-  const by = { CAPEX: zeroM(), OPEX: zeroM(), T: zeroM() };
-  const mb = Array(12).fill(0), ma = Array(12).fill(0);
-  L.forEach(it => { const m = metrics(it, a, b); addM(by[it.oc], m); addM(by.T, m); for (let k = 0; k < 12; k++) { mb[k] += it.budget[k] || 0; ma[k] += it.actual[k] || 0; } });
-  const am = Math.max(0, ...L.map(i => i.actual_months));
-  const chips = sel.map((x, i) => `<span class="chip">${esc(SEL_TYPE[x.t])}${x.t === 'pyp' ? ` <span class="hint">${x.pc === 'ecc' ? 'ECC' : 'S4'}</span>` : ''}: <b>${esc(x.text)}</b> <span class="hint">· ${items.filter(it => matchSel(it, x)).length}</span><button data-i="${i}" title="Remove">✕</button></span>`).join('');
-  const row = (lbl, m) => `<tr${lbl === 'Total' ? ' style="font-weight:700;border-top:2px solid #cbd5e1"' : ''}><td>${lbl === 'Total' ? 'Total' : ocTag(lbl)}</td><td class="num">${USD(m.B)}</td>${hasA ? `<td class="num">${USD(m.A)}</td><td class="num">${USD(m.AF)}</td><td class="num ${cls(m.V)}">${USD(m.V)}</td><td>${usedBar(m)}</td>` : ''}</tr>`;
-  const ocs = OCS.filter(o => !st.oc || o === st.oc);
-  const lines = L.map(it => `<tr class="line" data-id="${it.id}"><td>${COUNTRY_FLAG[it.country]} ${esc(it.country)}</td><td>${ocTag(it.oc)}</td><td>${itemLabel(it)}</td><td>${it.gl_no ? `<code>${esc(it.gl_no)}</code>` : ''}</td><td>${pypCode(it) ? `<code>${esc(pypCode(it))}</code>` : ''}</td>`
-    + (() => { const m = metrics(it, a, b); return `<td class="num">${USD(m.B)}</td>${hasA ? `<td class="num">${USD(m.AF)}</td><td class="num ${cls(m.V)}">${USD(m.V)}</td>` : ''}`; })() + '</tr>').join('');
-  el.innerHTML = `<div class="combo">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><b>Combined selection · Birleşik seçim</b><span class="hint">${L.length} lines · ${esc(periodLabel(st.period))}</span>${chips}<button class="btn btn-ghost btn-sm" id="combo-clear">Clear all</button></div>
-    <div>
-      <div class="bdg-scroll" style="max-width:760px"><table><thead><tr><th></th><th class="num">Budget</th>${hasA ? '<th class="num">Actual</th><th class="num">A+F</th><th class="num">Var.</th><th>Used</th>' : ''}</tr></thead>
-        <tbody>${ocs.map(o => row(o, by[o])).join('')}${ocs.length > 1 ? row('Total', by.T) : ''}</tbody></table></div>
-      <div class="bdg-scroll" style="margin-top:10px"><table class="mgrid"><thead><tr><th></th>${MON.map((m, k) => `<th class="num ${hasA && k >= am ? 'fc' : ''}">${m}</th>`).join('')}</tr></thead><tbody>
-        <tr><td>Budget</td>${mb.map(v => `<td class="num">${Math.abs(v) > 0.5 ? USD(v) : '–'}</td>`).join('')}</tr>
-        ${hasA ? `<tr><td>Actual / Forecast</td>${ma.map((v, k) => `<td class="num ${k >= am ? 'fc' : ''}">${Math.abs(v) > 0.5 ? USD(v) : '–'}</td>`).join('')}</tr>` : ''}</tbody></table></div>
-    </div>
-    <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">Show the ${L.length} combined lines</summary>
-      <div class="bdg-scroll"><table class="lt"><thead><tr><th>Country</th><th>Type</th><th>Item</th><th>GL</th><th>PYP</th><th class="num">Budget</th>${hasA ? '<th class="num">A+F</th><th class="num">Var.</th>' : ''}</tr></thead><tbody>${lines}</tbody></table></div></details>
-  </div>`;
-  el.querySelectorAll('.chip button').forEach(btn => btn.addEventListener('click', () => { st.sel.splice(+btn.dataset.i, 1); renderAll(); }));
-  document.getElementById('combo-clear').onclick = () => { st.sel = []; renderAll(); };
-  el.querySelectorAll('tr.line').forEach(tr => tr.addEventListener('click', () => openDetail(+tr.dataset.id)));
-}
-
 function usedBar(m) {
   if (!m.B) return m.AF ? '<span class="tag-ek">no budget</span>' : '';
   const p = pct(m.AF, m.B), c = p > 100 ? '#dc2626' : p > 85 ? '#f59e0b' : '#16a34a';

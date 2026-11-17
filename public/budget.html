@@ -45,10 +45,12 @@
     /* OPEX / CAPEX tags */
     .flag { display: inline-block; vertical-align: -1px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.12); margin-right: 3px; }
     .bdg td.dlt, .bdg th.dlt { background: #f8fafc; font-size: 12px; }
-    .combo { border: 1px solid #bfdbfe; background: #f8fbff; border-radius: 10px; padding: 12px 14px; margin-bottom: 16px; }
-    .chip { display: inline-flex; align-items: center; gap: 4px; background: #fff; border: 1px solid #bfdbfe; border-radius: 999px; padding: 2px 4px 2px 10px; font-size: 12px; }
-    .chip button { border: 0; background: #e0ecff; color: #1e3a8a; border-radius: 999px; width: 18px; height: 18px; cursor: pointer; font-size: 10px; line-height: 18px; padding: 0; }
-    .lt tr.grp.sel td { background: #e8f0fe; }
+    .seg .gnum { display: inline-block; background: #fff; color: var(--brand); border-radius: 50%; width: 15px; height: 15px; font-size: 10px; line-height: 15px; text-align: center; margin-right: 5px; font-weight: 700; }
+    .lt tr.grp.lvl1 td { background: #fbfcfe; border-top: 1px dashed #e2e8f0; font-weight: 500; }
+    .lt tr.grp.lvl2 td { background: #fff; border-top: 1px dotted #e2e8f0; font-weight: 500; }
+    .yoy-tg { cursor: pointer; user-select: none; } .yoy-tg:hover td { background: #f1f5ff; }
+    .yoy-tg .car { display: inline-block; width: 14px; color: #64748b; }
+    tr.yoy-d td { font-size: 11.5px; background: #fcfcfd; } tr.yoy-d td:first-child { padding-left: 26px; min-width: 320px; }
     .oc { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: .02em; }
     .oc-OPEX { background: #e0f2fe; color: #075985; } .oc-CAPEX { background: #ede9fe; color: #5b21b6; }
     .tag-ek { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; white-space: nowrap; }
@@ -146,21 +148,20 @@
 
       <!-- Year comparison -->
       <div class="card">
-        <div class="card-header"><span class="card-title">Year over year <span class="en-inline">· Yıllara göre</span></span><span class="hint">Full-year USD · B = budget · A+F = actual + forecast · current filters (country, Opex/Capex, search) apply</span><button class="btn btn-ghost btn-sm" id="yoy-diff" style="margin-left:10px">(+) Changes vs last year</button></div>
+        <div class="card-header"><span class="card-title">Year over year <span class="en-inline">· Yıllara göre</span></span><span class="hint">Full-year USD · B = budget · A+F = actual + forecast · click a row ▸ to see the items behind the change</span><button class="btn btn-ghost btn-sm" id="yoy-diff" style="margin-left:10px">(+) Changes vs last year</button></div>
         <div class="card-body bdg-scroll"><table id="yoy-table"></table></div>
       </div>
 
       <!-- Lines -->
       <div class="card">
         <div class="card-header" style="flex-wrap:wrap;gap:10px">
-          <span class="card-title">Budget lines by PYP <span class="en-inline">· PYP bazında bütçe kalemleri</span></span>
-          <div class="seg" id="seg-group">
-            <button data-v="pyp">Group: PYP</button><button data-v="cat">Category</button><button data-v="gl">GL</button><button data-v="none">No grouping</button></div>
+          <span class="card-title">Budget lines <span class="en-inline">· Bütçe kalemleri</span></span>
+          <span class="hint">Group by (click 1 or more):</span><div class="seg" id="seg-group"></div>
           <div class="seg" id="seg-cols"><button data-v="sum">Summary</button><button data-v="month">Months</button></div>
           <label class="hint" style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" id="f-ek" checked> Unbudgeted actuals (FİİLİ_EK)</label>
           <label class="hint" style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" id="f-zero"> Hide lines with 0 in period</label>
         </div>
-        <div class="card-body"><div id="combo"></div><div id="lines-body"></div></div>
+        <div class="card-body" id="lines-body"></div>
       </div>
 
       <!-- Data & import -->
