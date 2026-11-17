@@ -83,9 +83,18 @@
       }
     }
     // The same device written two ways ("DD-6300" / "DD6300") → the one that has a table.
-    const key = (h) => h.replace(/[^A-Z0-9/]/g, '');
+    // …and "MR-01/DATA-ASW-01" for the table "MR-01/ASW-01".
+    const key = (h) => h.replace(/DATA-?/g, '').replace(/[^A-Z0-9/]/g, '');
     const byKey = new Map([...devices.keys()].map(h => [key(h), h]));
     for (const p of ports) if (p.peer_host && !devices.has(p.peer_host) && byKey.has(key(p.peer_host))) p.peer_host = byKey.get(key(p.peer_host));
+    // Far port spelled differently ("T1/1/1" for "T 1/1/1") → the device's own port name.
+    const pkey = (x) => String(x).replace(/\s+/g, '').toUpperCase();
+    const portNames = new Map();
+    for (const p of ports) { if (!portNames.has(p.device)) portNames.set(p.device, new Map()); portNames.get(p.device).set(pkey(p.port), p.port); }
+    for (const p of ports) if (p.peer_host && p.peer_port && portNames.has(p.peer_host)) { const n = portNames.get(p.peer_host).get(pkey(p.peer_port)); if (n) p.peer_port = n; }
+    // A link written on one side only → fill the other side's empty port.
+    const at = new Map(ports.map(p => [p.device + '|' + p.port, p]));
+    for (const p of ports) if (p.peer_host && p.peer_port) { const o = at.get(p.peer_host + '|' + p.peer_port); if (o && !o.peer_host) { o.peer_host = p.device; o.peer_port = p.port; o.cable = o.cable || p.cable; o.grp = o.grp || p.grp; } }
     // Far ends that have no table of their own (ISP routers, …) become devices too.
     for (const p of ports) if (p.peer_host && !devices.has(p.peer_host)) devices.set(p.peer_host, { hostname: p.peer_host, role: guessRole(p.peer_host), alias: '', model: '', serial: '', mgmt_ip: '', location: '' });
     // …with the ports other devices point at.
