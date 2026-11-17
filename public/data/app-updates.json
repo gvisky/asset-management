@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-11-17",
+    "title": "Budget Tracking redesigned: 2027 budgets, months, Opex/Capex, PYP",
+    "items": [
+      "2027 approved budgets for Vietnam, Thailand and Malaysia can be loaded; the monthly B-F report adds 2025 and 2026 budget, actual (Jan–Aug), forecast (Sep–Dec) and comments.",
+      "Pick year, country and period (full year, YTD, quarter or one month); KPIs, Opex/Capex by country, a monthly grid and year-over-year comparison follow the filters.",
+      "Opex and Capex are shown separately; lines are grouped by PYP — switch between the new S4 code and the old ECC code.",
+      "Turkish names and comments are shown with their English translation next to them.",
+      "Click a line for all details, the 12 months and to add your own IT note; import shows a preview before saving."
+    ]
+  },
+  {
     "date": "2026-11-13",
     "title": "My devices: Active devices only",
     "items": [

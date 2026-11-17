@@ -1,236 +1,516 @@
-/* Budget Tracking page (IT admin only). All filtering/aggregation is client-side
-   over the ~91 line items returned by /api/budget. Dependency-free SVG charts. */
+/* Budget Tracking page (IT admin only) — multi-year, per month, Opex/Capex
+   split, grouped by PYP (WBS). All filtering/aggregation is client-side over
+   /api/budget items (a few hundred lines). Parsing of corporate workbooks is
+   done here with the shared BudgetCore (public/js/budget-core.js).
 
-let ALL_ITEMS = [];
-let GL_MAP = {};         // Turkish GL (MÇ No) -> Local GL
-let searchTerm = '';     // free-text quick search
-const selections = {};   // field -> selected value ('' = all)
+   Item: { id, country, year, kind, oc, status, …hierarchy, gl_no, gl_name,
+           pyp_ecc(+_name) old ECC, pyp_s4(+_name) new S4,
+           budget[12], actual[12], actual_months, comment, note } */
 
-const FILTERS = [
-  { id: 'f-country', field: 'country', label: 'All 3 countries' },
-  { id: 'f-oc', field: 'oc', label: 'All (CapEx + OpEx)' },
-  { id: 'f-wbs', field: 'wbs', label: 'All WBS' },
-  { id: 'f-proj_group', field: 'proj_group', label: 'All' },
-  { id: 'f-proj_category', field: 'proj_category', label: 'All' },
-  { id: 'f-program', field: 'program', label: 'All' },
-  { id: 'f-project', field: 'project', label: 'All' },
-  { id: 'f-sub_project', field: 'sub_project', label: 'All' },
-  { id: 'f-pyp_name', field: 'pyp_name', label: 'All' },
-];
+const C = window.BudgetCore;
+const MON = C.MONTHS;
+const COUNTRY_FLAG = { Vietnam: '🇻🇳', Thailand: '🇹🇭', Malaysia: '🇲🇾' };
+const KIND_LABEL = {
+  approved: ['Approved budget', 'Onaylı bütçe'],
+  report: ['B-F report', 'Bütçe-Fiili raporu'],
+  legacy: ['budget 2026.xlsx (old)', 'eski dosya'],
+};
+const OCS = ['CAPEX', 'OPEX'];
 
-const USD = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('en-US');
-const USD2 = (n) => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const escB = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const varClass = (v) => v < 0 ? 'neg' : v > 0 ? 'pos' : '';
-const fmtVar = (v) => (v < 0 ? '−' : '') + USD(Math.abs(v));
-const pct = (a, b) => b ? (a / b * 100) : 0;
-const COLORS = { budget: '#3b82f6', actual: '#f59e0b', grid: '#e5e7eb', text: '#64748b' };
-const MONTH_LBL = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+let DATA = { items: [], glMap: {}, meta: { years: [], sources: [] } };
+const st = Object.assign({ year: 0, country: '', period: 'fy', pyp: 's4', oc: '', q: '', group: 'pyp', cols: 'sum', ek: true, hideZero: false },
+  (() => { try { return JSON.parse(localStorage.getItem('budget.v2') || '{}'); } catch (e) { return {}; } })());
+const save = () => { try { localStorage.setItem('budget.v2', JSON.stringify(st)); } catch (e) {} };
 
-// ── SVG charts ────────────────────────────────────────────────────────────────
-function legend(items) {
-  return '<div style="display:flex;gap:16px;margin-top:8px;font-size:12px;color:#475569">'
-    + items.map(([t, c]) => `<span style="display:inline-flex;align-items:center;gap:5px"><span style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></span>${t}</span>`).join('') + '</div>';
+// ── helpers ──────────────────────────────────────────────────────────────────
+const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const EN = (s) => C.tr(s);
+const bi = (s) => s ? esc(s) + (EN(s) ? `<span class="en">${esc(EN(s))}</span>` : '') : '<span class="text-muted">—</span>';
+const biInline = (s) => s ? esc(s) + (EN(s) ? ` <span class="en-inline">(${esc(EN(s))})</span>` : '') : '';
+const USD = (n) => { const v = Math.round(Number(n) || 0); return (v < 0 ? '−$' : '$') + Math.abs(v).toLocaleString('en-US'); };
+const USDk = (n) => { const v = Number(n) || 0, a = Math.abs(v); const s = a >= 1e6 ? (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (a / 1e3).toFixed(1) + 'K' : Math.round(a); return (v < 0 ? '−$' : '$') + s; };
+const cls = (v) => (v < -0.5 ? 'neg' : v > 0.5 ? 'pos' : '');
+const pct = (a, b) => (b ? Math.round(a / b * 100) : 0);
+const r2 = C.r2;
+// FİİLİ_EK: in a B-F report = actual booked with no budget line; in an approved
+// budget = a new budget line derived from last year's actuals ("Yeni Türetme").
+const isEK = (it) => /FIILI/i.test(C.fold(it.status)) && it.kind !== 'approved';
+const isDerived = (it) => /FIILI/i.test(C.fold(it.status)) && it.kind === 'approved';
+const pypCode = (it) => (st.pyp === 'ecc' ? it.pyp_ecc : it.pyp_s4) || '';
+const pypName = (it) => (st.pyp === 'ecc' ? it.pyp_ecc_name : it.pyp_s4_name) || '';
+const otherPyp = (it) => (st.pyp === 'ecc' ? it.pyp_s4 : it.pyp_ecc) || '';
+const ocTag = (oc) => `<span class="oc oc-${esc(oc)}">${esc(oc)}</span>`;
+
+// Months of the selected period → [from, to] inclusive.
+function periodRange(p) {
+  if (p === 'fy' || !p) return [0, 11];
+  if (p === 'ytd') return [0, Math.max(0, yearActualMonths() - 1)];
+  let m;
+  if ((m = p.match(/^q([1-4])$/))) return [(m[1] - 1) * 3, (m[1] - 1) * 3 + 2];
+  if ((m = p.match(/^m(\d+)$/))) return [+m[1], +m[1]];
+  return [0, 11];
 }
-function groupedBars(data, opts) {
-  opts = opts || {};
-  if (!data.length || data.every(d => !d.budget && !d.actual)) return '<p class="text-muted text-sm">No data.</p>';
-  const W = Math.max(360, data.length * (opts.groupGap || 90)), H = 240, padL = 60, padB = 50, padT = 14, padR = 10;
-  const max = Math.max(1, ...data.map(d => Math.max(d.budget, d.actual)));
-  const plotH = H - padB - padT, plotW = W - padL - padR, groupW = plotW / data.length;
-  const barW = Math.min(opts.barW || 30, groupW / 3);
-  const y = (v) => padT + plotH - (Math.max(0, v) / max) * plotH;
-  let ticks = '', bars = '', labels = '';
-  for (let i = 0; i <= 4; i++) { const val = max / 4 * i, yy = y(val); ticks += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="${COLORS.grid}"/><text x="${padL - 6}" y="${yy + 3}" text-anchor="end" font-size="9" fill="${COLORS.text}">${USD(val)}</text>`; }
-  data.forEach((d, i) => {
-    const cx = padL + groupW * i + groupW / 2;
-    bars += `<rect x="${cx - barW - 2}" y="${y(d.budget)}" width="${barW}" height="${padT + plotH - y(d.budget)}" fill="${COLORS.budget}"><title>Budget ${USD2(d.budget)}</title></rect>`;
-    bars += `<rect x="${cx + 2}" y="${y(d.actual)}" width="${barW}" height="${padT + plotH - y(d.actual)}" fill="${COLORS.actual}"><title>Actual ${USD2(d.actual)}</title></rect>`;
-    labels += `<text x="${cx}" y="${H - padB + 15}" text-anchor="middle" font-size="10.5" fill="#0f172a">${escB(d.label)}</text>`;
+function periodLabel(p) {
+  const [a, b] = periodRange(p);
+  if (p === 'fy') return `Full year ${st.year}`;
+  return a === b ? `${MON[a]} ${st.year}` : `${MON[a]}–${MON[b]} ${st.year}`;
+}
+
+// Metrics of one item over months [a..b].
+function metrics(it, a, b) {
+  let B = 0, A = 0, F = 0;
+  for (let k = a; k <= b; k++) {
+    B += it.budget[k] || 0;
+    if (k < it.actual_months) A += it.actual[k] || 0; else F += it.actual[k] || 0;
+  }
+  return { B, A, F, AF: A + F, V: B - (A + F) };
+}
+function addM(t, m) { t.B += m.B; t.A += m.A; t.F += m.F; t.AF += m.AF; t.V += m.V; return t; }
+const zeroM = () => ({ B: 0, A: 0, F: 0, AF: 0, V: 0 });
+
+// ── filtering ────────────────────────────────────────────────────────────────
+function matchesQuery(it, q) {
+  if (!q) return true;
+  const hay = [it.country, it.status, it.company, it.proj_group, it.proj_category, it.program, it.project, it.sub_project,
+    it.oc, it.gl_no, it.gl_name, DATA.glMap[it.gl_no] || '', it.cc_no, it.cc_name, it.proje_no, it.proje_name,
+    it.pyp_ecc, it.pyp_ecc_name, it.pyp_s4, it.pyp_s4_name, it.comment, it.note];
+  const s = hay.map(v => C.fold(v) + ' ' + C.fold(EN(v))).join(' ').toLowerCase();
+  return C.fold(q).toLowerCase().split(/\s+/).filter(Boolean).every(w => s.includes(w));
+}
+// Filter ignoring year (for YoY) or for the selected year.
+function baseFilter(it) {
+  return (!st.country || it.country === st.country) && (!st.oc || it.oc === st.oc) && (st.ek || !isEK(it)) && matchesQuery(it, st.q);
+}
+const yearItems = () => DATA.items.filter(it => it.year === st.year && baseFilter(it));
+function yearActualMonths() {
+  const list = DATA.items.filter(it => it.year === st.year && (!st.country || it.country === st.country));
+  return Math.max(0, ...list.map(i => i.actual_months));
+}
+const yearHasActuals = () => DATA.items.some(it => it.year === st.year && (!st.country || it.country === st.country) && it.actual.some(v => v));
+
+// ── toolbar ──────────────────────────────────────────────────────────────────
+function seg(id, options, current, onPick) {
+  const el = document.getElementById(id);
+  if (options) el.innerHTML = options.map(o => `<button data-v="${esc(o.v)}"${o.disabled ? ' disabled' : ''} title="${esc(o.title || '')}">${o.label}</button>`).join('');
+  el.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('on', b.dataset.v === String(current));
+    b.onclick = () => { if (!b.disabled) onPick(b.dataset.v); };
   });
-  return `<div class="bdg-scroll"><svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${ticks}${bars}${labels}</svg></div>` + legend([['Budget', COLORS.budget], ['Actual', COLORS.actual]]);
 }
+function buildToolbar() {
+  const years = DATA.meta.years || [];
+  seg('seg-year', years.map(y => ({ v: String(y), label: String(y) })), String(st.year), v => { st.year = +v; if (!validPeriod()) st.period = 'fy'; renderAll(); });
+  const have = (c) => DATA.items.some(i => i.year === st.year && i.country === c);
+  seg('seg-country', [{ v: '', label: 'All' }].concat(C.COUNTRIES.map(c => ({ v: c, label: `${COUNTRY_FLAG[c]} ${c}`, title: have(c) ? '' : `No ${st.year} data for ${c}` }))),
+    st.country, v => { st.country = v; renderAll(); });
+  seg('seg-pyp', null, st.pyp, v => { st.pyp = v; renderAll(); });
+  seg('seg-oc', null, st.oc, v => { st.oc = v; renderAll(); });
+  seg('seg-group', null, st.group, v => { st.group = v; renderAll(); });
+  seg('seg-cols', null, st.cols, v => { st.cols = v; renderAll(); });
+  const am = yearActualMonths();
+  const opts = [['fy', `Full year ${st.year}`]];
+  if (am > 0 && am < 12) opts.push(['ytd', `YTD actual (Jan–${MON[am - 1]})`]);
+  [1, 2, 3, 4].forEach(q => opts.push(['q' + q, `Q${q} (${MON[(q - 1) * 3]}–${MON[(q - 1) * 3 + 2]})`]));
+  MON.forEach((m, i) => opts.push(['m' + i, `${m} ${st.year}${am ? (i < am ? ' · actual' : ' · forecast') : ''}`]));
+  const sel = document.getElementById('f-period');
+  sel.innerHTML = opts.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  sel.value = st.period;
+  document.getElementById('f-ek').checked = st.ek;
+  document.getElementById('f-zero').checked = st.hideZero;
+}
+function validPeriod() { return st.period !== 'ytd' || (yearActualMonths() > 0 && yearActualMonths() < 12); }
 
-// ── Browser-side parser (mirrors lib/budget-parse.js) ─────────────────────────
-const B_MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
-const B_DIM = { 'sirket tanimi': 'company', 'mudurluk': 'department', 'proje grubu': 'proj_group', 'proje kategorisi': 'proj_category', 'program servis adi': 'program', 'proje servis adi': 'project', 'alt proje servis adi': 'sub_project', 'pyp tanim': 'pyp_name', 'o c': 'oc', 'mc no': 'gl_tr_no', 'mc tanimi': 'gl_tr_name', 'pyp no': 'wbs', 'proje no': 'proje_no', 'proje tanimi': 'proje_name' };
-function bNorm(s) {
-  return String(s == null ? '' : s).replace(/İ/g, 'I').replace(/ı/g, 'i').replace(/Ş/g, 'S').replace(/ş/g, 's').replace(/Ğ/g, 'G').replace(/ğ/g, 'g').replace(/Ü/g, 'U').replace(/ü/g, 'u').replace(/Ö/g, 'O').replace(/ö/g, 'o').replace(/Ç/g, 'C').replace(/ç/g, 'c').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-}
-function bCountryOf(c) { const v = String(c).toUpperCase(); if (v.includes('VIETNAM')) return 'Vietnam'; if (v.includes('THAILAND')) return 'Thailand'; if (v.includes('MALAYSIA')) return 'Malaysia'; return null; }
-const bNum = (v) => Math.round((Number(v) || 0) * 100) / 100;
-const bSum = (a) => Math.round(a.reduce((s, x) => s + (Number(x) || 0), 0) * 100) / 100;
-function bMapColumns(h) {
-  const dim = {}, m2025 = Array(12).fill(-1), m2026b = Array(12).fill(-1), m2026af = Array(12).fill(-1);
-  let y2025col = -1;
-  h.forEach((c, i) => {
-    const n = bNorm(c); if (B_DIM[n] && dim[B_DIM[n]] === undefined) dim[B_DIM[n]] = i;
-    if ((n === '2025 a usd' || n === '2025 actual') && y2025col < 0) y2025col = i;
-    let m;
-    if ((m = n.match(/^a ([a-z]{3}) 25/)) && B_MONTHS[m[1]] !== undefined) m2025[B_MONTHS[m[1]]] = i;
-    else if ((m = n.match(/^b ([a-z]{3}) 26/)) && B_MONTHS[m[1]] !== undefined) m2026b[B_MONTHS[m[1]]] = i;
-    else if ((m = n.match(/^a ([a-z]{3}) 26/)) && B_MONTHS[m[1]] !== undefined) m2026af[B_MONTHS[m[1]]] = i;
-    else if ((m = n.match(/^f ([a-z]{3}) 26/)) && B_MONTHS[m[1]] !== undefined) m2026af[B_MONTHS[m[1]]] = i;
-  });
-  if (dim.company === undefined || dim.proj_group === undefined || !m2026b.some(i => i >= 0)) return null;
-  return { dim, m2025, m2026b, m2026af, y2025col };
-}
-function bRowsToLines(rows) {
-  let map = null, hr = -1;
-  for (let h = 0; h < Math.min(6, rows.length); h++) { map = bMapColumns(rows[h] || []); if (map) { hr = h; break; } }
-  if (!map) return null;
-  const { dim, m2026b, m2026af, y2025col } = map, at = (r, i) => (i >= 0 ? r[i] : ''), ser = (r, idx) => idx.map(i => bNum(at(r, i)));
-  const has2025 = map.m2025.some(i => i >= 0);
-  const out = [];
-  for (let i = hr + 1; i < rows.length; i++) {
-    const r = rows[i]; const country = bCountryOf(at(r, dim.company)); if (!country) continue;
-    const b2026 = ser(r, m2026b), af = ser(r, m2026af);
-    out.push({
-      country, company: String(at(r, dim.company)).trim(), department: String(at(r, dim.department)).trim(),
-      proj_group: String(at(r, dim.proj_group)).trim(), proj_category: String(at(r, dim.proj_category)).trim(),
-      program: String(at(r, dim.program)).trim(), project: String(at(r, dim.project)).trim(),
-      sub_project: String(at(r, dim.sub_project)).trim(), pyp_name: String(at(r, dim.pyp_name)).trim(),
-      oc: String(at(r, dim.oc)).trim().toUpperCase(), gl_tr_no: String(at(r, dim.gl_tr_no)).trim(),
-      gl_tr_name: String(at(r, dim.gl_tr_name)).trim(), wbs: String(at(r, dim.wbs)).trim(),
-      proje_no: String(at(r, dim.proje_no)).trim(), proje_name: String(at(r, dim.proje_name)).trim(),
-      y2025_actual: has2025 ? bSum(ser(r, map.m2025)) : bNum(at(r, y2025col)), y2026_budget: bSum(b2026),
-      ja_budget: bSum(b2026.slice(0, 4)), ja_actual: bSum(af.slice(0, 4)),
-      m2026_budget: b2026, m2026_af: af,
-    });
-  }
-  return out;
-}
-function parseBudgetFile(arrayBuffer) {
-  const meta = XLSX.read(arrayBuffer, { type: 'array', bookSheets: true });
-  const names = meta.SheetNames || [];
-  const likely = (n) => /sheet1|data|ocak|nisan|rapor/i.test(n);
-  const ordered = names.slice().sort((a, b) => (likely(b) ? 1 : 0) - (likely(a) ? 1 : 0));
-  for (const name of ordered) {
-    let rows;
-    try { const wb = XLSX.read(arrayBuffer, { type: 'array', sheets: [name] }); rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' }); }
-    catch (e) { continue; }
-    const lines = bRowsToLines(rows); if (lines && lines.length) return lines;
-  }
-  throw new Error('Could not find the budget sheet (need Şirket Tanımı, Proje Grubu and monthly B_*-26 columns).');
-}
-function fileToArrayBuffer(file) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsArrayBuffer(file); }); }
-
-// ── Filtering ─────────────────────────────────────────────────────────────────
-function distinctFor(field) {
-  const items = ALL_ITEMS.filter(it => FILTERS.every(f => f.field === field || !selections[f.field] || it[f.field] === selections[f.field]));
-  return [...new Set(items.map(it => String(it[field] || '')).filter(v => v !== ''))].sort((a, b) => a.localeCompare(b));
-}
-function reconcile() {
-  let changed = true, guard = 0;
-  while (changed && guard++ < 12) { changed = false; for (const f of FILTERS) { if (selections[f.field] && !distinctFor(f.field).includes(selections[f.field])) { selections[f.field] = ''; changed = true; } } }
-}
-function rebuildSelects() {
-  for (const f of FILTERS) {
-    const sel = document.getElementById(f.id); if (!sel) continue;
-    const opts = distinctFor(f.field);
-    sel.innerHTML = `<option value="">${f.label}</option>` + opts.map(o => `<option${o === selections[f.field] ? ' selected' : ''}>${escB(o)}</option>`).join('');
-    sel.value = selections[f.field] || '';
-  }
-}
-function itemMatchesSearch(it, q) {
-  return [it.country, it.company, it.department, it.proj_group, it.proj_category, it.program, it.project,
-    it.sub_project, it.pyp_name, it.oc, it.gl_tr_no, it.gl_tr_name, GL_MAP[it.gl_tr_no] || '', it.wbs,
-    it.proje_no, it.proje_name].some(v => String(v).toLowerCase().includes(q));
-}
-function filteredItems() {
-  const q = searchTerm.trim().toLowerCase();
-  return ALL_ITEMS.filter(it => FILTERS.every(f => !selections[f.field] || it[f.field] === selections[f.field]) && (!q || itemMatchesSearch(it, q)));
-}
-
-// ── Rendering ─────────────────────────────────────────────────────────────────
-function render() {
-  const items = filteredItems();
-  document.getElementById('filter-count').textContent = `${items.length} of ${ALL_ITEMS.length} line items match the current filter.`;
-  document.getElementById('line-count').textContent = `${items.length} line items`;
-
-  // Summary by country
-  const countries = ['Vietnam', 'Thailand', 'Malaysia'].filter(c => items.some(it => it.country === c));
-  const tot = { y25: 0, y26: 0, jb: 0, ja: 0 };
-  const rowsHtml = countries.map(c => {
-    const ci = items.filter(it => it.country === c);
-    const y25 = sumf(ci, 'y2025_actual'), y26 = sumf(ci, 'y2026_budget'), jb = sumf(ci, 'ja_budget'), ja = sumf(ci, 'ja_actual');
-    tot.y25 += y25; tot.y26 += y26; tot.jb += jb; tot.ja += ja;
-    const v = jb - ja;
-    return `<tr><td><strong>${c}</strong></td><td class="num">${USD2(y25)}</td><td class="num">${USD2(y26)}</td><td class="num">${USD2(jb)}</td><td class="num">${USD2(ja)}</td><td class="num ${varClass(v)}">${fmtVar(v)}</td><td class="num">${pct(ja, jb).toFixed(1)}%</td></tr>`;
+// ── source strip ─────────────────────────────────────────────────────────────
+function renderSources() {
+  const src = DATA.meta.sources || [];
+  const html = C.COUNTRIES.filter(c => !st.country || c === st.country).map(c => {
+    const s = src.find(x => x.country === c && x.year === st.year);
+    if (!s) return `<span class="src-pill none">${COUNTRY_FLAG[c]} <b>${c} ${st.year}</b> · no data loaded</span>`;
+    const k = KIND_LABEL[s.kind] || [s.kind, ''];
+    const act = s.actual_months ? ` · actual Jan–${MON[s.actual_months - 1]}${s.actual_months < 12 ? `, forecast ${MON[s.actual_months]}–Dec` : ''}` : '';
+    return `<span class="src-pill ${esc(s.kind)}" title="${esc(s.source_file)} · imported ${esc((s.imported_at || '').slice(0, 10))}">${COUNTRY_FLAG[c]} <b>${c} ${st.year}</b> · ${esc(k[0])}${act} · ${s.lines} lines</span>`;
   }).join('');
-  const tv = tot.jb - tot.ja;
-  document.getElementById('summary-tbody').innerHTML = rowsHtml + `<tr style="border-top:2px solid #cbd5e1;font-weight:700"><td>Total</td><td class="num">${USD2(tot.y25)}</td><td class="num">${USD2(tot.y26)}</td><td class="num">${USD2(tot.jb)}</td><td class="num">${USD2(tot.ja)}</td><td class="num ${varClass(tv)}">${fmtVar(tv)}</td><td class="num">${pct(tot.ja, tot.jb).toFixed(1)}%</td></tr>`;
-  document.getElementById('chart-summary').innerHTML = groupedBars(countries.map(c => { const ci = items.filter(it => it.country === c); return { label: c, budget: sumf(ci, 'ja_budget'), actual: sumf(ci, 'ja_actual') }; }));
-
-  // Monthly burn (2026 budget vs actual)
-  const mb = Array(12).fill(0), ma = Array(12).fill(0);
-  items.forEach(it => { for (let i = 0; i < 12; i++) { mb[i] += Number(it.m2026_budget[i]) || 0; ma[i] += Number(it.m2026_af[i]) || 0; } });
-  document.getElementById('chart-monthly').innerHTML = groupedBars(MONTH_LBL.map((m, i) => ({ label: m, budget: round2(mb[i]), actual: round2(ma[i]) })), { groupGap: 64, barW: 18 });
-
-  // GL tables
-  const byGL = {};
-  items.forEach(it => { const k = it.gl_tr_no || '(none)'; (byGL[k] = byGL[k] || { alts: new Set(), jb: 0, ja: 0 }); if (it.pyp_name) byGL[k].alts.add(it.pyp_name); byGL[k].jb += it.ja_budget; byGL[k].ja += it.ja_actual; });
-  const glKeys = Object.keys(byGL).sort();
-  document.getElementById('gl-tr-tbody').innerHTML = glKeys.length ? glKeys.map(k => {
-    const lg = GL_MAP[k];
-    return `<tr><td><code>${escB(k)}</code></td><td>${lg ? '<code>' + escB(lg) + '</code>' : '<span class="text-muted">— to map —</span>'}</td><td class="text-sm">${escB([...byGL[k].alts].join(', ')) || '—'}</td><td class="num">${USD(byGL[k].jb)}</td><td class="num">${USD(byGL[k].ja)}</td></tr>`;
-  }).join('') : '<tr><td colspan="5" class="text-muted">No data.</td></tr>';
-
-  // Line items
-  document.getElementById('line-tbody').innerHTML = items.length ? items.map(it => {
-    const p = it.ja_budget ? (it.ja_actual / it.ja_budget * 100) : 0;
-    return `<tr>
-      <td>${escB(it.country)}</td><td>${escB(it.oc)}</td>
-      <td>${escB(it.proj_group)}</td><td>${escB(it.proj_category)}</td><td>${escB(it.program)}</td><td>${escB(it.project)}</td><td>${escB(it.sub_project)}</td><td>${escB(it.pyp_name)}</td>
-      <td><code>${escB(it.gl_tr_no)}</code></td><td><code>${escB(it.wbs)}</code></td>
-      <td class="num">${USD(it.y2025_actual)}</td><td class="num">${USD(it.y2026_budget)}</td>
-      <td class="num">${USD(it.ja_budget)}</td><td class="num">${USD(it.ja_actual)}</td>
-      <td class="num ${p > 100 ? 'neg' : ''}">${p.toFixed(0)}%</td></tr>`;
-  }).join('') : '<tr><td colspan="15" class="text-muted">No line items match.</td></tr>';
+  document.getElementById('src-strip').innerHTML = html;
 }
-function sumf(arr, f) { return round2(arr.reduce((s, x) => s + (Number(x[f]) || 0), 0)); }
-function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 
-function onFilterChange(field, value) { selections[field] = value; reconcile(); rebuildSelects(); render(); }
+// ── KPIs ─────────────────────────────────────────────────────────────────────
+function renderKpis(items, a, b) {
+  const by = { OPEX: zeroM(), CAPEX: zeroM() }, t = zeroM();
+  items.forEach(it => { const m = metrics(it, a, b); addM(by[it.oc] || by.OPEX, m); addM(t, m); });
+  const split = (f) => `<div class="s"><span>OPEX <b>${USDk(by.OPEX[f])}</b></span><span>CAPEX <b>${USDk(by.CAPEX[f])}</b></span></div>`;
+  const card = (label, en, val, color, f, extra) => `<div class="bk" style="--c:${color}"><div class="l">${label} <span class="en-inline">· ${en}</span></div><div class="v ${extra || ''}">${val}</div>${f ? split(f) : ''}</div>`;
+  const P = periodLabel(st.period);
+  let html;
+  if (yearHasActuals()) {
+    const used = pct(t.AF, t.B);
+    html = card('Budget', 'Bütçe', USD(t.B), '#3b82f6', 'B')
+      + card('Actual', 'Fiili', USD(t.A), '#f59e0b', 'A')
+      + card('Forecast', 'Tahmin', USD(t.F), '#a855f7', 'F')
+      + card('Actual + Forecast', 'Fiili + Tahmin', USD(t.AF), '#0ea5e9', 'AF')
+      + card('Remaining (B − A+F)', 'Fark', USD(t.V), t.V < 0 ? '#dc2626' : '#16a34a', 'V', cls(t.V))
+        .replace('</div></div>', `</div><div class="s"><span>Used <b>${used}%</b> of budget</span></div></div>`);
+  } else {
+    // Budget-only year (e.g. newly approved 2027): compare with prior year A+F.
+    const prev = DATA.items.filter(it => it.year === st.year - 1 && baseFilter(it));
+    const pv = { OPEX: 0, CAPEX: 0, T: 0 };
+    prev.forEach(it => { const m = metrics(it, a, b); pv[it.oc] = (pv[it.oc] || 0) + m.AF; pv.T += m.AF; });
+    const d = t.B - pv.T;
+    html = card('Budget', 'Bütçe', USD(t.B), '#3b82f6', 'B')
+      + card('OPEX budget', 'Opex', USD(by.OPEX.B), '#0ea5e9')
+      + card('CAPEX budget', 'Capex', USD(by.CAPEX.B), '#7c3aed')
+      + card(`${st.year - 1} Actual + Forecast`, 'önceki yıl', prev.length ? USD(pv.T) : '—', '#94a3b8')
+      + card(`Change vs ${st.year - 1} A+F`, 'Fark', prev.length ? (d >= 0 ? '+' : '') + USD(d) : '—', '#f59e0b', null, '')
+        .replace('</div></div>', prev.length ? `</div><div class="s"><span>OPEX <b>${USDk(by.OPEX.B - pv.OPEX)}</b></span><span>CAPEX <b>${USDk(by.CAPEX.B - pv.CAPEX)}</b></span></div></div>` : '</div></div>');
+  }
+  document.getElementById('kpis').innerHTML = html;
+  document.getElementById('sum-hint').textContent = `${P} · USD · ${items.length} lines`;
+}
 
-// ── Import ────────────────────────────────────────────────────────────────────
-function wireBudgetImport() {
-  const card = document.getElementById('import-budget-card'); if (card) card.style.display = '';
-  const btn = document.getElementById('budget-import-btn'); if (!btn || btn.dataset.wired) return;
-  btn.dataset.wired = '1';
-  btn.addEventListener('click', async () => {
-    const input = document.getElementById('budget-import-file'), status = document.getElementById('budget-import-status');
-    const file = input.files && input.files[0];
-    if (!file) { showToast('Choose the budget .xlsx first', 'error'); return; }
-    if (typeof XLSX === 'undefined') { showToast('Parser not loaded — hard-refresh', 'error'); return; }
-    if (!confirm('Upload this file and REPLACE the current budget data?')) return;
-    btn.disabled = true; status.textContent = 'Reading & parsing in your browser…';
-    try {
-      const rows = parseBudgetFile(await fileToArrayBuffer(file));
-      if (!rows.length) throw new Error('No matching rows (Vietnam/Thailand/Malaysia).');
-      status.textContent = `Parsed ${rows.length} line items — saving…`;
-      const r = await fetch('/api/budget/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows }) });
-      const text = await r.text(); const d = text ? JSON.parse(text) : {};
-      if (!r.ok) throw new Error(d.error || ('Import failed (HTTP ' + r.status + ')'));
-      const by = Object.entries(d.byCountry || {}).map(([k, v]) => `${k} ${v}`).join(', ');
-      status.textContent = `✅ Imported ${d.inserted} line items (${by}).`;
-      showToast(`Budget imported: ${d.inserted} line items`);
-      input.value = '';
-      await loadData();
-    } catch (e) { status.textContent = '❌ ' + e.message; showToast(e.message, 'error'); }
-    finally { btn.disabled = false; }
+// ── Opex / Capex × country ───────────────────────────────────────────────────
+function renderSummary(items, a, b) {
+  const hasA = yearHasActuals();
+  const countries = C.COUNTRIES.filter(c => (!st.country || c === st.country));
+  const ocs = OCS.filter(o => !st.oc || o === st.oc);
+  const cell = (m) => hasA
+    ? `<td class="num">${USD(m.B)}</td><td class="num">${USD(m.AF)}</td><td class="num ${cls(m.V)}">${USD(m.V)}</td>`
+    : `<td class="num">${USD(m.B)}</td>`;
+  const sub = hasA ? '<th class="num">Budget</th><th class="num">A+F</th><th class="num">Var.</th>' : '<th class="num">Budget</th>';
+  let h = `<thead><tr><th rowspan="2">Country · Ülke</th>${ocs.map(o => `<th colspan="${hasA ? 3 : 1}" style="text-align:center">${ocTag(o)}</th>`).join('')}<th colspan="${hasA ? 4 : 1}" style="text-align:center">Total · Toplam</th></tr>`
+    + `<tr>${ocs.map(() => sub).join('')}${sub}${hasA ? '<th class="num">Used</th>' : ''}</tr></thead><tbody>`;
+  const grand = { OPEX: zeroM(), CAPEX: zeroM(), T: zeroM() };
+  countries.forEach(c => {
+    const ci = items.filter(i => i.country === c);
+    const m = { OPEX: zeroM(), CAPEX: zeroM(), T: zeroM() };
+    ci.forEach(it => { const x = metrics(it, a, b); addM(m[it.oc], x); addM(m.T, x); addM(grand[it.oc], x); addM(grand.T, x); });
+    h += `<tr><td><b>${COUNTRY_FLAG[c]} ${c}</b>${ci.length ? '' : ' <span class="hint">no data</span>'}</td>${ocs.map(o => cell(m[o])).join('')}${cell(m.T)}${hasA ? `<td class="num">${pct(m.T.AF, m.T.B)}%</td>` : ''}</tr>`;
   });
+  if (countries.length > 1) h += `<tr style="border-top:2px solid #cbd5e1;font-weight:700"><td>Total</td>${ocs.map(o => cell(grand[o])).join('')}${cell(grand.T)}${hasA ? `<td class="num">${pct(grand.T.AF, grand.T.B)}%</td>` : ''}</tr>`;
+  document.getElementById('sum-table').innerHTML = h + '</tbody>';
+}
+
+// ── Monthly grid + chart ─────────────────────────────────────────────────────
+function renderMonthly(items, a, b) {
+  const hasA = yearHasActuals();
+  const am = yearActualMonths();
+  const inP = (k) => k >= a && k <= b;
+  const head = `<thead><tr><th></th>${MON.map((m, k) => `<th class="num ${hasA && k >= am ? 'fc' : ''} ${inP(k) && st.period !== 'fy' ? 'inp' : ''}">${m}${hasA ? `<span class="en">${k < am ? 'actual' : 'forecast'}</span>` : ''}</th>`).join('')}${st.period === 'fy' ? '' : '<th class="num">Period</th>'}<th class="num">Year</th></tr></thead>`;
+  const series = (list) => {
+    const B = Array(12).fill(0), AF = Array(12).fill(0);
+    list.forEach(it => { for (let k = 0; k < 12; k++) { B[k] += it.budget[k] || 0; AF[k] += it.actual[k] || 0; } });
+    return { B, AF };
+  };
+  const sumR = (arr, x, y) => arr.slice(x, y + 1).reduce((s, v) => s + v, 0);
+  const row = (label, arr, opt) => {
+    opt = opt || {};
+    return `<tr class="${opt.cls || ''}"><td>${label}</td>${arr.map((v, k) => `<td class="num ${opt.fc && k >= am ? 'fc' : ''} ${inP(k) && st.period !== 'fy' ? 'inp' : ''} ${opt.var ? cls(v) : ''}">${Math.abs(v) < 0.5 ? '<span class="text-muted">–</span>' : USD(v)}</td>`).join('')}`
+      + (st.period === 'fy' ? '' : `<td class="num ${opt.var ? cls(sumR(arr, a, b)) : ''}"><b>${opt.cum ? USD(arr[b]) : USD(sumR(arr, a, b))}</b></td>`)
+      + `<td class="num ${opt.var && st.period === 'fy' ? cls(sumR(arr, 0, 11)) : ''}">${st.period === 'fy' ? '<b>' : ''}${opt.cum ? USD(arr[11]) : USD(sumR(arr, 0, 11))}${st.period === 'fy' ? '</b>' : ''}</td></tr>`;
+  };
+  let body = '';
+  const ocs = OCS.filter(o => !st.oc || o === st.oc);
+  ocs.forEach(o => {
+    const s = series(items.filter(i => i.oc === o));
+    body += `<tr class="sec"><td colspan="${st.period === 'fy' ? 14 : 15}">${ocTag(o)}</td></tr>` + row('Budget · Bütçe', s.B);
+    if (hasA) body += row('Actual / Forecast · Fiili / Tahmin', s.AF, { fc: true }) + row('Variance · Fark', s.B.map((v, k) => v - s.AF[k]), { var: true });
+  });
+  const T = series(items);
+  const cum = (arr) => arr.reduce((o, v, k) => (o.push((o[k - 1] || 0) + v), o), []);
+  body += `<tr class="sec"><td colspan="${st.period === 'fy' ? 14 : 15}">Total · Toplam</td></tr>` + row('Budget', T.B, { cls: '' });
+  if (hasA) body += row('Actual / Forecast', T.AF, { fc: true }) + row('Variance', T.B.map((v, k) => v - T.AF[k]), { var: true })
+    + row('Cumulative budget', cum(T.B), { cum: true }) + row('Cumulative A+F', cum(T.AF), { cum: true, fc: true });
+  document.getElementById('month-table').innerHTML = head + '<tbody>' + body + '</tbody>';
+  document.getElementById('month-chart').innerHTML = barChart(T.B, hasA ? T.AF : null, am);
+}
+function barChart(B, AF, am) {
+  const W = 900, H = 230, padL = 64, padB = 34, padT = 10, padR = 10;
+  const max = Math.max(1, ...B, ...(AF || []).map(v => Math.max(0, v)));
+  const plotH = H - padB - padT, gw = (W - padL - padR) / 12, bw = Math.min(26, gw / 3);
+  const y = (v) => padT + plotH - (Math.max(0, v) / max) * plotH;
+  let g = '';
+  for (let i = 0; i <= 4; i++) { const v = max / 4 * i, yy = y(v); g += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="#e5e7eb"/><text x="${padL - 6}" y="${yy + 3}" text-anchor="end" font-size="10" fill="#64748b">${USDk(v)}</text>`; }
+  MON.forEach((m, k) => {
+    const cx = padL + gw * k + gw / 2;
+    g += `<rect x="${AF ? cx - bw - 1 : cx - bw / 2}" y="${y(B[k])}" width="${bw}" height="${padT + plotH - y(B[k])}" fill="#3b82f6" rx="2"><title>${m} budget ${USD(B[k])}</title></rect>`;
+    if (AF) {
+      const fc = k >= am;
+      g += `<rect x="${cx + 1}" y="${y(AF[k])}" width="${bw}" height="${padT + plotH - y(AF[k])}" fill="${fc ? '#fcd34d' : '#f59e0b'}" ${fc ? 'stroke="#f59e0b" stroke-dasharray="3 2"' : ''} rx="2"><title>${m} ${fc ? 'forecast' : 'actual'} ${USD(AF[k])}</title></rect>`;
+    }
+    g += `<text x="${cx}" y="${H - padB + 15}" text-anchor="middle" font-size="11" fill="#0f172a">${m}</text>`;
+  });
+  const lg = [['Budget', '#3b82f6']].concat(AF ? [['Actual', '#f59e0b'], ['Forecast', '#fcd34d']] : []);
+  return `<div class="bdg-scroll"><svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">${g}</svg></div>`
+    + `<div style="display:flex;gap:16px;font-size:12px;color:#475569;margin-top:4px">${lg.map(([t, c]) => `<span style="display:inline-flex;align-items:center;gap:5px"><i style="width:12px;height:12px;border-radius:3px;background:${c};display:inline-block"></i>${t}</span>`).join('')}</div>`;
+}
+
+// ── Year over year ───────────────────────────────────────────────────────────
+function renderYoy() {
+  const items = DATA.items.filter(baseFilter);
+  const years = (DATA.meta.years || []).slice();
+  const yHasA = {}; years.forEach(y => { yHasA[y] = items.some(i => i.year === y && i.actual.some(v => v)); });
+  const countries = C.COUNTRIES.filter(c => !st.country || c === st.country);
+  const ocs = OCS.filter(o => !st.oc || o === st.oc);
+  const fy = (list) => list.reduce((t, it) => addM(t, metrics(it, 0, 11)), zeroM());
+  const last = years[years.length - 1], prev = years[years.length - 2];
+  let h = `<thead><tr><th>Country</th><th>Type</th>${years.map(y => `<th class="num">${y} B</th>${yHasA[y] ? `<th class="num">${y} A+F</th>` : ''}`).join('')}`
+    + (prev ? `<th class="num">${last} B vs ${prev} ${yHasA[prev] ? 'A+F' : 'B'}</th>` : '') + '</tr></thead><tbody>';
+  const line = (label, oc, list, strong) => {
+    let cells = '';
+    years.forEach(y => { const m = fy(list.filter(i => i.year === y)); cells += `<td class="num">${m.B ? USD(m.B) : '<span class="text-muted">–</span>'}</td>${yHasA[y] ? `<td class="num">${m.AF ? USD(m.AF) : '<span class="text-muted">–</span>'}</td>` : ''}`; });
+    let d = '';
+    if (prev) {
+      const lb = fy(list.filter(i => i.year === last)).B, pm = fy(list.filter(i => i.year === prev)), pv = yHasA[prev] ? pm.AF : pm.B;
+      const dv = lb - pv;
+      d = `<td class="num ${dv > 0 ? 'neg' : dv < 0 ? 'pos' : ''}">${pv || lb ? (dv >= 0 ? '+' : '') + USD(dv) + (pv ? ` <span class="hint">(${dv >= 0 ? '+' : ''}${pct(dv, pv)}%)</span>` : '') : '–'}</td>`;
+    }
+    return `<tr${strong ? ' style="font-weight:700;border-top:1px solid #cbd5e1"' : ''}><td>${label}</td><td>${oc ? ocTag(oc) : 'Total'}</td>${cells}${d}</tr>`;
+  };
+  countries.forEach(c => {
+    const ci = items.filter(i => i.country === c);
+    ocs.forEach(o => { h += line(`${COUNTRY_FLAG[c]} ${c}`, o, ci.filter(i => i.oc === o)); });
+    if (ocs.length > 1) h += line(`${COUNTRY_FLAG[c]} ${c}`, '', ci, true);
+  });
+  if (countries.length > 1) h += line('<b>All countries</b>', '', items, true);
+  document.getElementById('yoy-table').innerHTML = h + '</tbody>';
+}
+
+// ── Lines (grouped by PYP / category / GL) ───────────────────────────────────
+function groupOf(it) {
+  if (st.group === 'pyp') { const c = pypCode(it); return { key: c || '~', label: c ? `<code>${esc(c)}</code> ${biInline(pypName(it))}` : '<span class="text-muted">(no PYP)</span>' }; }
+  if (st.group === 'cat') return { key: it.proj_group + '|' + it.proj_category, label: `${biInline(it.proj_group)} › ${biInline(it.proj_category)}` };
+  if (st.group === 'gl') return { key: it.gl_no || '~', label: it.gl_no ? `<code>${esc(it.gl_no)}</code> ${biInline(it.gl_name)}${DATA.glMap[it.gl_no] ? ` <span class="hint">· Local GL <code>${esc(DATA.glMap[it.gl_no])}</code></span>` : ''}` : '<span class="text-muted">(no GL)</span>' };
+  return { key: '', label: '' };
+}
+function itemLabel(it) {
+  const parts = [it.program, it.project, it.sub_project].filter((v, i, a) => v && a.indexOf(v) === i);
+  const en = parts.map(EN).filter(Boolean);
+  return `${esc(parts.join(' › ') || it.proj_category)}${isEK(it) ? ' <span class="tag-ek" title="FİİLİ_EK — actual booked without a budget line">Unbudgeted actual</span>' : isDerived(it) ? ' <span class="tag-ek" style="background:#f0fdf4;color:#166534;border-color:#bbf7d0" title="FİİLİ_EK / Yeni Türetme — new budget line based on last year\'s actuals">From actuals</span>' : ''}`
+    + (en.length ? `<span class="en">${esc(parts.map(p => EN(p) || p).join(' › '))}</span>` : '');
+}
+function renderLines(items, a, b) {
+  const hasA = yearHasActuals();
+  let list = items;
+  if (st.hideZero) list = list.filter(it => { const m = metrics(it, a, b); return Math.abs(m.B) > 0.5 || Math.abs(m.AF) > 0.5; });
+  const ocs = OCS.filter(o => !st.oc || o === st.oc);
+  const months = st.cols === 'month';
+  const showCountry = !st.country;
+  const headSum = `<tr>${showCountry ? '<th>Country</th>' : ''}<th>Item · Kalem</th><th>GL · MÇ</th><th>PYP ${st.pyp === 'ecc' ? '(old ECC)' : '(new S4)'}</th>`
+    + (hasA ? '<th class="num">Budget</th><th class="num">Actual</th><th class="num">A+F</th><th class="num">Var.</th><th>Used</th>' : '<th class="num">Budget</th>') + '<th>Comment · Açıklama</th></tr>';
+  const headMon = `<tr>${showCountry ? '<th>Country</th>' : ''}<th>Item · Kalem</th><th>GL</th><th>PYP</th>${MON.map((m, k) => `<th class="num">${m}</th>`).join('')}<th class="num">Total</th></tr>`;
+  const valsSum = (m) => hasA
+    ? `<td class="num">${USD(m.B)}</td><td class="num">${USD(m.A)}</td><td class="num">${USD(m.AF)}</td><td class="num ${cls(m.V)}">${USD(m.V)}</td><td>${usedBar(m)}</td>`
+    : `<td class="num">${USD(m.B)}</td>`;
+  const monthCells = (it) => MON.map((_, k) => {
+    const bv = it.budget[k] || 0, av = it.actual[k] || 0;
+    const top = Math.abs(bv) > 0.5 ? USD(bv) : '<span class="text-muted">–</span>';
+    const bot = hasA && Math.abs(av) > 0.5 ? `<span class="en" style="${k >= it.actual_months ? 'font-style:italic' : 'color:#b45309'}">${USD(av)}</span>` : '';
+    return `<td class="num">${top}${bot}</td>`;
+  }).join('');
+  let html = '';
+  ocs.forEach(o => {
+    const L = list.filter(i => i.oc === o);
+    const tot = L.reduce((t, it) => addM(t, metrics(it, a, b)), zeroM());
+    html += `<h3 style="margin:${html ? '22px' : '0'} 0 8px;font-size:14px;display:flex;align-items:center;gap:8px">${ocTag(o)} ${o === 'CAPEX' ? 'Capital expenditure · Yatırım' : 'Operating expenditure · İşletme gideri'}`
+      + `<span class="hint" style="font-weight:400">${L.length} lines · budget ${USD(tot.B)}${hasA ? ` · A+F ${USD(tot.AF)} · var. ${USD(tot.V)}` : ''} · ${esc(periodLabel(st.period))}</span></h3>`;
+    if (!L.length) { html += '<p class="hint">No lines.</p>'; return; }
+    const groups = new Map();
+    L.forEach(it => { const g = groupOf(it); if (!groups.has(g.key)) groups.set(g.key, { label: g.label, items: [] }); groups.get(g.key).items.push(it); });
+    const keys = [...groups.keys()].sort((x, y) => (x === '~') - (y === '~') || x.localeCompare(y));
+    let rows = '';
+    keys.forEach(k => {
+      const g = groups.get(k);
+      if (st.group !== 'none') {
+        const gt = g.items.reduce((t, it) => addM(t, metrics(it, a, b)), zeroM());
+        if (months) {
+          const mb = Array(12).fill(0); g.items.forEach(it => it.budget.forEach((v, i) => { mb[i] += v || 0; }));
+          rows += `<tr class="grp"><td colspan="${(showCountry ? 1 : 0) + 3}">${g.label} <span class="hint">· ${g.items.length}</span></td>${mb.map(v => `<td class="num">${Math.abs(v) > 0.5 ? USD(v) : ''}</td>`).join('')}<td class="num">${USD(mb.reduce((s, v) => s + v, 0))}</td></tr>`;
+        } else {
+          rows += `<tr class="grp"><td colspan="${(showCountry ? 1 : 0) + 3}">${g.label} <span class="hint">· ${g.items.length}</span></td>${valsSum(gt)}<td></td></tr>`;
+        }
+      }
+      g.items.forEach(it => {
+        const m = metrics(it, a, b);
+        const pyp = pypCode(it), alt = otherPyp(it);
+        const pypCell = `<td>${pyp ? `<code>${esc(pyp)}</code>` : '<span class="text-muted">—</span>'}${alt && alt !== pyp ? `<span class="en" title="${st.pyp === 'ecc' ? 'new S4' : 'old ECC'}">${st.pyp === 'ecc' ? 'S4' : 'ECC'}: ${esc(alt)}</span>` : ''}</td>`;
+        const glCell = `<td>${it.gl_no ? `<code>${esc(it.gl_no)}</code>` : ''}${it.gl_name ? `<span class="en">${esc(EN(it.gl_name) || it.gl_name)}</span>` : ''}</td>`;
+        const cmt = [it.comment ? `${esc(it.comment)}${EN(it.comment) ? `<span class="en">${esc(EN(it.comment))}</span>` : ''}` : '', it.note ? `<div class="note">📝 ${esc(it.note)}</div>` : ''].join('');
+        rows += `<tr class="line" data-id="${it.id}">${showCountry ? `<td>${COUNTRY_FLAG[it.country]} ${esc(it.country)}</td>` : ''}<td>${itemLabel(it)}</td>${glCell}${pypCell}`
+          + (months ? monthCells(it) + `<td class="num"><b>${USD(C.sum(it.budget))}</b>${hasA ? `<span class="en">${USD(C.sum(it.actual))}</span>` : ''}</td>` : valsSum(m) + `<td class="cmt">${cmt}</td>`) + '</tr>';
+      });
+    });
+    html += `<div class="bdg-scroll"><table class="lt"><thead>${months ? headMon : headSum}</thead><tbody>${rows}</tbody></table></div>`;
+  });
+  if (months && hasA) html = '<p class="hint" style="margin:0 0 8px">Each month: <b>budget</b> on top, actual (amber) or <i>forecast (italic)</i> below.</p>' + html;
+  document.getElementById('lines-body').innerHTML = html || '<p class="hint">No lines match.</p>';
+  document.querySelectorAll('#lines-body tr.line').forEach(tr => tr.addEventListener('click', () => openDetail(+tr.dataset.id)));
+}
+function usedBar(m) {
+  if (!m.B) return m.AF ? '<span class="tag-ek">no budget</span>' : '';
+  const p = pct(m.AF, m.B), c = p > 100 ? '#dc2626' : p > 85 ? '#f59e0b' : '#16a34a';
+  return `<div style="font-size:11px">${p}%</div><div class="bar"><i style="width:${Math.min(100, Math.max(0, p))}%;background:${c}"></i></div>`;
+}
+
+// ── detail modal ─────────────────────────────────────────────────────────────
+function openDetail(id) {
+  const it = DATA.items.find(i => i.id === id); if (!it) return;
+  const hasA = it.actual.some(v => v);
+  const f = (tr, en, v, code) => `<dt>${tr}<span class="en-inline">${en}</span></dt><dd>${v ? (code ? `<code>${esc(v)}</code>` : bi(v)) : '<span class="text-muted">—</span>'}</dd>`;
+  const pair = (tr, en, code, name) => `<dt>${tr}<span class="en-inline">${en}</span></dt><dd>${code ? `<code>${esc(code)}</code>` : '<span class="text-muted">—</span>'} ${name ? bi(name) : ''}</dd>`;
+  const rows = MON.map((m, k) => {
+    const b = it.budget[k] || 0, a = it.actual[k] || 0;
+    return `<tr><td>${m} ${it.year}</td><td class="num">${USD(b)}</td>${hasA ? `<td class="num" style="${k >= it.actual_months ? 'font-style:italic;color:#64748b' : ''}">${USD(a)} <span class="hint">${k < it.actual_months ? 'A' : 'F'}</span></td><td class="num ${cls(b - a)}">${USD(b - a)}</td>` : ''}</tr>`;
+  }).join('');
+  const tb = C.sum(it.budget), ta = C.sum(it.actual);
+  document.getElementById('bd-title').innerHTML = `${COUNTRY_FLAG[it.country]} ${esc(it.country)} ${it.year} · ${ocTag(it.oc)} ${esc(it.sub_project || it.project || it.program)}`;
+  document.getElementById('bd-body').innerHTML = `
+    <div class="twocol">
+      <dl class="kv">
+        ${f('Durum', 'Status', it.status)}
+        ${f('Şirket Tanımı', 'Company', it.company)}
+        ${f('Bütçe Sahibi / Müdürlük', 'Owner / Department', [it.owner, it.department].filter(Boolean).join(' / '))}
+        ${f('Proje Grubu', 'Project group', it.proj_group)}
+        ${f('Proje Kategorisi', 'Project category', it.proj_category)}
+        ${f('Program / Servis Adı', 'Program / service', it.program)}
+        ${f('Proje / Servis Adı', 'Project / service', it.project)}
+        ${f('Alt Proje / Servis Adı', 'Sub project / service', it.sub_project)}
+      </dl>
+      <dl class="kv">
+        ${pair('PYP öğesi (Yeni Yapı)', 'PYP new — S/4HANA', it.pyp_s4, it.pyp_s4_name)}
+        ${pair('PYP No', 'PYP old — ECC', it.pyp_ecc, it.pyp_ecc_name)}
+        ${pair('Masraf Çeşidi / MÇ', 'GL account (Turkish)', it.gl_no, it.gl_name)}
+        ${f('Local GL', 'GL.xlsx mapping', DATA.glMap[it.gl_no] || '', true)}
+        ${pair('MY No', 'Cost center', it.cc_no, it.cc_name)}
+        ${pair('Proje No', 'Project no', it.proje_no, it.proje_name)}
+        ${f('Kaynak', 'Source', `${(KIND_LABEL[it.kind] || [it.kind])[0]} · ${it.source_file || ''}`)}
+      </dl>
+    </div>
+    <div class="bdg-scroll" style="margin-top:16px"><table>
+      <thead><tr><th>Month · Ay</th><th class="num">Budget · Bütçe</th>${hasA ? '<th class="num">Actual / Forecast</th><th class="num">Variance · Fark</th>' : ''}</tr></thead>
+      <tbody>${rows}<tr style="font-weight:700;border-top:2px solid #cbd5e1"><td>Total</td><td class="num">${USD(tb)}</td>${hasA ? `<td class="num">${USD(ta)}</td><td class="num ${cls(tb - ta)}">${USD(tb - ta)}</td>` : ''}</tr></tbody>
+    </table></div>
+    <div style="margin-top:16px">
+      <div class="hint" style="font-weight:600">Açıklama · Comment (from report)</div>
+      <div style="margin-top:4px">${it.comment ? bi(it.comment) : '<span class="text-muted">—</span>'}</div>
+    </div>
+    <div style="margin-top:14px">
+      <label class="hint" style="font-weight:600" for="bd-note">IT note · our own comment (kept when the next report is imported)</label>
+      <textarea id="bd-note" class="form-control" rows="2" style="width:100%;margin-top:4px">${esc(it.note)}</textarea>
+      <div style="margin-top:8px;display:flex;gap:8px;justify-content:flex-end"><button class="btn btn-primary btn-sm" id="bd-save">Save note</button></div>
+    </div>`;
+  document.getElementById('bd-modal').classList.add('open');
+  document.getElementById('bd-save').onclick = async () => {
+    const note = document.getElementById('bd-note').value;
+    try {
+      const r = await fetch(`/api/budget/${it.id}/note`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
+      if (!r.ok) throw new Error('Save failed (HTTP ' + r.status + ')');
+      it.note = note; showToast('Note saved'); renderLines(yearItems(), ...periodRange(st.period));
+    } catch (e) { showToast(e.message, 'error'); }
+  };
+}
+function closeDetail() { document.getElementById('bd-modal').classList.remove('open'); }
+
+// ── data sources & import ────────────────────────────────────────────────────
+function renderSourceTable() {
+  const src = (DATA.meta.sources || []).slice().sort((x, y) => y.year - x.year || x.country.localeCompare(y.country));
+  document.getElementById('src-table').innerHTML = src.length
+    ? '<thead><tr><th>Country</th><th>Year</th><th>Type</th><th>Actual through</th><th class="num">Lines</th><th>File</th><th>Imported</th><th></th></tr></thead><tbody>'
+      + src.map(s => `<tr><td>${COUNTRY_FLAG[s.country]} ${esc(s.country)}</td><td>${s.year}</td><td><span class="src-pill ${esc(s.kind)}">${esc((KIND_LABEL[s.kind] || [s.kind])[0])}</span></td>`
+        + `<td>${s.actual_months ? MON[s.actual_months - 1] + ' ' + s.year : '<span class="hint">budget only</span>'}</td><td class="num">${s.lines}</td>`
+        + `<td class="hint">${esc(s.source_file)}</td><td class="hint">${esc((s.imported_at || '').slice(0, 16).replace('T', ' '))}</td>`
+        + `<td><button class="btn btn-ghost btn-sm" data-del="${esc(s.country)}|${s.year}" title="Remove ${esc(s.country)} ${s.year}">🗑</button></td></tr>`).join('') + '</tbody>'
+    : '<tbody><tr><td class="hint">No budget data loaded yet.</td></tr></tbody>';
+  document.querySelectorAll('#src-table [data-del]').forEach(btn => btn.addEventListener('click', async () => {
+    const [c, y] = btn.dataset.del.split('|');
+    if (!confirm(`Remove all ${c} ${y} budget lines?`)) return;
+    try { await apiDelete(`/api/budget/${encodeURIComponent(c)}/${y}`); showToast(`${c} ${y} removed`); await loadData(); }
+    catch (e) { showToast(e.message, 'error'); }
+  }));
+}
+
+let PENDING = [];   // [{ file, sheets, items, plan }]
+const tick = () => new Promise(r => setTimeout(r, 30));
+function fileToArrayBuffer(file) { return new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsArrayBuffer(file); }); }
+async function postImport(body) {
+  const r = await fetch('/api/budget/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const t = await r.text(); const d = t ? JSON.parse(t) : {};
+  if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+async function readFiles() {
+  const input = document.getElementById('imp-files'), status = document.getElementById('imp-status');
+  const files = [...(input.files || [])];
+  if (!files.length) { showToast('Choose one or more .xlsx files first', 'error'); return; }
+  if (typeof XLSX === 'undefined') { showToast('Excel reader not loaded — hard-refresh the page', 'error'); return; }
+  PENDING = []; document.getElementById('imp-preview').innerHTML = '';
+  const errors = [];
+  for (const [i, file] of files.entries()) {
+    status.textContent = `Reading ${i + 1}/${files.length}: ${file.name} (${(file.size / 1048576).toFixed(1)} MB)…`;
+    await tick();
+    try {
+      const { items, sheets } = C.parseWithXLSX(XLSX, await fileToArrayBuffer(file), 'array', file.name);
+      const { plan } = await postImport({ rows: items, file_name: file.name, dry_run: true });
+      PENDING.push({ file: file.name, sheets, items, plan });
+    } catch (e) { errors.push(`${file.name}: ${e.message}`); }
+  }
+  status.textContent = errors.length ? '⚠️ ' + errors.join(' · ') : '';
+  renderPreview();
+}
+function renderPreview() {
+  const el = document.getElementById('imp-preview');
+  if (!PENDING.length) { el.innerHTML = ''; return; }
+  const rows = PENDING.flatMap(p => p.plan.map(x => ({ ...x, file: p.file, sheet: p.sheets.join(', ') })));
+  el.innerHTML = `<div class="bdg-scroll"><table class="imp-table"><thead><tr><th>File · sheet</th><th>Country</th><th>Year</th><th>Type</th><th class="num">Lines</th><th class="num">Budget</th><th class="num">Actual+Fcst</th><th>Actual through</th><th>Action</th></tr></thead><tbody>`
+    + rows.map(x => `<tr><td class="hint">${esc(x.file)}<br>· ${esc(x.sheet)}</td><td>${COUNTRY_FLAG[x.country]} ${esc(x.country)}</td><td>${x.year}</td><td>${esc((KIND_LABEL[x.kind] || [x.kind])[0])}</td>`
+      + `<td class="num">${x.lines}</td><td class="num">${USD(x.budget)}</td><td class="num">${x.actual ? USD(x.actual) : '–'}</td><td>${x.actual_months ? MON[x.actual_months - 1] : '–'}</td>`
+      + `<td><span class="act-${x.action}">${x.action === 'add' ? 'Add' : x.action === 'replace' ? `Replace ${x.existing} lines` : 'Skip'}</span>${x.reason ? `<div class="hint">${esc(x.reason)}</div>` : ''}</td></tr>`).join('')
+    + `</tbody></table></div><div style="margin-top:10px;display:flex;gap:10px;align-items:center"><button class="btn btn-primary" id="imp-save">Save ${PENDING.length} file${PENDING.length > 1 ? 's' : ''}</button><button class="btn btn-ghost" id="imp-cancel">Cancel</button><span class="hint">Approved budgets are saved first, then reports.</span></div>`;
+  document.getElementById('imp-cancel').onclick = () => { PENDING = []; renderPreview(); };
+  document.getElementById('imp-save').onclick = saveImport;
+}
+async function saveImport() {
+  const btn = document.getElementById('imp-save'), status = document.getElementById('imp-status');
+  btn.disabled = true;
+  const order = { approved: 0, report: 1, legacy: 2 };
+  const list = PENDING.slice().sort((x, y) => (order[x.items[0].kind] || 0) - (order[y.items[0].kind] || 0));
+  const done = [];
+  try {
+    for (const p of list) {
+      status.textContent = `Saving ${p.file}…`;
+      const d = await postImport({ rows: p.items, file_name: p.file });
+      d.plan.forEach(x => done.push(`${x.country} ${x.year}: ${x.action === 'skip' ? 'skipped' : x.lines + ' lines'}`));
+    }
+    status.textContent = '✅ ' + done.join(' · ');
+    showToast('Budget imported');
+    PENDING = []; renderPreview(); document.getElementById('imp-files').value = '';
+    await loadData();
+  } catch (e) { status.textContent = '❌ ' + e.message; showToast(e.message, 'error'); btn.disabled = false; }
+}
+
+// ── main ─────────────────────────────────────────────────────────────────────
+function renderAll() {
+  save();
+  buildToolbar();
+  renderSources();
+  const items = yearItems();
+  const [a, b] = periodRange(st.period);
+  renderKpis(items, a, b);
+  renderSummary(items, a, b);
+  renderMonthly(items, a, b);
+  renderYoy();
+  renderLines(items, a, b);
+  renderSourceTable();
 }
 
 async function loadData() {
-  const d = await apiGet('/api/budget');
-  ALL_ITEMS = d.items || [];
-  GL_MAP = d.glMap || {};
-  for (const f of FILTERS) selections[f.field] = '';
-  searchTerm = '';
-  const se = document.getElementById('f-search'); if (se) se.value = '';
-  rebuildSelects();
-  render();
+  DATA = await apiGet('/api/budget');
+  const years = DATA.meta.years || [];
+  if (!years.includes(st.year)) {
+    const now = new Date().getFullYear();
+    st.year = years.includes(now) ? now : (years[years.length - 1] || now);
+    st.period = 'fy';
+  }
+  if (!validPeriod()) st.period = 'fy';
+  document.getElementById('export-btn').href = '/api/budget/export.xlsx?t=' + Date.now();
+  renderAll();
 }
 
 async function initBudget() {
@@ -240,12 +520,18 @@ async function initBudget() {
   if (!(u.team === 'IT' && u.role === 'admin')) { gate.style.display = ''; gateMsg.textContent = '🔒 Budget Tracking is available to IT administrators only.'; return; }
   try {
     body.style.display = '';
+    document.getElementById('f-period').addEventListener('change', (e) => { st.period = e.target.value; renderAll(); });
+    const se = document.getElementById('f-search');
+    se.value = st.q || '';
+    let t = null;
+    se.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { st.q = se.value; renderAll(); }, 150); });
+    document.getElementById('f-ek').addEventListener('change', (e) => { st.ek = e.target.checked; renderAll(); });
+    document.getElementById('f-zero').addEventListener('change', (e) => { st.hideZero = e.target.checked; renderAll(); });
+    document.getElementById('imp-read').addEventListener('click', readFiles);
+    document.getElementById('bd-close').addEventListener('click', closeDetail);
+    document.getElementById('bd-modal').addEventListener('click', (e) => { if (e.target.id === 'bd-modal') closeDetail(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDetail(); });
     await loadData();
-    FILTERS.forEach(f => { const sel = document.getElementById(f.id); if (sel) sel.addEventListener('change', () => onFilterChange(f.field, sel.value)); });
-    const searchEl = document.getElementById('f-search');
-    if (searchEl) searchEl.addEventListener('input', () => { searchTerm = searchEl.value; render(); });
-    document.getElementById('reset-filters').addEventListener('click', () => { for (const f of FILTERS) selections[f.field] = ''; searchTerm = ''; if (searchEl) searchEl.value = ''; rebuildSelects(); render(); });
-    wireBudgetImport();
   } catch (e) { gate.style.display = ''; gateMsg.textContent = 'Could not load budget data: ' + e.message; }
 }
 

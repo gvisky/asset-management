@@ -72,7 +72,7 @@ async function runSync({ endpoint, inputId, statusId, btnId, label }) {
     const xlsx_base64 = await fileToBase64(file);
     const r = await fetch(endpoint, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ xlsx_base64 }),
+      body: JSON.stringify({ xlsx_base64, file_name: file.name }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Import failed');
@@ -102,12 +102,12 @@ async function runImportBudget() {
     const xlsx_base64 = await fileToBase64(file);
     const r = await fetch('/api/budget/import', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ xlsx_base64 }),
+      body: JSON.stringify({ xlsx_base64, file_name: file.name }),
     });
     const text = await r.text();
     const d = text ? JSON.parse(text) : {};
     if (!r.ok) throw new Error(d.error || ('Import failed (HTTP ' + r.status + ')'));
-    const by = Object.entries(d.byCountry || {}).map(([k, v]) => `${k} ${v}`).join(', ');
+    const by = (d.plan || []).map(p => `${p.country} ${p.year}: ${p.action === 'skip' ? 'skipped' : p.lines + ' lines'}`).join(', ');
     status.textContent = `✅ Imported ${d.inserted} line items (${by}).`;
     showToast(`Budget synced: ${d.inserted} line items`);
     input.value = '';
