@@ -1247,3 +1247,6 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .nm-move { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
 .nm-vt { width: 100%; border-collapse: collapse; font-size: 13px; } .nm-vt th, .nm-vt td { padding: 7px 10px; border-bottom: 1px solid #eef2f7; text-align: left; } .nm-vt th { background: #f8fafc; position: sticky; top: 0; }
 @media (max-width: 900px) { .nm-wrap { grid-template-columns: 1fr; } .nm-side { position: static; max-height: 260px; } }
+.nm-focus { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+.nm-zone { font: 600 13px system-ui, sans-serif; fill: #94a3b8; text-anchor: middle; letter-spacing: .03em; }
+.nm-node.far { opacity: .6; }
