@@ -8,6 +8,7 @@ const NM = (() => {
   const errText = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
   const $ = (id) => document.getElementById(id);
   let D = { site: '', sites: [], devices: [], ports: [], vlans: [], can: {} };
+  let mode = 'map';   // map = layers (+ focus) · logical / physical / system = document-style views (netmap-views.js)
   let focus = true, depth = 1, fpos = new Map();   // focus: show only the selected device and what is cabled to it
   let byHost = new Map(), byId = new Map(), portsOf = new Map(), sel = null, view = { x: 0, y: 0, w: 1600, h: 900 }, q = '', portFilter = 'all';
   const CABLES = ['', 'CAT6', 'CAT5e', 'SFP+ SR', 'SFP+ LR', 'SFP LX', 'SFP SX', 'DAC', 'Fiber', 'Console', 'Other'];
@@ -98,7 +99,7 @@ const NM = (() => {
   }
   // Focus: the selected device in the middle, devices one layer up ("in front", towards ISP / core) above,
   // one layer down ("behind", towards access / servers) below, same layer left and right. depth 2 = their neighbours too.
-  const focusOn = () => focus && sel && byId.has(sel);
+  const focusOn = () => mode === 'map' && focus && sel && byId.has(sel);
   function neighbours() {
     const adj = new Map();
     for (const l of links()) { (adj.get(l.a) || adj.set(l.a, new Set()).get(l.a)).add(l.b); (adj.get(l.b) || adj.set(l.b, new Set()).get(l.b)).add(l.a); }
@@ -130,6 +131,7 @@ const NM = (() => {
   function renderTopoKeep(keep) { keepPos = keep; renderTopo(); keepPos = null; }
   const pos = (d) => (focusOn() ? fpos.get(d.id) : d);
   function fit() {
+    if (mode !== 'map' && lastBounds) { view = { ...lastBounds }; return apply(); }
     if (focusOn()) {
       const ps = [...fpos.values()], xs = ps.map(p => p.x), ys = ps.map(p => p.y);
       const x0 = Math.min(...xs) - 130, x1 = Math.max(...xs) + 130, y0 = Math.min(...ys) - 80, y1 = Math.max(...ys) + 90;
@@ -142,7 +144,12 @@ const NM = (() => {
     view = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; apply();
   }
   const apply = () => $('nm-svg').setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
-  function renderTopo() {
+  let lastBounds = null;
+  function renderTopo(fitIt) {
+    if (mode !== 'map' && self.NMViews) {
+      NMViews.svg(mode).then(r => { $('nm-svg').innerHTML = r.svg; lastBounds = r.bounds; if (fitIt) { view = { ...r.bounds }; apply(); } const fb = $('nm-focus'); if (fb) fb.innerHTML = ''; });
+      return;
+    }
     const F = focusOn(), dist = F ? focusLayout() : null;
     const showing = (h) => !F || dist.has(h);
     // Focus: only the links that lead out from the selected device (step 1 → step 2), not between neighbours.
@@ -188,23 +195,28 @@ const NM = (() => {
       view = { x: p.x - (p.x - view.x) * f, y: p.y - (p.y - view.y) * f, w: view.w * f, h: view.h * f }; apply(); }, { passive: false });
     svg.addEventListener('pointerdown', (e) => {
       const node = e.target.closest('.nm-node'), p = svgPoint(e);
+      if (node && mode !== 'map') { drag = { kind: 'click', id: Number(node.dataset.id) }; svg.setPointerCapture(e.pointerId); return; }
       if (node) { const d = byId.get(Number(node.dataset.id)), P = pos(d); drag = { kind: 'node', d, P, dx: p.x - P.x, dy: p.y - P.y, moved: false }; }
       else drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, v: { ...view }, moved: false };
       svg.setPointerCapture(e.pointerId);
     });
     svg.addEventListener('pointermove', (e) => {
       if (!drag) return hover(e);
+      if (drag.kind === 'click') return;
       if (drag.kind === 'node') { const p = svgPoint(e); drag.P.x = Math.round(p.x - drag.dx); drag.P.y = Math.round(p.y - drag.dy); drag.moved = true;
         if (focusOn()) { const keep = new Map(fpos); renderTopoKeep(keep); } else renderTopo(); }
       else { const r = svg.getBoundingClientRect(); view.x = drag.v.x - (e.clientX - drag.sx) / r.width * view.w; view.y = drag.v.y - (e.clientY - drag.sy) / r.height * view.h; drag.moved = Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 3; apply(); }
     });
     svg.addEventListener('pointerup', async (e) => {
       const d = drag; drag = null; if (!d) return;
+      if (d.kind === 'click') { select(d.id); return; }
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      if (!d.moved && under && under.closest('.nm-edge')) { NMViews.edge(true); return; }
       if (d.kind === 'node') {
         if (d.moved) { if (D.can.edit && !focusOn()) { try { await apiPut('/api/netmap/device/' + d.d.id, { x: d.d.x, y: d.d.y }); } catch {} } }
         else select(d.d.id);
       } else if (!d.moved) {
-        const l = e.target.closest('.nm-link');
+        const l = (under && under.closest('.nm-link')) || e.target.closest('.nm-link');
         if (l) { const [a] = l.dataset.k.split('~'); select(byHost.get(a).id, false, l.dataset.k); }
       }
     });
@@ -400,6 +412,7 @@ const NM = (() => {
     $('nm-site').onchange = (e) => { sel = null; load(e.target.value).then(fit); };
     $('nm-q').addEventListener('input', (e) => { q = e.target.value.trim(); renderList(); });
     $('nm-fit').onclick = fit;
+    $('nm-mode').onchange = (e) => { mode = e.target.value; $('nm-auto').style.display = mode === 'map' ? '' : 'none'; document.querySelector('.nm-legend').style.display = mode === 'map' ? '' : 'none'; renderTopo(true); };
     $('nm-auto').onclick = async () => { focus = false; autoPlace(true); renderTopo(); fit(); if (D.can.edit && confirm('Save this layout for everyone?')) savePositions(D.devices); };
     $('nm-import').onclick = () => $('nm-file').click();
     $('nm-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importDoc(f); };
@@ -410,7 +423,7 @@ const NM = (() => {
     load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { data: () => D, known, portTip, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
+  return { data: () => D, known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); },
     outlet: (o) => { const pp = (D.patches || []).find(x => String(x.outlet).toUpperCase() === String(o).toUpperCase()); if (pp && self.NMFaces) NMFaces.panel(pp.panel); else showToast('Outlet ' + o + ' is not in the patch-panel list', 'error'); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };

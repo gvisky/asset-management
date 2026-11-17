@@ -1282,3 +1282,10 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .nm-trace-box summary { cursor: pointer; font-weight: 600; font-size: 13px; }
 .nm-trace { padding: 6px 2px; font-size: 13px; } .tr-step { display: flex; gap: 8px; align-items: flex-start; } .tr-step span { width: 20px; text-align: center; }
 .tr-step.here { background: #eff6ff; border-radius: 6px; padding: 3px 4px; } .tr-arrow { color: #94a3b8; padding-left: 4px; font-size: 11px; }
+.nm-ip { font: 600 10px ui-monospace, monospace; text-anchor: middle; fill: #475569; paint-order: stroke; stroke: #f8fafc; stroke-width: 3px; }
+.nm-po { font: 700 9.5px system-ui; text-anchor: middle; fill: #0f172a; }
+.nm-pe { font: 600 9px system-ui; text-anchor: middle; fill: #b91c1c; paint-order: stroke; stroke: #fff; stroke-width: 3px; }
+.nm-box { fill: rgba(255,255,255,.65); stroke: #94a3b8; stroke-width: 1.5; stroke-dasharray: 6 4; } .nm-box.rack, .nm-box.cab { fill: #f1f5f9; stroke: #0e7490; stroke-width: 2; stroke-dasharray: none; }
+.nm-boxl { font: 800 12px system-ui; fill: #b91c1c; letter-spacing: .04em; }
+.nm-bar { fill: #1e293b; stroke: #0f172a; } .nm-node.on .nm-bar { fill: #1d4ed8; } .nm-bart { font: 700 10px system-ui; fill: #fde047; text-anchor: middle; }
+.nm-edge { cursor: pointer; } .nm-edge:hover rect { fill: #eff6ff; }
