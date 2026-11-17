@@ -17,7 +17,7 @@
 
   const MODES = {
     missing: {
-      title: '⚠️ Needs Attention — Missing Info',
+      title: '⚠️ Needs Attention — Assets: Missing Info',
       issues: ['Asset code', 'Serial', 'PC No', 'AD Name', 'Dup Serial'],
       fields: { 'Serial': 'serial_no', 'Asset code': 'asset_code', 'PC No': 'computer_no', 'AD Name': 'ad_name' },
       load: async () => apiGet('/api/assets/incomplete'),
@@ -26,7 +26,7 @@
       link: 'incomplete',
     },
     ad: {
-      title: '⚠️ Needs Attention — Missing AD & Asset',
+      title: '⚠️ Needs Attention — Assets: Missing AD & Asset',
       issues: [AD_MISSING, AD_UNMATCHED],
       fields: { [AD_MISSING]: 'ad_name', [AD_UNMATCHED]: 'ad_name' },
       load: async () => (await apiGet('/api/assets?ad_issue=1&limit=10000')).data || [],
