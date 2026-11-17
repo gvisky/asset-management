@@ -1250,3 +1250,23 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .nm-focus { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; flex-wrap: wrap; }
 .nm-zone { font: 600 13px system-ui, sans-serif; fill: #94a3b8; text-anchor: middle; letter-spacing: .03em; }
 .nm-node.far { opacity: .6; }
+.nm-ips { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 12.5px; }
+.nm-ips i { font-style: normal; color: #64748b; margin-right: 2px; }
+.ns-tbl { width: 100%; border-collapse: collapse; font-size: 13px; } .ns-tbl th, .ns-tbl td { padding: 7px 8px; border-bottom: 1px solid #eef2f7; vertical-align: top; text-align: left; }
+.ns-tbl tr.ns-add td { background: #f0fdf4; }
+.ns-warn { color: #b45309; font-size: 12px; margin-top: 4px; max-width: 280px; }
+/* Network map: racks + drawings */
+.nm-tall { max-height: 78vh; }
+.rk-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff; z-index: 2; }
+.rk-wrap { padding: 6px 4px; }
+.rk-svg { flex: none; user-select: none; touch-action: none; }
+.rk-name { font: 800 15px system-ui; text-anchor: middle; fill: #0f172a; } .rk-use { font: 11px system-ui; text-anchor: middle; fill: #64748b; }
+.rk-area { font: 800 13px system-ui; fill: #94a3b8; letter-spacing: .12em; }
+.rk-u { font: 600 8.5px system-ui; fill: #fbbf24; text-anchor: middle; }
+.rk-lbl { font: 700 9px system-ui; fill: #fde047; text-anchor: middle; } .rk-small { font: 8px system-ui; }
+.rk-item { cursor: pointer; } .rk-item:hover > rect:first-of-type { filter: brightness(1.15); } .rk-item.dev:hover { outline: none; } .rk-item.drag { opacity: .75; }
+.rk-draw { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 10px; padding: 10px 12px 0; } .rk-draw img { width: 100%; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+.rk-draw figcaption { font-size: 12px; color: #64748b; }
+.dw-h { margin: 14px 12px 6px; } .dw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; padding: 0 12px 12px; }
+.dw-card { border: 1px solid var(--border); border-radius: 8px; padding: 8px; background: #fff; } .dw-card img { width: 100%; height: 150px; object-fit: contain; background: #f8fafc; border-radius: 4px; }
+.dw-name { font-weight: 600; font-size: 13px; margin-top: 6px; }

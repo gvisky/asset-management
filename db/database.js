@@ -1259,6 +1259,26 @@ async function migrate() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT DEFAULT '', device TEXT DEFAULT '', port TEXT DEFAULT '',
       before TEXT DEFAULT '', after TEXT DEFAULT '', by_user TEXT DEFAULT '', at TEXT DEFAULT (datetime('now')));`);
 
+  // Network map ↔ Server Inventory: IPs per function (iDRAC, vMotion, ESXi …), services, service tag, link.
+  const ndcols = (await backend.all('PRAGMA table_info(net_devices)')).map(c => c.name);
+  for (const [col, type] of [['ips', "TEXT DEFAULT ''"], ['services', "TEXT DEFAULT ''"], ['service_tag', "TEXT DEFAULT ''"], ['server_id', 'INTEGER DEFAULT NULL']]) {
+    if (!ndcols.includes(col)) await backend.run(`ALTER TABLE net_devices ADD COLUMN ${col} ${type}`);
+  }
+  const svcols = (await backend.all('PRAGMA table_info(servers)')).map(c => c.name);
+  if (!svcols.includes('net_info')) await backend.run("ALTER TABLE servers ADD COLUMN net_info TEXT DEFAULT ''");
+
+  // Racks (front view) and their contents; drawings (rack / topology / floor-plan pictures from the document).
+  await backend.script(`CREATE TABLE IF NOT EXISTS net_racks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, kind TEXT DEFAULT 'rack',
+      units INTEGER NOT NULL DEFAULT 42, sort INTEGER DEFAULT 0, area TEXT DEFAULT '', notes TEXT DEFAULT '', UNIQUE(site, name));
+    CREATE TABLE IF NOT EXISTS net_rack_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, rack_id INTEGER NOT NULL, device_id INTEGER DEFAULT NULL, kind TEXT DEFAULT 'device',
+      label TEXT DEFAULT '', u INTEGER NOT NULL DEFAULT 1, height INTEGER NOT NULL DEFAULT 1, auto INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS net_drawings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, category TEXT DEFAULT '',
+      mime TEXT DEFAULT 'image/png', size INTEGER DEFAULT 0, data_b64 TEXT DEFAULT '', pins TEXT DEFAULT '',
+      uploaded_by TEXT DEFAULT '', uploaded_at TEXT DEFAULT (datetime('now')));`);
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");

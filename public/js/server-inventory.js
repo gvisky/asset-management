@@ -82,7 +82,7 @@ function rowHtml(s, inGroup) {
     <tr class="${s.fields_locked ? 'row-locked' : ''}${inGroup ? ' sg-in' : ''}">
       <td class="text-muted text-sm">${s.id}</td>
       <td>${s.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}<code style="font-size:12px;color:var(--brand)">${sEsc(s.asset_code) || '—'}</code></td>
-      <td><strong>${sEsc(s.hostname) || '—'}</strong></td>
+      <td><strong>${sEsc(s.hostname) || '—'}</strong>${s.hostname && /\//.test(s.hostname) ? ` <a href="/network-map.html?host=${encodeURIComponent(s.hostname)}" title="Open on the network map" onclick="event.stopPropagation()">🗺</a>` : ''}</td>
       <td>${sEsc(s.brand_model) || '—'} ${DeviceSpecs.btn(s.brand_model, s.category)}</td>
       <td class="text-muted text-sm">${sEsc(s.producer) || '—'}</td>
       <td>${s.category ? `<span class="badge badge-office">${sEsc(s.category)}</span>` : '—'}</td>
@@ -155,6 +155,8 @@ async function onView(id) {
       ['Purchase Date', s.purchase_date], ['Warranty', warrantyBadge(s.warranty_expiry) || s.warranty_expiry],
       ['Vendor', s.vendor], ['Cost', s.cost], ['PO Number', s.po_number],
       ['History Usage', s.history_usage], ['Remark', s.remark],
+      ['Network IPs / services', sEsc(s.net_info || '')],
+      ['Network map', s.hostname ? `<a href="/network-map.html?host=${encodeURIComponent(s.hostname)}">🗺 Open ${sEsc(s.hostname)} on the network map</a>` : ''],
     ];
     document.getElementById('view-body').innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -346,3 +348,44 @@ document.addEventListener('DOMContentLoaded', () => {
     catch (e) { showToast('Delete failed', 'error'); }
   });
 });
+
+// ── Update from the network map (implementation document) — admins ──
+// The button shows for admins once the page knows who you are.
+document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin') document.getElementById('btn-netsync').style.display = '';
+  const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v); }, 150); });
+let nsChoose = {};
+async function openNetSync(keepSite) {
+  let sites = [];
+  try { sites = (await apiGet('/api/netmap')).sites; } catch {}
+  if (!sites.length) { showToast('No network map yet — import the implementation document on the Network map page first', 'error'); return; }
+  const site = keepSite || (sites.length === 1 ? sites[0].site : (prompt('Which site? ' + sites.map(s => s.site).join(', '), sites[0].site) || ''));
+  if (!site) return;
+  if (!keepSite) nsChoose = {};
+  const d = await apiGet('/api/netmap/inventory-sync?site=' + encodeURIComponent(site) + '&choose=' + encodeURIComponent(JSON.stringify(nsChoose)));
+  let ov = document.getElementById('ns-ov');
+  if (!ov) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="ns-ov"><div class="modal" style="max-width:980px">
+      <div class="modal-header"><span class="modal-title" id="ns-t"></span><button class="modal-close" onclick="document.getElementById('ns-ov').classList.remove('open')">✕</button></div>
+      <div class="modal-body" id="ns-b" style="max-height:70vh;overflow:auto"></div><div class="modal-footer" id="ns-f"></div></div></div>`); ov = document.getElementById('ns-ov'); }
+  const LBL = { hostname: 'Hostname', ip_address: 'IP', location: 'Location', role: 'Role / name', net_info: 'IP list', brand_model: 'Model', serial_no: 'Serial', category: 'Category' };
+  const todo = d.items.filter(i => i.action !== 'same');
+  document.getElementById('ns-t').textContent = `Update Server Inventory from the network map — ${site}`;
+  document.getElementById('ns-b').innerHTML = `<p class="text-sm" style="margin-top:0">Matched by serial / service tag. <b>${d.items.filter(i => i.action === 'update').length}</b> to update ·
+      <b>${d.items.filter(i => i.action === 'add').length}</b> not in Server Inventory (add) · <b style="color:#b45309">${d.items.filter(i => i.warn).length}</b> matched by model only (check ⚠) · ${d.items.filter(i => i.action === 'same').length} already up to date. Untick what you don't want.</p>
+    <table class="ns-tbl"><thead><tr><th><input type="checkbox" id="ns-all" checked></th><th>Device (network map)</th><th>Server Inventory</th><th>Changes</th></tr></thead><tbody>
+    ${todo.map(i => `<tr class="ns-${i.action}"><td><input type="checkbox" class="ns-ck" value="${i.net_id}" ${i.warn ? '' : 'checked'} title="${i.warn ? 'Not ticked: matched by model only — tick after checking the record' : ''}"></td>
+      <td><b>${sEsc(i.hostname)}</b><div class="text-muted text-sm">${sEsc(i.role)} · ${sEsc(i.model)}${i.serial ? ' · S/N ' + sEsc(i.serial) : ''}</div></td>
+      <td><select class="form-control ns-pick" data-net="${i.net_id}" style="min-width:230px;font-size:12.5px;padding:4px 6px">
+          <option value="0"${i.server ? '' : ' selected'}>➕ Add as a new record</option>
+          ${i.candidates.map(c => `<option value="${c.id}"${i.server && i.server.id === c.id ? ' selected' : ''}>${sEsc(c.label)}</option>`).join('')}</select>
+        ${i.warn ? `<div class="ns-warn">⚠ ${sEsc(i.warn)}</div>` : i.how === 'serial' ? '<div class="text-sm" style="color:#15803d">✓ same serial</div>' : ''}</td>
+      <td class="text-sm">${Object.entries(i.fields).map(([k, v]) => `<div><b>${LBL[k] || k}</b>: ${v.from ? `<s class="text-muted">${sEsc(v.from)}</s> → ` : ''}${sEsc(v.to).replace(/\n/g, '<br>')}</div>`).join('')}</td></tr>`).join('') || '<tr><td colspan="4" class="empty-state">Everything is already up to date.</td></tr>'}</tbody></table>`;
+  document.getElementById('ns-f').innerHTML = `<button class="btn btn-ghost" onclick="document.getElementById('ns-ov').classList.remove('open')">Cancel</button><button class="btn btn-primary" id="ns-go" ${todo.length ? '' : 'disabled'}>Apply ticked</button>`;
+  document.querySelectorAll('.ns-pick').forEach(sel => { sel.onchange = () => { nsChoose[sel.dataset.net] = Number(sel.value); openNetSync(site); }; });
+  const all = document.getElementById('ns-all'); if (all) all.onchange = () => document.querySelectorAll('.ns-ck').forEach(c => { c.checked = all.checked; });
+  document.getElementById('ns-go').onclick = async () => {
+    const ids = [...document.querySelectorAll('.ns-ck:checked')].map(c => Number(c.value));
+    try { const r = await apiPost('/api/netmap/inventory-sync', { site, net_ids: ids, choose: nsChoose }); showToast(`${r.updated} updated · ${r.added} added`); ov.classList.remove('open'); loadServers(1); loadSummary && loadSummary(); }
+    catch (e) { showToast('Could not update', 'error'); }
+  };
+  ov.classList.add('open');
+}

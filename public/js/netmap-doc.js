@@ -38,6 +38,7 @@
     const doc = new DOMParser().parseFromString(xml, 'application/xml');
     const body = doc.getElementsByTagNameNS(W, 'body')[0];
     const devices = new Map(), ports = [], vlans = [];
+    const ipInfo = [];   // { host, ip, name, gateway, service, serial, service_tag } from 7.1 IP MGMT / System (never user names / passwords)
     let section = '';
     for (const el of body.childNodes) {
       if (el.namespaceURI !== W) continue;
@@ -73,8 +74,35 @@
         }
         continue;
       }
-      // VLAN – IP table
+      // 7.1.2 System: No | Roles | Devices | Service Tag | Serial Number | Hostname | Function | IP MGMT (hostname only on a host's first row)
       const h0 = (rows[0] || []).join(' | ');
+      if (/function/i.test(h0) && /ip mgmt/i.test(h0)) {
+        const hdr = rows[0].map(h => h.toLowerCase()), ix = (re) => hdr.findIndex(h => re.test(h));
+        const iT = ix(/service tag/), iS = ix(/serial/), iH = ix(/hostname/), iF = ix(/function/), iI = ix(/ip mgmt/);
+        let host = '', tag = '';
+        for (const r of rows.slice(1)) {
+          const t = (r[iT] || '').trim(), h = (r[iH] || '').trim().toUpperCase(), ip = (r[iI] || '').trim();
+          if (h) host = h; else if (t && t !== tag) host = '';
+          if (t) tag = t;
+          if (!ip) continue;
+          ipInfo.push({ host: t ? host : '(cluster)', name: (r[iF] || '').trim(), ip, service_tag: t, serial: (r[iS] || '').trim() });
+        }
+        continue;
+      }
+      // 7.1.1 Network: key / value rows (HOSTNAME, IP ADDRESS, IP GATEWAY, SERVICE …) — credentials are skipped.
+      if (rows.some(r => /^HOSTNAME$/i.test((r[1] || '').trim())) && rows.some(r => /^IP ADDRESS$/i.test((r[1] || '').trim()))) {
+        let cur = null;
+        for (const r of rows) {
+          const k = (r[1] || '').trim().toUpperCase(), v = (r[2] || '').trim();
+          if (/^\d+\.\d+$/.test((r[0] || '').trim())) { cur = { host: /^[A-Z0-9][\w-]*-\d+$/i.test(v) ? v.toUpperCase() : '', title: k, model: v }; ipInfo.push(cur); continue; }
+          if (!cur || /USER|PASS|PPPOE|SECRET|KEY/.test(k)) continue;
+          if (k === 'HOSTNAME') cur.host = (v.match(/^[^\s(]+/) || [''])[0].toUpperCase();
+          else if (k === 'IP ADDRESS') cur.ip = v; else if (k === 'IP GATEWAY') cur.gateway = v;
+          else if (k === 'DEVICE IP ADDRESS') cur.device_ip = v; else if (k === 'SERVICE') cur.service = v;
+        }
+        continue;
+      }
+      // VLAN – IP table
       if (/vlan/i.test(h0) && /network/i.test(h0)) {
         const hdr = rows[0].map(h => h.toLowerCase());
         const ix = (re) => hdr.findIndex(h => re.test(h));
@@ -104,6 +132,23 @@
         ports.push({ device: p.peer_host, port: p.peer_port, peer_host: p.device, peer_port: p.port, cable: p.cable, mode: '', vlan: '', grp: p.grp, patch: '' });
         have.add(p.peer_host + '|' + p.peer_port);
       }
+    }
+    // Attach the IP information to the devices (same name, the other spelling, or the same management IP).
+    const findDev = (h, ip) => devices.get(h) || devices.get(byKey.get(key(h)) || '') || [...devices.values()].find(d => [...devices.keys()].length && d.hostname.endsWith('/' + h.replace(/^.*\//, '')))
+      || (ip && [...devices.values()].find(d => d.mgmt_ip && d.mgmt_ip.split('/')[0] === ip.split('/')[0])) || null;
+    let firstHci = null;
+    for (const x of ipInfo) {
+      if (x.host === '(cluster)') { x.dev = firstHci; } else x.dev = x.host ? findDev(x.host, x.ip) : null;
+      const d = x.dev; if (!d) continue;
+      if (/hci|vxrail/i.test(d.role + d.hostname) && !firstHci) firstHci = d;
+      d.ips = d.ips || [];
+      if (x.name) d.ips.push({ name: (x.host === '(cluster)' ? 'Cluster ' : '') + x.name, ip: x.ip });
+      else { if (x.ip) d.ips.push({ name: 'IP address', ip: x.ip }); if (x.gateway) d.ips.push({ name: 'Gateway', ip: x.gateway }); if (x.device_ip) d.ips.push({ name: 'Device IP', ip: x.device_ip }); }
+      if (x.service) d.services = x.service;
+      if (x.service_tag) d.service_tag = x.service_tag;
+      if (x.serial && !d.serial) d.serial = x.serial;
+      if (x.model && !d.model && !/LEASE|LINE/i.test(x.model)) d.model = x.model;
+      if (x.title && /LEASE LINE|FTTH/.test(x.title)) d.alias = d.alias || x.title;
     }
     return { devices: [...devices.values()], ports, vlans, counts: { devices: devices.size, ports: ports.length, links: ports.filter(p => p.peer_host).length, vlans: vlans.length } };
   }

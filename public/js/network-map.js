@@ -240,6 +240,7 @@ const NM = (() => {
       return `<div class="fp-row"><span class="fp-lbl">${esc(k.trim())}</span><div class="fp-grid"><div>${top.map(btn).join('')}</div><div>${bot.map(btn).join('')}</div></div></div>`;
     }).join('');
   }
+  const ipList = (d) => { let l = []; try { l = JSON.parse(d.ips || '[]'); } catch {} return l.length || d.services ? `<div class="nm-ips">${l.map(x => `<span><i>${esc(x.name)}</i> ${esc(x.ip)}</span>`).join('')}${d.services ? `<span><i>services</i> ${esc(d.services)}</span>` : ''}</div>` : ''; };
   function renderDevice(linkKey) {
     const box = $('nm-dev');
     if (!sel) { box.innerHTML = '<div class="empty-state" style="padding:22px">Click a device (in the list or on the map) to see its front panel and ports.</div>'; return; }
@@ -250,7 +251,8 @@ const NM = (() => {
     box.innerHTML = `<div class="nm-dh">${icon(d.role, 0, 0, 40, true)}
         <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}</div>
           <div class="text-muted text-sm">${esc([d.alias, d.role, d.model].filter(Boolean).join(' · '))}</div>
-          <div class="text-sm">${d.mgmt_ip ? `IP <b>${esc(d.mgmt_ip)}</b> · ` : ''}${esc(d.location || '')}${d.serial ? ` · S/N ${esc(d.serial)}` : ''}</div></div>
+          <div class="text-sm">${d.mgmt_ip ? `IP <b>${esc(d.mgmt_ip)}</b> · ` : ''}${esc(d.location || '')}${d.serial ? ` · S/N ${esc(d.serial)}` : ''}${d.service_tag && d.service_tag !== d.serial ? ` · tag ${esc(d.service_tag)}` : ''}</div>
+          ${ipList(d)}${d.server_id ? `<div class="text-sm"><a href="/server-inventory.html?view=${d.server_id}">📦 Server Inventory record #${d.server_id}</a></div>` : ''}</div>
         <span style="flex:1"></span>
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.editDevice(${d.id})">✏️ Device</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="NM.showLog(${jsArg(d.hostname)})">🕓 Changes</button></div>
@@ -362,7 +364,9 @@ const NM = (() => {
   }
   function tab(v) {
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-    ['topo', 'vlan', 'log'].forEach(k => { $('nm-view-' + k).hidden = k !== v; });
+    ['topo', 'rack', 'draw', 'vlan', 'log'].forEach(k => { $('nm-view-' + k).hidden = k !== v; });
+    document.querySelector('.nm-legend').style.display = v === 'topo' ? '' : 'none'; $('nm-fit').style.display = $('nm-auto').style.display = v === 'topo' ? '' : 'none'; $('nm-focus').style.display = v === 'topo' ? '' : 'none';
+    if (v === 'rack' || v === 'draw') NMRacks.show(v);
     if (v === 'vlan') renderVlans();
     if (v === 'log' && !$('nm-view-log').innerHTML.trim()) showLog();
   }
@@ -401,10 +405,11 @@ const NM = (() => {
     $('nm-export').onclick = exportCsv;
     $('nm-add').onclick = () => editDevice(0);
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.v); });
-    load().then(fit).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
+    const want = new URLSearchParams(location.search).get('host');
+    load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
+  return { data: () => D, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };
 })();
