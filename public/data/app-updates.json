@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Virtual servers: Status column",
+    "items": [
+      "New Status column with a coloured badge: Active (green), Powered off (grey), Maintenance (amber), Decommissioned (red). Change it in Edit (drop-down) and filter the list by status.",
+      "Powered-off and decommissioned servers are no longer flagged 'Not in the backup reports'. Long descriptions stay inside their cell (3 lines, hover for the full text)."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Virtual servers: backup jobs from the daily backup report",
     "items": [
       "Server Inventory → ☁ Virtual servers → ⬆ Import backup report: choose the 'Daily Backups Hayat Vietnam' e-mails (NetBackup OpsCenter) saved from Outlook as .msg — several at once is fine; .eml / .txt work too. The file is read in your browser; each backup job is kept as a record (job, server, policy, status, start, end, status code). Importing the same report again adds nothing twice.",

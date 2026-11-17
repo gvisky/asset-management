@@ -5,14 +5,17 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const errText = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
   const $ = (id) => document.getElementById(id);
-  let rows = [], can = {}, q = '', kind = '', itot = '', loaded = false, newest = '';
+  let rows = [], can = {}, q = '', kind = '', itot = '', vst = '', loaded = false, newest = '';
+  // Status of a server: in use, switched off, being worked on, or removed (kept for the record).
+  const STATUSES = ['Active', 'Powered off', 'Maintenance', 'Decommissioned'];
+  const stCls = (v) => ({ Active: 'act', 'Powered off': 'off', Maintenance: 'mnt', Decommissioned: 'dec' }[v] || 'off');
   const FIELDS = [['hostname', 'Hostname *'], ['kind', 'Virtual / Physical'], ['status', 'Status'], ['ip', 'IP address'], ['infra_ip', 'Infra IP'], ['farm', 'VM farm / cluster'],
     ['it_ot', 'IT / OT'], ['system_type', 'System type (PRD / TST)'], ['platform', 'Platform'], ['os', 'OS'], ['os_version', 'OS / firmware version'], ['domain', 'Domain'],
     ['sap', 'SAP / non-SAP'], ['usage', 'Used for'], ['backup', 'Backup policy'], ['host_model', 'Host model (physical)'], ['serial', 'Serial / service tag (physical)'],
     ['cpu', 'CPU'], ['memory', 'Memory'], ['location', 'Location'], ['ref_key', 'Reference key'], ['description', 'Description', 'wide'], ['impact', 'If it stops', 'wide'], ['notes', 'Notes', 'wide'], ['backup_client', 'Name in the backup reports (if not the hostname)']];
 
   async function load() {
-    const p = new URLSearchParams(); if (q) p.set('search', q); if (kind) p.set('kind', kind); if (itot) p.set('it_ot', itot);
+    const p = new URLSearchParams(); if (q) p.set('search', q); if (kind) p.set('kind', kind); if (itot) p.set('it_ot', itot); if (vst) p.set('status', vst);
     const r = await apiGet('/api/virtual-servers?' + p); rows = r.rows; can = r.can; newest = r.newest_backup || ''; loaded = true; render();
   }
   function render() {
@@ -22,24 +25,27 @@
     box.innerHTML = `<div class="card"><div class="card-header" style="flex-wrap:wrap;gap:10px">
         <div class="search-box" style="min-width:240px;flex:1"><input type="text" id="vm-q" placeholder="Search hostname, IP, OS, purpose…" value="${esc(q)}"></div>
         <select class="filter-select" id="vm-kind"><option value="">Virtual + physical</option><option${kind === 'Virtual' ? ' selected' : ''}>Virtual</option><option${kind === 'Physical' ? ' selected' : ''}>Physical</option></select>
+        <select class="filter-select" id="vm-st"><option value="">All statuses</option>${STATUSES.map(v => `<option${vst === v ? ' selected' : ''}>${v}</option>`).join('')}</select>
         <select class="filter-select" id="vm-itot"><option value="">IT + OT</option><option${itot === 'IT' ? ' selected' : ''}>IT</option><option${itot === 'OT' ? ' selected' : ''}>OT</option></select>
         <span class="text-muted text-sm">${nV} virtual · ${nP} physical host${nP === 1 ? '' : 's'}</span>
         <button class="btn btn-ghost btn-sm" id="vm-bk" title="Backup jobs from the NetBackup daily reports">🗄 Backups</button>
         ${can.edit ? '<button class="btn btn-ghost btn-sm" id="vm-bk-imp" title="Import a \'Daily Backups\' report e-mail (.msg saved from Outlook, or .eml / .txt)">⬆ Import backup report</button><input type="file" id="vm-bk-file" accept=".msg,.eml,.txt,.htm,.html" multiple hidden>' : ''}
         ${can.edit ? '<button class="btn btn-primary btn-sm" id="vm-add">+ Add</button>' : ''}</div>
       ${hosts.length ? `<div class="text-sm" style="padding:8px 20px;border-bottom:1px solid var(--border)">Hosts: ${hosts.map(h => `<b>${esc(h.hostname)}</b>${h.server_id ? ` <a href="/server-inventory.html?view=${h.server_id}" title="Server Inventory record">(${esc(h.server_hostname || h.host_model || '#' + h.server_id)})</a>` : h.host_model ? ` <span class="text-muted">${esc(h.host_model)}</span>` : ''}`).join(' · ')}</div>` : ''}
-      <div class="table-wrap"><table><thead><tr><th>Hostname</th><th>Kind</th><th>IP</th><th>OS</th><th>Used for</th><th>Farm</th><th>Last backup</th><th>Description</th><th></th></tr></thead><tbody>
-      ${rows.map(r => `<tr><td><b>${esc(r.hostname)}</b>${r.status && r.status !== 'Active' ? ` <span class="text-muted text-sm">${esc(r.status)}</span>` : ''}<div class="text-muted text-sm">${esc(r.domain || '')}</div></td>
+      <div class="table-wrap"><table><thead><tr><th>Hostname</th><th>Status</th><th>Kind</th><th>IP</th><th>OS</th><th>Used for</th><th>Farm</th><th>Last backup</th><th>Description</th><th></th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td><b>${esc(r.hostname)}</b><div class="text-muted text-sm">${esc(r.domain || '')}</div></td>
+        <td><span class="vm-st ${stCls(r.status || 'Active')}">${esc(r.status || 'Active')}</span></td>
         <td><span class="vm-kind${r.kind === 'Physical' ? ' phys' : ''}">${esc(r.kind || 'Virtual')}</span>${r.it_ot === 'OT' ? ' <span class="vm-ot">OT</span>' : ''}</td>
         <td>${esc(r.ip || r.infra_ip || '')}</td><td class="text-sm">${esc([r.os, r.os_version].filter(Boolean).join(' · '))}</td><td>${esc(r.usage || '')}</td><td class="text-sm">${esc(r.farm || '')}</td>
         <td>${bkCell(r)}</td>
-        <td class="vm-desc">${esc(r.description || r.impact || '')}${r.notes ? `<div class="text-muted">${esc(r.notes)}</div>` : ''}</td>
+        <td class="vm-desc" title="${esc(r.description || r.impact || '')}"><div class="vm-desc-in">${esc(r.description || r.impact || '')}</div>${r.notes ? `<div class="text-muted">${esc(r.notes)}</div>` : ''}</td>
         <td style="white-space:nowrap">${can.edit ? `<button class="btn btn-ghost btn-sm" data-edit="${r.id}">Edit</button>` : `<button class="btn btn-ghost btn-sm" data-edit="${r.id}">View</button>`}</td></tr>`).join('')
-        || `<tr><td colspan="9" class="empty-state">No virtual servers yet${can.admin ? ' — import them from the Factory Info workbook: <a href="/network-map.html">Network map</a> → ⬆ Import Factory Info (.xlsx)' : ''}.</td></tr>`}
+        || `<tr><td colspan="10" class="empty-state">No virtual servers yet${can.admin ? ' — import them from the Factory Info workbook: <a href="/network-map.html">Network map</a> → ⬆ Import Factory Info (.xlsx)' : ''}.</td></tr>`}
       </tbody></table></div></div>`;
     let t; $('vm-q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); load().then(() => { const i = $('vm-q'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }); }, 300); };
     $('vm-kind').onchange = (e) => { kind = e.target.value; load(); };
     $('vm-itot').onchange = (e) => { itot = e.target.value; load(); };
+    $('vm-st').onchange = (e) => { vst = e.target.value; load(); };
     if ($('vm-add')) $('vm-add').onclick = () => edit(null);
     $('vm-bk').onclick = () => backups();
     if ($('vm-bk-imp')) { $('vm-bk-imp').onclick = () => $('vm-bk-file').click(); $('vm-bk-file').onchange = (e) => { const f = [...e.target.files]; e.target.value = ''; if (f.length) importReports(f); }; }
@@ -53,7 +59,7 @@
   const ok = (j) => !(Number(j.status_code) > 1 || /fail/i.test(j.status || ''));
   function bkCell(r) {
     const L = r.last_backup;
-    if (!L) return r.kind === 'Physical' ? '<span class="text-muted text-sm">—</span>' : `<span class="bk-chip none" title="This server is not in any imported backup report">Not in the backup reports</span>`;
+    if (!L) return r.kind === 'Physical' || ['Decommissioned', 'Powered off'].includes(r.status) ? '<span class="text-muted text-sm">—</span>' : `<span class="bk-chip none" title="This server is not in any imported backup report">Not in the backup reports</span>`;
     const age = daysBetween(L.started_at, newest), imgAge = r.last_image ? daysBetween(r.last_image, newest) : null;
     return `<span class="bk-chip ${ok(L) ? (age > 2 ? 'old' : 'ok') : 'fail'}" title="${esc(L.policy)} · ${esc(L.status)} (code ${L.status_code ?? '?'})">${ok(L) ? '✓' : '✗'} ${esc(fmt(L.started_at))}</span>
       <div class="text-sm text-muted">${r.last_image ? `VM image ${esc(fmt(r.last_image))}${imgAge > 7 ? ' ⚠' : ''}` : 'no VM image backup'}${r.backup_fails ? ` · <b style="color:#b91c1c">${r.backup_fails} failed (7 d)</b>` : ''}</div>`;
@@ -138,7 +144,7 @@
       document.body.appendChild(ov); }
     const x = r || { kind: 'Virtual', status: 'Active', it_ot: 'IT', country: 'Vietnam' }, ro = can.edit ? '' : 'disabled';
     $('vm-t').textContent = r ? `Virtual server — ${r.hostname}` : 'Add virtual server';
-    $('vm-b').innerHTML = `<div class="qe-grid">${FIELDS.map(([k, l, w]) => `<div class="form-group${w ? ' span-2' : ''}"><label class="form-label">${l}</label>${w ? `<textarea class="form-control" id="vmf-${k}" rows="2" ${ro}>${esc(x[k] || '')}</textarea>` : `<input class="form-control" id="vmf-${k}" value="${esc(x[k] || '')}" ${ro}>`}</div>`).join('')}</div>
+    $('vm-b').innerHTML = `<div class="qe-grid">${FIELDS.map(([k, l, w]) => `<div class="form-group${w ? ' span-2' : ''}"><label class="form-label">${l}</label>${k === 'status' ? `<select class="form-control" id="vmf-status" ${ro}>${[...new Set([...STATUSES, x.status || 'Active'])].map(v => `<option${(x.status || 'Active') === v ? ' selected' : ''}>${esc(v)}</option>`).join('')}</select>` : w ? `<textarea class="form-control" id="vmf-${k}" rows="2" ${ro}>${esc(x[k] || '')}</textarea>` : `<input class="form-control" id="vmf-${k}" value="${esc(x[k] || '')}" ${ro}>`}</div>`).join('')}</div>
       ${r && r.updated_at ? `<p class="text-muted text-sm" style="margin:6px 0 0">Last change ${esc(String(r.updated_at).slice(0, 16))} UTC</p>` : ''}`;
     $('vm-f').innerHTML = `${r && can.admin ? `<button class="btn btn-danger" style="margin-right:auto" id="vm-del">Delete</button>` : ''}<button class="btn btn-ghost" onclick="document.getElementById('vm-ov').classList.remove('open')">${can.edit ? 'Cancel' : 'Close'}</button>${can.edit ? '<button class="btn btn-primary" id="vm-save">Save</button>' : ''}`;
     if ($('vm-save')) $('vm-save').onclick = async () => {
