@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Server Inventory: Needs Attention — Missing Info",
+    "items": [
+      "The 'Check vs document' button is replaced by ⚠️ Needs Attention — Missing Info (with a count), like on Asset Inventory.",
+      "It lists devices missing a Serial, Hostname, IP or Location (access points: Serial only), serials used twice, and serials that differ from the implementation document — fill them in right there and Save.",
+      "On top: whether every model matches the quantity in the document. Devices added after the document (Palo Alto PA-440) count as fine."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Budget: group by several fields, year-over-year item details",
     "items": [
       "Budget lines: Group by is now on/off buttons — switch on 1 or more of PYP, Category and GL; lines are grouped by them in the order you click (e.g. ① PYP ② GL = each PYP split by GL) with subtotals at every level. No grouping = flat list.",

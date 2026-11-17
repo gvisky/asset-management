@@ -395,38 +395,63 @@ async function openNetSync(keepSite) {
   ov.classList.add('open');
 }
 
-// ── Check Server Inventory against the implementation document (network map) ──
-async function openInvCheck() {
-  let sites = [];
-  try { sites = (await apiGet('/api/netmap')).sites; } catch {}
-  if (!sites.length) { showToast('No network map yet — import the implementation document on the Network map page first', 'error'); return; }
-  const site = sites[0].site;
-  const d = await apiGet('/api/netmap/inventory-check?site=' + encodeURIComponent(site));
-  let ov = document.getElementById('ic-ov');
-  if (!ov) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="ic-ov"><div class="modal" style="max-width:1050px">
-      <div class="modal-header"><span class="modal-title" id="ic-t"></span><button class="modal-close" onclick="document.getElementById('ic-ov').classList.remove('open')">✕</button></div>
-      <div class="modal-body" id="ic-b" style="max-height:74vh;overflow:auto"></div></div></div>`); ov = document.getElementById('ic-ov'); }
-  const canEdit = window.CURRENT_USER && ['admin', 'editor'].includes(window.CURRENT_USER.role);
-  const ST = { ok: '<span class="ic-ok">✓ matches</span>', missing: (x) => `<span class="ic-bad">✗ ${-x.diff} missing</span>`, extra: (x) => `<span class="ic-warn">＋${x.diff} more than the document</span>` };
-  const fams = [...new Set(d.issues.map(i => i.family))];
-  document.getElementById('ic-t').textContent = `Server Inventory vs implementation document — ${site}`;
-  document.getElementById('ic-b').innerHTML = `
-    ${d.has_equipment ? '' : '<p class="ic-note">The equipment list (section 2) is not imported yet — import the document again on the Network map page; until then the expected quantity is the number of devices in the port tables.</p>'}
-    <h4 style="margin:0 0 6px">Quantity per model</h4>
-    <table class="ic-tbl"><thead><tr><th>Model</th><th>Document (equipment list)</th><th>In port tables</th><th>Server Inventory</th><th>Result</th></tr></thead><tbody>
-    ${d.models.map(x => `<tr class="${x.status === 'ok' || x.status === 'notindoc' ? '' : 'ic-row-bad'}"><td><b>${sEsc(x.family)}</b> ${DeviceSpecs.btn(x.family, '')}</td><td>${x.doc_qty == null ? '<span class="text-muted">—</span>' : x.doc_qty}</td><td>${x.map || '<span class="text-muted">—</span>'}</td>
-      <td><b>${x.inv}</b> <span class="text-muted text-sm">(${x.active} active${x.stock ? ` · ${x.stock} stock` : ''}${x.other ? ` · ${x.other} other` : ''})</span></td>
-      <td>${x.status === 'ok' ? ST.ok : x.status === 'missing' ? ST.missing(x) : x.status === 'extra' ? ST.extra(x) : x.status === 'notindoc' ? '<span class="text-muted">not in the document (other project)</span>' : ''}</td></tr>`).join('')}</tbody></table>
-    <h4 style="margin:18px 0 6px">Records to check (${d.issues.length})</h4>
-    ${d.issues.length ? fams.map(f => `<div class="ic-fam">${sEsc(f)}</div><table class="ic-tbl"><tbody>${d.issues.filter(i => i.family === f).map(i => `<tr>
-        <td style="width:70px">#${i.id}</td><td><b>${sEsc(i.hostname || '—')}</b><div class="text-muted text-sm">${sEsc(i.brand_model)} · ${statusBadge(i.status)}</div></td>
-        <td>S/N <b>${sEsc(i.serial_no || '—')}</b><div class="text-muted text-sm">${sEsc(i.location || '')}</div></td>
-        <td class="text-sm">${i.problems.map(p => `<div class="ic-p">⚠ ${sEsc(p)}</div>`).join('')}</td>
-        <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="onView(${i.id})">👁</button>${canEdit ? ` <button class="btn btn-ghost btn-sm" onclick="onEdit(${i.id})">✏️ Add info</button>` : ''}</td></tr>`).join('')}</tbody></table>`).join('')
-      : '<p class="ic-ok">✓ Every record has a serial that the document knows.</p>'}
-    ${d.doc_only.length ? `<h4 style="margin:18px 0 6px">In the document, serial not found in Server Inventory (${d.doc_only.length})</h4>
-      <table class="ic-tbl"><thead><tr><th>Device</th><th>Model</th><th>Serial in the document</th><th></th></tr></thead><tbody>${d.doc_only.map(x => `<tr><td><b>${sEsc(x.hostname)}</b></td><td>${sEsc(x.model)}</td><td>${sEsc(x.serial)}</td>
-        <td class="text-sm">${x.linked ? `linked to record <a href="#" onclick="onView(${x.linked});return false">#${x.linked}</a> — its serial differs` : 'not linked — 🔄 Update from network map can add / link it'}</td></tr>`).join('')}</tbody></table>` : ''}
-    <p class="text-muted text-sm" style="margin-top:12px">Serials compare without spaces / dashes and with or without a leading "S" (barcode exports). Fix a record with ✏️ Add info; link records to the document with 🔄 Update from network map.</p>`;
-  ov.classList.add('open');
+// ── ⚠️ Needs Attention — Missing Info (like Asset Inventory) ──
+// Network devices / servers need Serial, Hostname, IP and Location; access points need a Serial.
+// Also: the same serial on two records, and a serial that differs from the implementation document
+// (network map). The quantity per model is compared with the document's equipment list too.
+const NA_ISSUES = ['Serial', 'Hostname', 'IP', 'Location', 'Dup Serial', 'Serial ≠ document'];
+const NA_FIELD = { Serial: 'serial_no', Hostname: 'hostname', IP: 'ip_address', Location: 'location', 'Serial ≠ document': 'serial_no' };
+let naData = null, naFilter = '';
+const isAP = (s) => /access point/i.test(s.category || '');
+async function naLoad() {
+  const all = ((await apiGet(`${SAPI}?limit=5000`)).data || []).filter(s => s.status !== 'Broken');
+  let doc = null;
+  try { const sites = (await apiGet('/api/netmap')).sites; if (sites.length) doc = await apiGet('/api/netmap/inventory-check?site=' + encodeURIComponent(sites[0].site)); } catch {}
+  const sn = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const cnt = new Map(); all.forEach(s => { const n = sn(s.serial_no); if (n) cnt.set(n, (cnt.get(n) || 0) + 1); });
+  const docIssue = new Map((doc ? doc.issues : []).map(i => [i.id, i.problems.find(p => /document's serial there is|which has no serial/.test(p))]).filter(([, p]) => p));
+  const rows = all.map(s => {
+    const t = [];
+    if (!sn(s.serial_no)) t.push('Serial');
+    if (!isAP(s)) { if (!String(s.hostname || '').trim()) t.push('Hostname'); if (!String(s.ip_address || '').trim()) t.push('IP'); if (!String(s.location || '').trim()) t.push('Location'); }
+    if (sn(s.serial_no) && cnt.get(sn(s.serial_no)) > 1) t.push('Dup Serial');
+    if (docIssue.has(s.id)) t.push('Serial ≠ document');
+    return { s, t, docNote: docIssue.get(s.id) || '' };
+  }).filter(r => r.t.length);
+  naData = { rows, models: doc ? doc.models.filter(m => m.status === 'missing' || m.status === 'extra') : [] };
+  const c = document.getElementById('na-cnt'); if (c) c.textContent = rows.length ? rows.length : '';
+  return naData;
 }
+async function openMissing() {
+  let ov = document.getElementById('na-ov');
+  if (!ov) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="na-ov"><div class="modal" style="max-width:1100px">
+      <div class="modal-header"><span class="modal-title">⚠️ Needs Attention — Missing Info</span><button class="modal-close" onclick="document.getElementById('na-ov').classList.remove('open')">✕</button></div>
+      <div class="modal-body" id="na-b" style="max-height:76vh;overflow:auto"><p class="text-muted">Loading…</p></div></div></div>`); ov = document.getElementById('na-ov'); }
+  ov.classList.add('open');
+  await naLoad(); naRender();
+}
+function naRender() {
+  const d = naData, canEdit = window.CURRENT_USER && ['admin', 'editor'].includes(window.CURRENT_USER.role), it = window.CURRENT_USER && window.CURRENT_USER.team === 'IT';
+  const count = (k) => d.rows.filter(r => r.t.includes(k)).length;
+  const rows = d.rows.filter(r => !naFilter || r.t.includes(naFilter));
+  const input = (r, k) => { const f = NA_FIELD[k]; if (!f || !canEdit || (f === 'serial_no' && !it)) return '';
+    return `<label class="na-in"><span>${k === 'Serial ≠ document' ? 'Serial' : k}</span><input class="form-control" data-f="${f}" value="${sEsc(r.s[f] || '')}" placeholder="${k === 'IP' ? '10.84.x.x' : k === 'Location' ? 'e.g. MAIN RACK - 03 (U29)' : ''}"></label>`; };
+  document.getElementById('na-b').innerHTML = `
+    ${d.models.length ? `<div class="na-q">📦 Quantity differs from the implementation document: ${d.models.map(m => `<b>${sEsc(m.family)}</b> ${m.status === 'missing' ? `${-m.diff} missing` : `${m.diff} more`} (document ${m.expected}, inventory ${m.inv})`).join(' · ')}</div>`
+      : '<div class="na-q ok">📦 Every model matches the quantity in the implementation document (new devices added after it, like the Palo Alto PA-440, count as fine).</div>'}
+    <div class="na-chips"><button class="${naFilter ? '' : 'on'}" onclick="naFilter='';naRender()">All <b>${d.rows.length}</b></button>${NA_ISSUES.map(k => count(k) ? `<button class="${naFilter === k ? 'on' : ''}" onclick="naFilter=${jsArg(k)};naRender()">${k} <b>${count(k)}</b></button>` : '').join('')}</div>
+    ${rows.length ? `<table class="ic-tbl"><thead><tr><th>Device</th><th>Missing / to check</th><th>Fill in</th><th></th></tr></thead><tbody>
+      ${rows.map(r => `<tr data-id="${r.s.id}"><td><b>${sEsc(r.s.hostname || '—')}</b><div class="text-muted text-sm">#${r.s.id} · ${sEsc(r.s.brand_model)} · ${sEsc(r.s.category || '')}</div><div class="text-sm">S/N ${sEsc(r.s.serial_no || '—')} · ${statusBadge(r.s.status)}</div></td>
+        <td>${r.t.map(k => `<span class="na-tag">${k}</span>`).join(' ')}${r.docNote ? `<div class="text-sm" style="color:#b45309;margin-top:4px">${sEsc(r.docNote)}</div>` : ''}</td>
+        <td class="na-fill">${[...new Set(r.t)].map(k => input(r, k)).join('')}</td>
+        <td style="white-space:nowrap">${canEdit && r.t.some(k => NA_FIELD[k]) ? `<button class="btn btn-primary btn-sm" onclick="naSave(${r.s.id})">Save</button> ` : ''}<button class="btn btn-ghost btn-sm" onclick="onView(${r.s.id})">👁</button></td></tr>`).join('')}</tbody></table>`
+      : '<p class="ic-ok">✓ Every device has its key info. 🎉</p>'}
+    <p class="text-muted text-sm" style="margin-top:10px">Network devices and servers need Serial, Hostname, IP and Location; access points a Serial. Serial can be changed by IT members only. Broken devices are not listed.</p>`;
+}
+async function naSave(id) {
+  const tr = document.querySelector(`#na-b tr[data-id="${id}"]`), body = {};
+  tr.querySelectorAll('input[data-f]').forEach(i => { body[i.dataset.f] = i.value.trim(); });
+  try { await apiPut(`${SAPI}/${id}`, body); showToast('Saved'); await naLoad(); naRender(); loadServers(1); }
+  catch (e) { let m = 'Could not save'; try { m = JSON.parse(e.message).error || m; } catch {} showToast(m, 'error'); }
+}
+document.addEventListener('DOMContentLoaded', () => { setTimeout(() => naLoad().catch(() => {}), 800); });
