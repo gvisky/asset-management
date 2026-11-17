@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: topology views like the document",
+    "items": [
+      "Topology → choose the view: Layers (click a device to focus), Logical, Physical or System.",
+      "Logical (like 5.2): ISP lines → WAN firewall cluster → core pair (vPC) → server / distribution switches → 'EDGE SWITCHES: 16 PCS' (click to show them), VxRail / Data Domain on the left, WLCs on the right; IPs under every device, 1 G blue / 10 G green, port-channel labels (Po3001 …).",
+      "Physical (like 5.3): factory cabinets IT-KABIN2 … 12 on the left and racks MR-01 … MR-04 as boxes with their devices in rack order; cables CAT6 blue, fiber single-mode yellow, fiber multi-mode green.",
+      "System (like 5.1): core pair → server switches → VxRail nodes and Data Domain, with the port names at both ends of every link."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: real device panels, patch panels, cable path",
     "items": [
       "Each device's ports are drawn where they are on the real hardware: Catalyst 9200L (48 ports in 4 groups, odd top / even bottom + 4 SFP+ uplinks), 3560-CX, Nexus 3524 / 3548 (SFP+ cages), ISR 4331, WLC 5520, R740xd and VxRail rear (iDRAC, built-in, PCIe card), Data Domain, Sophos XG 210. Green = to a network device, cyan = to a user / patch panel, grey = free; click a port to change it.",

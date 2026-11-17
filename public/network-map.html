@@ -67,6 +67,7 @@
         <div class="card nm-canvas-card">
           <div class="nm-tools">
             <span class="nm-tabs"><button class="on" data-v="topo">🗺 Topology</button><button data-v="rack">🗄 Racks</button><button data-v="draw">🖼 Drawings</button><button data-v="vlan">🏷 VLANs</button><button data-v="log">🕓 Port changes</button></span>
+            <select class="form-control" id="nm-mode" style="width:auto;padding:4px 8px;font-size:13px" title="How to draw the topology"><option value="map">Layers (click = focus)</option><option value="logical">Logical — like the document</option><option value="physical">Physical — racks &amp; cabinets</option><option value="system">System — servers</option></select>
             <span id="nm-focus" class="nm-focus"></span>
             <span style="flex:1"></span>
             <span class="nm-legend"><i class="lg-fiber"></i>fiber / SFP <i class="lg-cu"></i>copper <i class="lg-pc"></i>port-channel</span>
@@ -99,8 +100,9 @@
 <script src="/js/alerts.js"></script>
 <script src="/js/device-specs.js?v=20261117a"></script>
 <script src="/js/netmap-doc.js?v=20261117d"></script>
-<script src="/js/network-map.js?v=20261117f"></script>
+<script src="/js/network-map.js?v=20261117h"></script>
 <script src="/js/netmap-racks.js?v=20261117c"></script>
-<script src="/js/netmap-faces.js?v=20261117a"></script>
+<script src="/js/netmap-faces.js?v=20261117b"></script>
+<script src="/js/netmap-views.js?v=20261117b"></script>
 </body>
 </html>
