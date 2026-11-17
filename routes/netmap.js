@@ -35,7 +35,8 @@ router.get('/', wrap(async (req, res) => {
   const devices = await all('SELECT * FROM net_devices WHERE site = ? ORDER BY hostname', [site]);
   const ports = devices.length ? await all(`SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ? ORDER BY p.device_id, p.sort, p.port`, [site]) : [];
   const vlans = await all('SELECT * FROM net_vlans WHERE site = ? ORDER BY CAST(vlan AS INTEGER)', [site]);
-  res.json({ site, sites, devices, ports, vlans, can: { edit: canEdit(req), admin: isAdmin(req) } });
+  const patches = await all('SELECT panel, port, outlet, note FROM net_patch_ports WHERE site = ? ORDER BY panel, port', [site]);
+  res.json({ site, sites, devices, ports, vlans, patches, can: { edit: canEdit(req), admin: isAdmin(req) } });
 }));
 
 router.post('/import', wrap(async (req, res) => {
@@ -44,6 +45,7 @@ router.post('/import', wrap(async (req, res) => {
   const devices = Array.isArray(req.body.devices) ? req.body.devices.slice(0, 2000) : [];
   const ports = Array.isArray(req.body.ports) ? req.body.ports.slice(0, 20000) : [];
   const vlans = Array.isArray(req.body.vlans) ? req.body.vlans.slice(0, 4096) : [];
+  const patches = Array.isArray(req.body.patches) ? req.body.patches.slice(0, 5000) : [];
   if (!devices.length) return res.status(400).json({ error: 'No devices found in the file' });
   const stmts = [];
   if (req.body.replace) {
@@ -58,6 +60,11 @@ router.post('/import', wrap(async (req, res) => {
         ON CONFLICT(site, hostname) DO UPDATE SET alias = excluded.alias, role = excluded.role, model = excluded.model, serial = excluded.serial,
           mgmt_ip = excluded.mgmt_ip, location = excluded.location, ips = excluded.ips, services = excluded.services, service_tag = excluded.service_tag, updated_at = datetime('now')`,
       args: [site, h, str(d.alias), str(d.role, 40), str(d.model), str(d.serial, 60), str(d.mgmt_ip, 60), str(d.location), ips, str(d.services, 120), str(d.service_tag, 40)] });
+  }
+  if (patches.length) stmts.push({ sql: 'DELETE FROM net_patch_ports WHERE site = ?', args: [site] });
+  for (const x of patches) {
+    const panel = str(x.panel, 40), port = Number(x.port); if (!panel || !port) continue;
+    stmts.push({ sql: 'INSERT OR REPLACE INTO net_patch_ports (site, panel, port, outlet) VALUES (?, ?, ?, ?)', args: [site, panel, port, str(x.outlet, 20)] });
   }
   for (const v of vlans) {
     if (!str(v.vlan, 10)) continue;
@@ -76,7 +83,7 @@ router.post('/import', wrap(async (req, res) => {
   }
   await batch(pst);
   await audit(req.user, 'NETMAP', null, `Network map "${site}": imported ${ids.size} devices, ${pst.length} ports, ${vlans.length} VLANs${req.body.replace ? ' (replaced)' : ''}`);
-  res.json({ ok: true, site, devices: ids.size, ports: pst.length, vlans: vlans.length });
+  res.json({ ok: true, site, devices: ids.size, ports: pst.length, vlans: vlans.length, patches: patches.length });
 }));
 
 async function deviceOf(id) { return get('SELECT * FROM net_devices WHERE id = ?', [Number(id)]); }

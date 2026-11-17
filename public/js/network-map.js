@@ -257,13 +257,13 @@ const NM = (() => {
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.editDevice(${d.id})">✏️ Device</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="NM.showLog(${jsArg(d.hostname)})">🕓 Changes</button></div>
       <div class="nm-stats"><span class="st-dev">${s.dev} to network devices</span><span class="st-end">${s.end} to users / patch panel</span><span class="st-free">${s.total - s.dev - s.end} free</span><span>${s.total} ports</span></div>
-      <div class="fp">${ps.length ? faceplate(d, hl) : '<span class="text-muted">No ports yet.</span>'}</div>
+      ${(self.NMFaces && ps.length && NMFaces.render(d, ps, hl)) || `<div class="fp">${ps.length ? faceplate(d, hl) : '<span class="text-muted">No ports yet.</span>'}</div>`}
       <div class="nm-pt-bar"><span class="nm-tabs small">${[['all', 'All'], ['dev', 'To devices'], ['end', 'Users / patch'], ['free', 'Free']].map(([k, l]) => `<button class="${portFilter === k ? 'on' : ''}" onclick="NM.filter('${k}')">${l}</button>`).join('')}</span>
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.addPort(${d.id})">+ Port</button>` : ''}</div>
       <div class="table-wrap nm-ptbl"><table><thead><tr><th>Port</th><th>Connected to</th><th>Far port</th><th>Cable</th><th>Mode</th><th>VLAN</th><th>Po</th><th>Patch</th><th>Note</th></tr></thead><tbody>
         ${shown.map(p => `<tr class="${hl.has(p.port) ? 'hl' : ''}" onclick="NM.openPort(${d.id}, ${jsArg(p.port)})"><td><span class="dot ${portClass(p)}"></span><b>${esc(p.port)}</b></td>
           <td>${known(p.peer_host) ? `<a href="#" onclick="event.stopPropagation();NM.select(${byHost.get(p.peer_host).id}, true);return false">${esc(p.peer_host)}</a>` : esc(p.peer_host)}</td><td>${esc(p.peer_port)}</td>
-          <td>${esc(p.cable)}</td><td>${esc(p.mode)}</td><td>${esc(p.vlan)}</td><td>${esc(p.grp)}</td><td>${esc(p.patch)}</td><td class="text-sm">${esc(p.note)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty-state">No ports here.</td></tr>'}
+          <td>${esc(p.cable)}</td><td>${esc(p.mode)}</td><td>${esc(p.vlan)}</td><td>${esc(p.grp)}</td><td>${p.patch && /^[DT]\d+$/i.test(p.patch) ? `<a href="#" onclick="event.stopPropagation();NM.outlet(${jsArg(p.patch)});return false">${esc(p.patch)}</a>` : esc(p.patch)}</td><td class="text-sm">${esc(p.note)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty-state">No ports here.</td></tr>'}
       </tbody></table></div>`;
   }
 
@@ -287,6 +287,7 @@ const NM = (() => {
         <div class="form-group"><label class="form-label">Note</label><input class="form-control" id="pp-note" value="${esc(p.note)}" ${ro}></div>
       </div>
       <div id="pp-warn" class="text-sm"></div>
+      ${self.NMFaces ? `<details class="nm-trace-box" open><summary>🔎 Cable path</summary>${NMFaces.trace(d, p)}</details>` : ''}
       ${D.can.edit ? `<div class="nm-move"><label class="form-label">⇄ Move this cable to another port of ${esc(d.hostname)} (the two ports swap)</label>
         <div style="display:flex;gap:8px"><select class="form-control" id="pp-to">${(portsOf.get(d.id) || []).filter(x => x.port !== port).map(x => `<option value="${esc(x.port)}">${esc(x.port)} — ${portClass(x) === 'pt-free' ? 'free' : esc(x.peer_host || x.patch || 'in use')}</option>`).join('')}</select>
         <button class="btn btn-ghost" onclick="NM.movePort()">Move</button></div></div>` : ''}
@@ -380,8 +381,8 @@ const NM = (() => {
     const site = prompt(`Found ${r.counts.devices} devices, ${r.counts.ports} ports (${r.counts.links} cabled to a device or user point) and ${r.counts.vlans} VLANs.\n\nSite name for this map:`, D.site || 'Vietnam factory');
     if (site == null) return;
     const replace = D.sites.some(s => s.site === site.trim()) ? confirm(`"${site}" already has a map. OK = replace it with the document, Cancel = add / update only.`) : true;
-    try { const x = await apiPost('/api/netmap/import', { site: site.trim(), devices: r.devices, ports: r.ports, vlans: r.vlans, replace });
-      showToast(`Imported ${x.devices} devices, ${x.ports} ports, ${x.vlans} VLANs`); await load(x.site); autoPlace(true); renderTopo(); fit();
+    try { const x = await apiPost('/api/netmap/import', { site: site.trim(), devices: r.devices, ports: r.ports, vlans: r.vlans, patches: r.patches, replace });
+      showToast(`Imported ${x.devices} devices, ${x.ports} ports, ${x.vlans} VLANs, ${x.patches} patch-panel ports`); await load(x.site); autoPlace(true); renderTopo(); fit();
       if (D.can.edit) savePositions(D.devices);
     } catch (e) { showToast(errText(e, 'Import failed'), 'error'); }
   }
@@ -409,7 +410,8 @@ const NM = (() => {
     load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { data: () => D, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
+  return { data: () => D, known, portTip, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); },
+    outlet: (o) => { const pp = (D.patches || []).find(x => String(x.outlet).toUpperCase() === String(o).toUpperCase()); if (pp && self.NMFaces) NMFaces.panel(pp.panel); else showToast('Outlet ' + o + ' is not in the patch-panel list', 'error'); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };
 })();
