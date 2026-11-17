@@ -6,18 +6,75 @@
   <title>Hayat Communication Tools — Budget Tracking</title>
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    #budget-body th.num, #budget-body td.num { text-align: right; white-space: nowrap; }
-    #budget-body td.neg { color: #b91c1c; } #budget-body td.pos { color: #15803d; }
-    .bdg-filters { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
-    .bdg-filters .fg { display:flex; flex-direction:column; gap:3px; }
-    .bdg-filters label { font-size:11px; color:var(--muted); font-weight:600; }
-    .bdg-filters select { min-width:150px; padding:6px 8px; }
-    .bdg-bar-wrap { background:#f1f5f9; border-radius:4px; height:13px; overflow:hidden; min-width:80px; }
-    .bdg-bar { height:100%; border-radius:4px; }
-    .bdg-scroll { overflow-x:auto; }
-    #line-table th, #line-table td { white-space:nowrap; font-size:12px; }
-    .twocol { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-    @media (max-width: 900px){ .twocol { grid-template-columns:1fr; } }
+    .bdg td.num, .bdg th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .bdg .neg { color: #b91c1c; } .bdg .pos { color: #15803d; }
+    .bdg .en { display: block; color: #64748b; font-size: 11px; font-weight: 400; line-height: 1.25; }
+    .bdg .en-inline { color: #64748b; font-size: 11px; font-weight: 400; }
+    .bdg-scroll { overflow-x: auto; }
+    .bdg table { width: 100%; border-collapse: collapse; }
+    .bdg th { font-size: 11px; text-transform: none; }
+    .bdg td, .bdg th { padding: 6px 8px; font-size: 12.5px; vertical-align: top; }
+    /* toolbar */
+    .bdg-toolbar { position: sticky; top: 0; z-index: 20; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: flex-end; box-shadow: 0 2px 6px rgba(15,23,42,.04); }
+    .bdg-toolbar .fg { display: flex; flex-direction: column; gap: 4px; }
+    .bdg-toolbar label { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #f8fafc; }
+    .seg button { border: 0; background: transparent; padding: 6px 12px; font-size: 12.5px; cursor: pointer; color: #334155; white-space: nowrap; }
+    .seg button + button { border-left: 1px solid var(--border); }
+    .seg button.on { background: var(--brand); color: #fff; font-weight: 600; }
+    .seg button:disabled { color: #cbd5e1; cursor: not-allowed; }
+    .bdg-toolbar select, .bdg-toolbar input[type=text] { padding: 6px 8px; font-size: 12.5px; }
+    /* source strip */
+    .src-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+    .src-pill { font-size: 11.5px; padding: 4px 9px; border-radius: 999px; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+    .src-pill b { font-weight: 600; }
+    .src-pill.approved { background: #ecfdf5; border-color: #a7f3d0; }
+    .src-pill.report { background: #eff6ff; border-color: #bfdbfe; }
+    .src-pill.legacy { background: #fffbeb; border-color: #fde68a; }
+    .src-pill.none { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+    /* KPI */
+    .bk-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin: 14px 0; }
+    @media (max-width: 1200px) { .bk-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 700px) { .bk-grid { grid-template-columns: repeat(2, 1fr); } }
+    .bk { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; border-top: 3px solid var(--c, #3b82f6); padding: 12px 14px; }
+    .bk .l { font-size: 12px; color: var(--muted); font-weight: 500; }
+    .bk .v { font-size: 22px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .bk .s { display: flex; gap: 6px; margin-top: 8px; font-size: 11.5px; color: var(--muted); flex-wrap: wrap; }
+    .bk .s span { background: #f6f7f9; border-radius: 6px; padding: 2px 6px; }
+    .bk .s b { color: var(--text); font-weight: 600; }
+    /* OPEX / CAPEX tags */
+    .oc { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; letter-spacing: .02em; }
+    .oc-OPEX { background: #e0f2fe; color: #075985; } .oc-CAPEX { background: #ede9fe; color: #5b21b6; }
+    .tag-ek { display: inline-block; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; white-space: nowrap; }
+    /* monthly grid */
+    .mgrid th, .mgrid td { white-space: nowrap; }
+    .mgrid tr.sec td { background: #f8fafc; font-weight: 700; }
+    .mgrid tr.tot td { border-top: 2px solid #cbd5e1; font-weight: 700; }
+    .mgrid td.fc { color: #64748b; font-style: italic; }
+    .mgrid th.fc { color: #94a3b8; }
+    .mgrid td.inp, .mgrid th.inp { background: #fefce8; }
+    /* line tables */
+    .lt tr.grp td { background: #f8fafc; border-top: 2px solid #e2e8f0; font-weight: 600; }
+    .lt tr.line { cursor: pointer; }
+    .lt tr.line:hover td { background: #f1f5ff; }
+    .lt tr.line td:first-child { padding-left: 18px; }
+    .lt code, .bdg code { font-size: 11.5px; background: #f1f5f9; padding: 1px 4px; border-radius: 4px; }
+    .bar { background: #f1f5f9; border-radius: 4px; height: 8px; overflow: hidden; min-width: 60px; margin-top: 3px; }
+    .bar i { display: block; height: 100%; border-radius: 4px; }
+    .cmt { max-width: 260px; white-space: normal; font-size: 11.5px; }
+    .note { color: #1d4ed8; }
+    .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 1100px) { .twocol { grid-template-columns: 1fr; } }
+    .card + .card, .twocol + .card, .card + .twocol { margin-top: 16px; }
+    .hint { font-size: 11.5px; color: var(--muted); }
+    /* detail modal */
+    #bd-modal .modal { max-width: 920px; }
+    .kv { display: grid; grid-template-columns: 210px 1fr; gap: 6px 14px; font-size: 13px; }
+    .kv dt { color: var(--muted); font-size: 12px; }
+    .kv dt .en-inline { display: block; }
+    .kv dd { margin: 0; }
+    .imp-table td, .imp-table th { font-size: 12px; }
+    .act-add { color: #15803d; font-weight: 600; } .act-replace { color: #1d4ed8; font-weight: 600; } .act-skip { color: #92400e; font-weight: 600; }
   </style>
 </head>
 <body>
@@ -41,89 +98,96 @@
 </aside>
 
 <div class="main-wrap">
-  <header class="topbar"><span class="topbar-title">💰 Budget Tracking</span></header>
+  <header class="topbar"><span class="topbar-title">💰 Budget Tracking <span class="text-muted text-sm" style="font-weight:400">· Bütçe Takibi</span></span></header>
 
-  <main class="content">
+  <main class="content bdg">
     <div class="card" id="gate-card" style="display:none"><div class="card-body"><p class="text-muted" id="gate-msg">Loading…</p></div></div>
 
     <div id="budget-body" style="display:none">
-      <!-- 1) Filters -->
+      <!-- Toolbar -->
+      <div class="bdg-toolbar">
+        <div class="fg"><label>Year · Yıl</label><div class="seg" id="seg-year"></div></div>
+        <div class="fg"><label>Country · Ülke</label><div class="seg" id="seg-country"></div></div>
+        <div class="fg"><label>Period · Dönem</label><select class="form-control" id="f-period"></select></div>
+        <div class="fg"><label>PYP code (WBS)</label><div class="seg" id="seg-pyp">
+          <button data-v="s4" title="PYP öğesi (Yeni Yapı) — new S/4HANA code">New · S4</button><button data-v="ecc" title="PYP No — old ECC code">Old · ECC</button></div></div>
+        <div class="fg"><label>Opex / Capex</label><div class="seg" id="seg-oc">
+          <button data-v="">Both</button><button data-v="OPEX">OPEX</button><button data-v="CAPEX">CAPEX</button></div></div>
+        <div class="fg" style="flex:1 1 220px"><label>Search · Ara</label><input type="text" class="form-control" id="f-search" placeholder="PYP, GL, project, comment… (Turkish or English)"></div>
+      </div>
+      <div class="src-strip" id="src-strip"></div>
+
+      <!-- KPIs -->
+      <div class="bk-grid" id="kpis"></div>
+
+      <!-- Opex / Capex by country -->
       <div class="card">
-        <div class="card-header"><span class="card-title">Filters</span><button class="btn btn-ghost btn-sm" id="reset-filters">Reset</button></div>
+        <div class="card-header"><span class="card-title">Opex / Capex by country <span class="en-inline">· Ülkeye göre Opex / Capex</span></span><span class="hint" id="sum-hint"></span></div>
+        <div class="card-body bdg-scroll"><table id="sum-table"></table></div>
+      </div>
+
+      <!-- Monthly -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Monthly — Budget vs Actual / Forecast <span class="en-inline">· Aylık Bütçe / Fiili / Tahmin</span></span>
+          <span class="hint">USD · <i>italic grey</i> = forecast months · yellow = selected period</span>
+        </div>
         <div class="card-body">
-          <div class="bdg-filters" style="margin-bottom:12px">
-            <div class="fg" style="flex:1 1 320px"><label>Search</label><input class="form-control" id="f-search" type="text" placeholder="Search any item — GL, WBS, project, category, description…" style="width:100%"></div>
-          </div>
-          <div class="bdg-filters">
-            <div class="fg"><label>Country</label><select class="form-control" id="f-country"></select></div>
-            <div class="fg"><label>CapEx / OpEx</label><select class="form-control" id="f-oc"></select></div>
-            <div class="fg"><label>WBS code</label><select class="form-control" id="f-wbs"></select></div>
-          </div>
-          <div class="bdg-filters" style="margin-top:12px">
-            <div class="fg"><label>Proje Grubu</label><select class="form-control" id="f-proj_group"></select></div>
-            <div class="fg"><label>Proje Kategorisi</label><select class="form-control" id="f-proj_category"></select></div>
-            <div class="fg"><label>Program / Servis</label><select class="form-control" id="f-program"></select></div>
-            <div class="fg"><label>Proje / Servis</label><select class="form-control" id="f-project"></select></div>
-            <div class="fg"><label>Alt Proje / Servis</label><select class="form-control" id="f-sub_project"></select></div>
-            <div class="fg"><label>PYP</label><select class="form-control" id="f-pyp_name"></select></div>
-          </div>
-          <div class="text-muted text-sm" style="margin-top:10px" id="filter-count"></div>
+          <div class="bdg-scroll"><table class="mgrid" id="month-table"></table></div>
+          <div id="month-chart" style="margin-top:16px"></div>
         </div>
       </div>
 
-      <!-- 2) Line items -->
-      <div class="card" style="margin-top:16px">
-        <div class="card-header"><span class="card-title">Budget Line Items</span><span class="text-muted text-sm" id="line-count"></span></div>
-        <div class="card-body bdg-scroll">
-          <table id="line-table">
-            <thead><tr>
-              <th>Country</th><th>O/C</th><th>Proje Grubu</th><th>Kategorisi</th><th>Program</th><th>Proje</th><th>Alt Proje</th><th>PYP</th>
-              <th>Turkish GL</th><th>WBS</th>
-              <th class="num">2025 Actual</th><th class="num">2026 Budget</th><th class="num">Jan–Apr B</th><th class="num">Jan–Apr A</th><th class="num">+/- %</th>
-            </tr></thead>
-            <tbody id="line-tbody"></tbody>
-          </table>
+      <!-- Year comparison -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">Year over year <span class="en-inline">· Yıllara göre</span></span><span class="hint">Full-year USD · B = budget · A+F = actual + forecast · current filters (country, Opex/Capex, search) apply</span></div>
+        <div class="card-body bdg-scroll"><table id="yoy-table"></table></div>
+      </div>
+
+      <!-- Lines -->
+      <div class="card">
+        <div class="card-header" style="flex-wrap:wrap;gap:10px">
+          <span class="card-title">Budget lines by PYP <span class="en-inline">· PYP bazında bütçe kalemleri</span></span>
+          <div class="seg" id="seg-group">
+            <button data-v="pyp">Group: PYP</button><button data-v="cat">Category</button><button data-v="gl">GL</button><button data-v="none">No grouping</button></div>
+          <div class="seg" id="seg-cols"><button data-v="sum">Summary</button><button data-v="month">Months</button></div>
+          <label class="hint" style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" id="f-ek" checked> Unbudgeted actuals (FİİLİ_EK)</label>
+          <label class="hint" style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" id="f-zero"> Hide lines with 0 in period</label>
         </div>
+        <div class="card-body" id="lines-body"></div>
       </div>
 
-      <!-- 3) Turkish GL -->
-      <div class="card" style="margin-top:16px">
-        <div class="card-header"><span class="card-title">🇹🇷 Turkish GL (MÇ No)</span><span class="text-muted text-sm">from current filter · Local GL from GL.xlsx</span></div>
-        <div class="card-body bdg-scroll"><table><thead><tr><th>Turkish GL</th><th>Local GL</th><th>PYP</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th></tr></thead><tbody id="gl-tr-tbody"></tbody></table></div>
-      </div>
-
-      <!-- 4) Overall Summary -->
-      <div class="card" style="margin-top:16px">
-        <div class="card-header"><span class="card-title">Overall Summary — by Country (USD)</span><span class="text-muted text-sm">Jan–Apr 2026 · Variance = Budget − Actual</span></div>
+      <!-- Data & import -->
+      <div class="card" id="import-card">
+        <div class="card-header"><span class="card-title">⬆️ Data sources &amp; import <span class="en-inline">· Veri kaynakları</span></span>
+          <a class="btn btn-ghost btn-sm" id="export-btn" href="/api/budget/export.xlsx" download>⬇️ Export .xlsx</a></div>
         <div class="card-body">
-          <div class="bdg-scroll"><table>
-            <thead><tr><th>Country</th><th class="num">2025 Actual</th><th class="num">2026 Budget</th><th class="num">Jan–Apr Budget</th><th class="num">Jan–Apr Actual</th><th class="num">Variance</th><th class="num">Used %</th></tr></thead>
-            <tbody id="summary-tbody"></tbody>
-          </table></div>
-          <div style="margin-top:16px"><div class="text-muted text-sm" style="margin-bottom:6px">📊 Jan–Apr Budget vs Actual by country</div><div id="chart-summary"></div></div>
-        </div>
-      </div>
-
-      <!-- 5) Monthly burn -->
-      <div class="card" style="margin-top:16px">
-        <div class="card-header"><span class="card-title">2026 Monthly — Budget vs Actual (burn rate)</span><span class="text-muted text-sm">Actual Jan–Apr; later months are budget only</span></div>
-        <div class="card-body"><div id="chart-monthly"></div></div>
-      </div>
-
-      <!-- 6) Import (IT admin) -->
-      <div class="card" id="import-budget-card" style="display:none;margin-top:16px">
-        <div class="card-header"><span class="card-title">⬆️ Import Budget .xlsx</span><span class="text-muted text-sm">IT admin only · uploads budget 2026.xlsx (Sheet1)</span></div>
-        <div class="card-body">
-          <p class="text-muted text-sm" style="margin:0 0 12px">Upload the budget workbook (.xlsx). It's parsed in your browser (only Vietnam/Thailand/Malaysia line items are sent) and <strong>replaces</strong> the current data. Financial data is never stored in Git.</p>
+          <div class="bdg-scroll" style="margin-bottom:14px"><table class="imp-table" id="src-table"></table></div>
+          <p class="hint" style="margin:0 0 10px">
+            Select one or more corporate workbooks — the <b>approved budget</b> (e.g. <i>2027_BUDGET_… - Vietnam.xlsx</i>, sheet “2027 Vietnam”)
+            and/or the monthly <b>B-F report</b> (<i>DT_…_B-F_RAPOR … - Vietnam.xlsx</i>, sheet “RAPOR_HEPSİ”: budget, actual, forecast &amp; comments).
+            Files are read in your browser; you'll see a preview before anything is saved. Data is replaced per country + year;
+            an approved budget is never overwritten by a report's draft for the same year. Financial data is never stored in Git.
+          </p>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-            <input type="file" id="budget-import-file" accept=".xlsx" class="form-control" style="max-width:380px">
-            <button class="btn btn-primary" id="budget-import-btn">Upload &amp; Replace</button>
-            <span id="budget-import-status" class="text-muted text-sm"></span>
+            <input type="file" id="imp-files" accept=".xlsx,.xlsm" multiple class="form-control" style="max-width:420px">
+            <button class="btn btn-primary" id="imp-read">Read files</button>
+            <span id="imp-status" class="hint"></span>
           </div>
+          <div id="imp-preview" style="margin-top:14px"></div>
         </div>
       </div>
     </div>
   </main>
+</div>
+
+<!-- Line detail -->
+<div class="modal-overlay" id="bd-modal">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title" id="bd-title">Line</span>
+      <button class="modal-close" id="bd-close" aria-label="Close"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="modal-body bdg" id="bd-body"></div>
+  </div>
 </div>
 
 <div class="toast-container" id="toast-container"></div>
@@ -131,6 +195,7 @@
 <script src="/js/auth.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/vendor/xlsx.full.min.js"></script>
+<script src="/js/budget-core.js"></script>
 <script src="/js/budget.js"></script>
 </body>
 </html>
