@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: the page stays still when you click a device",
+    "items": [
+      "Clicking a device on the map, in the list or in a rack no longer scrolls the page down to the device panel — the topology stays in view; scroll down yourself to see the ports."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Needs Attention: named per group, servers on the Dashboard and the Needs Attention page",
     "items": [
       "Each list now says what it is about: ⚠️ Needs Attention — Assets: Missing Info, — Assets: Missing AD & Asset, and — Servers & Network: Missing Info.",

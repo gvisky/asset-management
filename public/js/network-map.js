@@ -237,7 +237,7 @@ const NM = (() => {
     const prev = sel; sel = id; renderList(); renderTopo(); renderDevice(linkKey);
     if (focusOn()) { if (prev !== id) fit(); }
     else if (center) { const d = byId.get(id); view.x = d.x - view.w / 2; view.y = d.y - view.h / 2; apply(); }
-    $('nm-dev').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    // The page does not scroll: the topology stays where it is (the device panel is below it).
   }
   const portClass = (p) => (known(p.peer_host) ? 'pt-dev' : (p.peer_host || p.patch || p.vlan || p.mode) ? 'pt-end' : 'pt-free');
   const portTip = (p) => `${p.port}${known(p.peer_host) ? ` → ${p.peer_host} ${p.peer_port}` : p.peer_host ? ` → ${p.peer_host} ${p.peer_port}` : ''}${p.patch ? ` · patch ${p.patch}` : ''}${p.cable ? ' · ' + p.cable : ''}${p.mode ? ' · ' + p.mode : ''}${p.vlan ? ' · VLAN ' + p.vlan : ''}${p.grp ? ' · Po' + p.grp : ''}${p.note ? ' · ' + p.note : ''}` || 'free';
