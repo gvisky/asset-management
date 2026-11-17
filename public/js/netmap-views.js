@@ -47,12 +47,13 @@ const NMViews = self.NMViews = (() => {
 
   // ── Logical (5.2) ───────────────────────────────────────────────────────
   function logical() {
-    const devs = D().devices, by = (r) => devs.filter(d => d.role === r).sort((a, b) => a.hostname.localeCompare(b.hostname));
+    const devs = D().devices.filter(d => d.state !== 'retired'), by = (r) => devs.filter(d => d.role === r).sort((a, b) => a.hostname.localeCompare(b.hostname));
     const pos = new Map(), sel = NM.selected();
     let g = '', out = '';
     const row = (list, y, cx, gap = 190) => list.forEach((d, i) => pos.set(d.hostname, { x: cx + (i - (list.length - 1) / 2) * gap, y, d }));
     row(by('ISP / external'), 40, 640, 240);
-    const fw = by('Firewall'), wan = fw.filter(d => /VFW/i.test(d.hostname)), ot = fw.filter(d => !/VFW/i.test(d.hostname));
+    // WAN firewalls (Palo Alto PA-440 pair now; the retired VFW nodes are not shown) in the middle, the OT firewall aside.
+    const fw = by('Firewall'), isOt = (d) => /OT-FW|AUTOMATION|\bOT\b/i.test(`${d.hostname} ${d.alias}`), wan = fw.filter(d => !isOt(d)), ot = fw.filter(isOt);
     row(wan, 200, 640, 220); row(ot, 200, 1010);
     row(by('Router'), 360, 180, 170);
     row(by('Core switch'), 360, 640, 300);
@@ -63,7 +64,7 @@ const NMViews = self.NMViews = (() => {
     const edge = by('Access switch');
     if (edge.length && !edgeOpen) pos.set('__EDGE__', { x: 640, y: 740, d: null });
     else row(edge, 740, 640, 125);
-    for (const p of pairs(wan)) { const A = pos.get(p[0].hostname), B = pos.get(p[1].hostname); out += box(Math.min(A.x, B.x) - 80, A.y - 48, Math.abs(A.x - B.x) + 160, 116, 'WAN firewall cluster (HA)'); }
+    for (const p of pairs(wan)) { const A = pos.get(p[0].hostname), B = pos.get(p[1].hostname); out += box(Math.min(A.x, B.x) - 80, A.y - 48, Math.abs(A.x - B.x) + 160, 116, `WAN firewall cluster (HA)${/PA-?440/i.test(p[0].model) ? ' — Palo Alto PA-440' : ''}`); }
     for (const r of ['Core switch', 'Distribution switch', 'Server switch']) for (const p of pairs(by(r))) { const A = pos.get(p[0].hostname), B = pos.get(p[1].hostname); out += box(Math.min(A.x, B.x) - 80, A.y - 46, Math.abs(A.x - B.x) + 160, 112, r === 'Core switch' ? 'Core pair (vPC)' : ''); }
     const map = (h) => (pos.has(h) ? h : (!edgeOpen && edge.some(d => d.hostname === h) ? '__EDGE__' : h));
     g += linkSvg('logical', pos, null, { map });
@@ -94,7 +95,7 @@ const NMViews = self.NMViews = (() => {
       l.forEach((d, j) => pos.set(d.hostname, { x: x + 115, y: 70 + j * 34, d, bar: true }));
       x += 260;
     }
-    const unplaced = devs.filter(d => !pos.has(d.hostname));
+    const unplaced = devs.filter(d => !pos.has(d.hostname) && !['Access point', 'Printer'].includes(d.role) && d.state !== 'retired');
     unplaced.forEach((d, i) => pos.set(d.hostname, { x: 380 + (i % 6) * 170, y: 760 + Math.floor(i / 6) * 40, d, bar: true }));
     if (unplaced.length) out += `<text x="380" y="740" class="nm-boxl">Not in a rack</text>`;
     g += linkSvg('physical', pos, (l) => true);
@@ -109,7 +110,7 @@ const NMViews = self.NMViews = (() => {
 
   // ── System (5.1) ──────────────────────────────────────────────────────────
   function system() {
-    const devs = D().devices, by = (r) => devs.filter(d => d.role === r).sort((a, b) => a.hostname.localeCompare(b.hostname));
+    const devs = D().devices.filter(d => d.state !== 'retired'), by = (r) => devs.filter(d => d.role === r).sort((a, b) => a.hostname.localeCompare(b.hostname));
     const pos = new Map(), sel = NM.selected();
     const row = (list, y, cx, gap) => list.forEach((d, i) => pos.set(d.hostname, { x: cx + (i - (list.length - 1) / 2) * gap, y, d }));
     row(by('Core switch'), 60, 600, 420); row(by('Server switch'), 300, 600, 340);

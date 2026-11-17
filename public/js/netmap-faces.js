@@ -56,7 +56,8 @@ const NMFaces = self.NMFaces = (() => {
   }
 
   // ── Patch panels ─────────────────────────────────────────────────────────
-  const panelName = (label) => (String(label || '').toUpperCase().match(/MR\d+\/PP\d+/) || [''])[0];
+  // "MR01/PP01", "MR-01/DATA-PP-01" and "MR01/PP01 (D)" are the same panel.
+  const panelName = (label) => { const m = String(label || '').toUpperCase().match(/MR-?0?(\d+)\/(?:DATA-)?PP-?0?(\d+)/); return m ? `MR${m[1].padStart(2, '0')}/PP${m[2].padStart(2, '0')}` : ''; };
   function panel(label) {
     const name = panelName(label), rows = (D().patches || []).filter(p => p.panel === name);
     if (!name) return false;

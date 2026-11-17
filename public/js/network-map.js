@@ -12,8 +12,10 @@ const NM = (() => {
   let focus = true, depth = 1, fpos = new Map();   // focus: show only the selected device and what is cabled to it
   let byHost = new Map(), byId = new Map(), portsOf = new Map(), sel = null, view = { x: 0, y: 0, w: 1600, h: 900 }, q = '', portFilter = 'all';
   const CABLES = ['', 'CAT6', 'CAT5e', 'SFP+ SR', 'SFP+ LR', 'SFP LX', 'SFP SX', 'DAC', 'Fiber', 'Console', 'Other'];
-  const ROLES = ['ISP / external', 'Firewall', 'Router', 'Core switch', 'Wireless controller', 'Distribution switch', 'Server switch', 'Access switch', 'HCI server', 'Backup storage', 'Server', 'Access point', 'Other'];
-  const TIER = { 'ISP / external': 0, Firewall: 1, Router: 1, 'Core switch': 2, 'Wireless controller': 2, 'Distribution switch': 3, 'Server switch': 3, 'HCI server': 4, 'Backup storage': 4, Server: 4, 'Access switch': 5, 'Access point': 6, Other: 6 };
+  const ROLES = ['ISP / external', 'Firewall', 'Router', 'Core switch', 'Wireless controller', 'Distribution switch', 'Server switch', 'Access switch', 'HCI server', 'Backup storage', 'Server', 'Access point', 'Printer', 'Other'];
+  const TIER = { 'ISP / external': 0, Firewall: 1, Router: 1, 'Core switch': 2, 'Wireless controller': 2, 'Distribution switch': 3, 'Server switch': 3, 'HCI server': 4, 'Backup storage': 4, Server: 4, 'Access switch': 5, 'Access point': 6, Printer: 6, Other: 6, 'Retired (not in use)': 9 };
+  const RETIRED = 'Retired (not in use)';
+  const live = (d) => d && d.state !== 'retired';   // retired: still in its rack, not in the topology
   const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
   const isFiber = (c) => /sfp|sr|lr|lx|sx|fib|dac/i.test(c || '');
   const known = (h) => byHost.has(h);
@@ -26,6 +28,7 @@ const NM = (() => {
     for (const l of portsOf.values()) l.sort((a, b) => natural(a.port, b.port));
     $('nm-site').innerHTML = (D.sites.length ? D.sites : [{ site: D.site || '', devices: 0 }]).map(s => `<option value="${esc(s.site)}"${s.site === D.site ? ' selected' : ''}>${esc(s.site || '(no site yet)')} · ${s.devices} devices</option>`).join('');
     $('nm-import').style.display = D.can.admin ? '' : 'none';
+    $('nm-import-x').style.display = D.can.admin ? '' : 'none';
     $('nm-add').style.display = D.can.edit && D.site ? '' : 'none';
     $('nm-sub').textContent = D.devices.length ? `· ${D.devices.length} devices · ${D.ports.length} ports · ${links().length} links` : '· ports & links';
     if (sel && !byId.has(sel)) sel = null;
@@ -37,7 +40,7 @@ const NM = (() => {
   function links() {
     const seen = new Set(), out = [];
     for (const p of D.ports) {
-      if (!p.peer_host || !known(p.peer_host)) continue;
+      if (!p.peer_host || !known(p.peer_host) || !live(byId.get(p.device_id)) || !live(byHost.get(p.peer_host))) continue;
       const a = byId.get(p.device_id).hostname, k = [a + '|' + p.port, p.peer_host + '|' + p.peer_port].sort().join('~');
       if (seen.has(k)) continue; seen.add(k);
       out.push({ a, ap: p.port, b: p.peer_host, bp: p.peer_port, cable: p.cable, grp: p.grp });
@@ -55,7 +58,7 @@ const NM = (() => {
     const match = (d) => !qq || `${d.hostname} ${d.alias} ${d.model} ${d.mgmt_ip} ${d.location} ${d.role}`.toLowerCase().includes(qq)
       || (portsOf.get(d.id) || []).some(p => `${p.port} ${p.peer_host} ${p.peer_port} ${p.patch} vlan${p.vlan}`.toLowerCase().includes(qq));
     const groups = new Map();
-    for (const d of D.devices.filter(match)) { const r = d.role || 'Other'; if (!groups.has(r)) groups.set(r, []); groups.get(r).push(d); }
+    for (const d of D.devices.filter(match)) { const r = live(d) ? d.role || 'Other' : RETIRED; if (!groups.has(r)) groups.set(r, []); groups.get(r).push(d); }
     $('nm-list').innerHTML = [...groups.entries()].sort((a, b) => (TIER[a[0]] ?? 9) - (TIER[b[0]] ?? 9)).map(([r, list]) => `
       <div class="nm-grp"><div class="nm-grp-h">${icon(r, 0, 0, 18, true)} ${esc(r)} <span>${list.length}</span></div>
       ${list.sort((a, b) => natural(a.hostname, b.hostname)).map(d => { const s = stats(d); return `<div class="nm-item${sel === d.id ? ' on' : ''}" onclick="NM.select(${d.id}, true)">
@@ -78,6 +81,8 @@ const NM = (() => {
       case 'HCI server': case 'Server': return wrap(`<rect x="-12" y="-17" width="24" height="34" rx="3" fill="${role === 'HCI server' ? '#0f766e' : '#334155'}"/><path d="M-7 -10h14M-7 -4h14M-7 2h14" stroke="#e2e8f0" stroke-width="2"/><circle cx="5" cy="10" r="2" fill="#4ade80"/>`);
       case 'Backup storage': return wrap('<ellipse cx="0" cy="-11" rx="15" ry="5" fill="#64748b"/><path d="M-15 -11v22a15 5 0 0 0 30 0v-22" fill="#475569"/><ellipse cx="0" cy="-11" rx="15" ry="5" fill="#94a3b8"/><path d="M-15 0a15 5 0 0 0 30 0" stroke="#cbd5e1" fill="none"/>');
       case 'Access point': return wrap('<circle r="13" fill="#f8fafc" stroke="#64748b" stroke-width="2"/><circle r="3" fill="#22c55e"/>');
+      case 'Printer': return wrap('<rect x="-15" y="-6" width="30" height="16" rx="3" fill="#475569"/><rect x="-9" y="-15" width="18" height="10" fill="#e2e8f0" stroke="#64748b"/><rect x="-9" y="6" width="18" height="9" fill="#fff" stroke="#64748b"/>');
+      case RETIRED: return wrap('<rect x="-16" y="-12" width="32" height="24" rx="4" fill="#cbd5e1"/><path d="M-9 -7l18 14M9 -7l-18 14" stroke="#64748b" stroke-width="2.5"/>');
       default: return wrap('<rect x="-16" y="-12" width="32" height="24" rx="4" fill="#64748b"/>');
     }
   }
@@ -85,7 +90,7 @@ const NM = (() => {
   // ── Topology (centre) ─────────────────────────────────────────────────────
   function autoPlace(force) {
     const tiers = new Map();
-    for (const d of D.devices) { const t = TIER[d.role] ?? 6; if (!tiers.has(t)) tiers.set(t, []); tiers.get(t).push(d); }
+    for (const d of D.devices.filter(live)) { const t = TIER[d.role] ?? 6; if (!tiers.has(t)) tiers.set(t, []); tiers.get(t).push(d); }
     // Layers top → bottom; at most 8 devices per row (big layers wrap), 150 px apart.
     const PER = 8, GAP = 150, W = PER * GAP;
     let y = 60;
@@ -139,7 +144,8 @@ const NM = (() => {
       view = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h }; return apply();
     }
     if (!D.devices.length) { view = { x: 0, y: 0, w: 1600, h: 900 }; return apply(); }
-    const xs = D.devices.map(d => d.x), ys = D.devices.map(d => d.y);
+    const vis = D.devices.filter(live), xs = vis.map(d => d.x), ys = vis.map(d => d.y);
+    if (!vis.length) { view = { x: 0, y: 0, w: 1600, h: 900 }; return apply(); }
     const x0 = Math.min(...xs) - 90, x1 = Math.max(...xs) + 90, y0 = Math.min(...ys) - 70, y1 = Math.max(...ys) + 80;
     view = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; apply();
   }
@@ -165,7 +171,7 @@ const NM = (() => {
         <line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${fib ? '#f59e0b' : '#3b82f6'}" stroke-width="${pc || ls.length > 1 ? 4 : 2}" ${pc ? 'stroke-dasharray="10 4"' : ''}/>
         ${ls.length > 1 ? `<text x="${(A.x + B.x) / 2}" y="${(A.y + B.y) / 2 - 4}" class="nm-lcnt">×${ls.length}</text>` : ''}</g>`;
     }
-    for (const d of D.devices.filter(d => showing(d.hostname))) {
+    for (const d of D.devices.filter(d => showing(d.hostname) && (live(d) || d.id === sel))) {
       const s = stats(d), P = pos(d);
       g += `<g class="nm-node${sel === d.id ? ' on' : ''}${F && dist.get(d.hostname) === 2 ? ' far' : ''}" data-id="${d.id}" transform="translate(${P.x},${P.y})">
         <circle r="30" class="nm-halo"/>${icon(d.role, 0, 0, 46)}
@@ -261,7 +267,7 @@ const NM = (() => {
     if (linkKey) for (const l of links()) if ([l.a, l.b].sort().join('~') === linkKey) hl.add(l.a === d.hostname ? l.ap : l.bp);
     const shown = ps.filter(p => (portFilter === 'all' || (portFilter === 'dev' && known(p.peer_host)) || (portFilter === 'end' && portClass(p) === 'pt-end') || (portFilter === 'free' && portClass(p) === 'pt-free')));
     box.innerHTML = `<div class="nm-dh">${icon(d.role, 0, 0, 40, true)}
-        <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}</div>
+        <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}${live(d) ? '' : ' <span class="nm-retired">Retired — not in use</span>'}</div>
           <div class="text-muted text-sm">${esc([d.alias, d.role, d.model].filter(Boolean).join(' · '))}</div>
           <div class="text-sm">${d.mgmt_ip ? `IP <b>${esc(d.mgmt_ip)}</b> · ` : ''}${esc(d.location || '')}${d.serial ? ` · S/N ${esc(d.serial)}` : ''}${d.service_tag && d.service_tag !== d.serial ? ` · tag ${esc(d.service_tag)}` : ''}</div>
           ${ipList(d)}${d.server_id ? `<div class="text-sm"><a href="/server-inventory.html?view=${d.server_id}">📦 Server Inventory record #${d.server_id}</a></div>` : ''}</div>
@@ -342,6 +348,7 @@ const NM = (() => {
     $('nm-dev-b').innerHTML = `<div class="qe-grid">${f('hostname', 'Hostname *', 'e.g. MR-01/ASW-06')}${f('alias', 'Name / description')}
       <div class="form-group"><label class="form-label">Role</label><select class="form-control" id="nd-role">${ROLES.map(r => `<option${r === d.role ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
       ${f('model', 'Model', 'e.g. C9200L-48P-4X-E')}${f('mgmt_ip', 'Management IP')}${f('location', 'Location / rack', 'e.g. MAIN RACK - 01 (U38)')}${f('serial', 'Serial')}${f('notes', 'Notes')}
+      ${id ? `<div class="form-group"><label class="form-label">In use?</label><select class="form-control" id="nd-state"><option value="">In use</option><option value="retired"${d.state === 'retired' ? ' selected' : ''}>Retired — stays in the rack, hidden from the topology</option></select></div>` : ''}
       ${id ? '' : `<div class="form-group"><label class="form-label">Ports: name before the number</label><input class="form-control" id="nd-prefix" placeholder="e.g. GE 1/0/"></div>
         <div class="form-group"><label class="form-label">How many</label><input class="form-control" id="nd-count" type="number" min="0" max="96" placeholder="48"></div>`}</div>`;
     $('nm-dev-f').innerHTML = `${id && D.can.admin ? `<button class="btn btn-danger" style="margin-right:auto" onclick="NM.deleteDevice(${id})">Delete</button>` : ''}
@@ -351,6 +358,7 @@ const NM = (() => {
   async function saveDevice(id) {
     const v = (k) => ($('nd-' + k) ? $('nd-' + k).value.trim() : '');
     const body = { site: D.site, hostname: v('hostname'), alias: v('alias'), role: v('role'), model: v('model'), serial: v('serial'), mgmt_ip: v('mgmt_ip'), location: v('location'), notes: v('notes'), port_prefix: v('prefix'), port_count: v('count') };
+    if (id && $('nd-state')) body.state = $('nd-state').value;
     try {
       const r = id ? await apiPut('/api/netmap/device/' + id, body) : await apiPost('/api/netmap/device', body);
       $('nm-dev-ov').classList.remove('open'); showToast('Saved'); await load(D.site); select(r.id);
@@ -364,8 +372,15 @@ const NM = (() => {
   // ── VLANs / change log ────────────────────────────────────────────────────
   function renderVlans() {
     const use = new Map(); for (const p of D.ports) for (const v of String(p.vlan || '').split(/[,\s]+/).filter(Boolean)) use.set(v, (use.get(v) || 0) + 1);
-    $('nm-view-vlan').innerHTML = D.vlans.length ? `<table class="nm-vt"><thead><tr><th>VLAN</th><th>Name</th><th>Network</th><th>Gateway</th><th>Ports set to it</th></tr></thead><tbody>
-      ${D.vlans.map(v => `<tr><td><b>${esc(v.vlan)}</b></td><td>${esc(v.name)}</td><td>${esc(v.network)}</td><td>${esc(v.gateway)}</td><td>${use.get(v.vlan) || ''}${use.get(v.vlan) ? ` <a href="#" onclick="NM.search('vlan${esc(v.vlan)}');return false">show</a>` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="text-muted" style="padding:14px">No VLANs (they come from the VLAN – IP table of the document).</p>';
+    // VLANs set on ports but missing from the list (e.g. 134 PXE boot) are shown too.
+    const listed = new Set(D.vlans.map(v => v.vlan));
+    const extra = [...use.keys()].filter(v => /^\d+$/.test(v) && !listed.has(v)).sort((a, b) => a - b).map(v => ({ vlan: v, unlisted: true }));
+    const inNet = (ip, net) => { const m = String(net || '').match(/^(\d+\.\d+\.\d+)\.\d+\/(\d+)$/); return m && Number(m[2]) >= 24 && String(ip || '').split('/')[0].startsWith(m[1] + '.'); };
+    $('nm-view-vlan').innerHTML = D.vlans.length || extra.length ? `<table class="nm-vt"><thead><tr><th>VLAN</th><th>Name</th><th>Description</th><th>Network</th><th>Gateway</th><th>DHCP range</th><th>Ports set to it</th><th>Devices in it</th></tr></thead><tbody>
+      ${[...D.vlans, ...extra].map(v => { const devs = v.network ? D.devices.filter(d => inNet(d.mgmt_ip, v.network)) : [];
+        return `<tr${v.unlisted ? ' class="nm-vl-x"' : ''}><td><b>${esc(v.vlan)}</b></td><td>${v.unlisted ? '<i>not in the VLAN list</i>' : esc(v.name)}</td><td class="text-sm">${esc(v.description && v.description !== v.name ? v.description : '')}</td><td>${esc(v.network || '')}</td><td>${esc(v.gateway || '')}</td><td>${esc(v.dhcp || '')}</td>
+        <td>${use.get(v.vlan) || ''}${use.get(v.vlan) ? ` <a href="#" onclick="NM.search('vlan${esc(v.vlan)}');return false">show</a>` : ''}</td>
+        <td class="text-sm">${devs.length ? `${devs.length} <span class="text-muted">${esc(devs.slice(0, 3).map(d => d.hostname).join(', '))}${devs.length > 3 ? ' …' : ''}</span>` : ''}</td></tr>`; }).join('')}</tbody></table>` : '<p class="text-muted" style="padding:14px">No VLANs (they come from the VLAN – IP table of the document).</p>';
   }
   async function showLog(device) {
     $('nm-view-log').innerHTML = '<p class="text-muted" style="padding:14px">Loading…</p>';   // before tab(): tab() loads only an empty view
@@ -392,11 +407,63 @@ const NM = (() => {
     if (!r.devices.length) { showToast('No switch-port tables found in this document', 'error'); return; }
     const site = prompt(`Found ${r.counts.devices} devices, ${r.counts.ports} ports (${r.counts.links} cabled to a device or user point) and ${r.counts.vlans} VLANs.\n\nSite name for this map:`, D.site || 'Vietnam factory');
     if (site == null) return;
-    const replace = D.sites.some(s => s.site === site.trim()) ? confirm(`"${site}" already has a map. OK = replace it with the document, Cancel = add / update only.`) : true;
+    const replace = D.sites.some(s => s.site === site.trim()) ? confirm(`"${site}" already has a map. OK = replace it with the document, Cancel = add / update only.\n\nReplace resets the ports to the document: if you imported the Factory Info workbook, import it again afterwards (devices it added stay).`) : true;
     try { const x = await apiPost('/api/netmap/import', { site: site.trim(), devices: r.devices, ports: r.ports, vlans: r.vlans, patches: r.patches, equipment: r.equipment, replace });
       showToast(`Imported ${x.devices} devices, ${x.ports} ports, ${x.vlans} VLANs, ${x.patches} patch-panel ports`); await load(x.site); autoPlace(true); renderTopo(); fit();
       if (D.can.edit) savePositions(D.devices);
     } catch (e) { showToast(errText(e, 'Import failed'), 'error'); }
+  }
+  // ── Factory Info workbook (.xlsx): preview every change, apply the ticked ones ──
+  let WB = null;
+  async function importWorkbook(file) {
+    showToast('Reading the workbook…');
+    let wb;
+    try { wb = await NetmapXlsx.read(file); } catch (e) { console.error(e); showToast('Could not read this .xlsx', 'error'); return; }
+    if (!wb.counts.blocks && !wb.counts.equipment && !wb.counts.vms) { showToast('No port sheets, equipment list or VM list found in this workbook', 'error'); return; }
+    const site = prompt(`Found ${wb.counts.blocks} port tables (${wb.counts.ports} ports), ${wb.counts.equipment} equipment rows, ${wb.counts.aps} access points, ${wb.counts.vlans} VLANs, ${wb.counts.racks} racks / cabinets, ${wb.counts.vms} VM servers, ${wb.counts.printers} printers.\n\nCompare with the map of site:`, D.site || 'Vietnam factory');
+    if (site == null || !site.trim()) return;
+    try { const plan = await apiPost('/api/netmap/workbook/plan', { site: site.trim(), wb }); WB = { wb, site: site.trim(), plan }; wbShow(); }
+    catch (e) { showToast(errText(e, 'Could not compare'), 'error'); }
+  }
+  function wbShow() {
+    const { plan, wb } = WB, total = plan.groups.reduce((t, g) => t + g.changes.length, 0);
+    $('nm-wb-t').textContent = `Factory Info workbook → ${WB.site}`;
+    const row = (c) => `<label class="wb-r${c.warn ? ' warn' : ''}"><input type="checkbox" data-id="${esc(c.id)}"${c.on ? ' checked' : ''}>
+        <span class="wb-t">${esc(c.title)}</span><span class="wb-ft">${c.from ? `<s>${esc(c.from)}</s> → ` : ''}${esc(c.to || '')}</span>${c.warn ? `<span class="wb-w">⚠ ${esc(c.warn)}</span>` : ''}</label>`;
+    const body = (g) => {
+      if (g.key !== 'port') return g.changes.map(row).join('');
+      const by = new Map(); for (const c of g.changes) { if (!by.has(c.dev)) by.set(c.dev, []); by.get(c.dev).push(c); }
+      return [...by.entries()].map(([dev, l]) => `<details class="wb-dev"${l.some(c => c.warn) ? ' open' : ''}><summary><input type="checkbox" class="wb-sub" ${l.every(c => c.on) ? 'checked' : ''}> <b>${esc(dev)}</b> <span class="text-muted">${l.length} port${l.length > 1 ? 's' : ''}${l.some(c => c.warn) ? ' · ⚠ links move' : ''}</span></summary>${l.map(row).join('')}</details>`).join('');
+    };
+    $('nm-wb-b').innerHTML = total ? `<p class="text-sm" style="margin:0 0 10px">Read from <b>${esc(wb.file || 'the workbook')}</b> in your browser (the file is not uploaded). Ticked = will be applied.
+        Blank cells never clear what the map has. <span class="wb-w">⚠</span> = check first (a different value is already there, or the workbook contradicts itself) — not ticked unless it is clearly newer.</p>
+      ${plan.groups.map(g => `<details class="wb-g"${['dev', 'retire', 'rack'].includes(g.key) ? ' open' : ''} data-g="${g.key}"><summary><input type="checkbox" class="wb-all"> <b>${esc(g.title)}</b> <span class="wb-n"></span></summary><div class="wb-rows">${body(g)}</div></details>`).join('')}`
+      : '<p class="ic-ok">✓ The map, Server Inventory and the virtual-server list already match the workbook.</p>';
+    const count = () => {
+      document.querySelectorAll('#nm-wb-b .wb-g').forEach(g => { const all = g.querySelectorAll('.wb-r input'), on = [...all].filter(i => i.checked).length;
+        g.querySelector('.wb-n').textContent = `${on} / ${all.length} ticked`; const a = g.querySelector('.wb-all'); a.checked = on === all.length; a.indeterminate = on > 0 && on < all.length; });
+      document.querySelectorAll('#nm-wb-b .wb-dev').forEach(d => { const all = d.querySelectorAll('.wb-r input'), on = [...all].filter(i => i.checked).length; const a = d.querySelector('.wb-sub'); a.checked = on === all.length; a.indeterminate = on > 0 && on < all.length; });
+      const n = document.querySelectorAll('#nm-wb-b .wb-r input:checked').length; const b = $('wb-apply'); if (b) { b.textContent = `Apply ${n} change${n === 1 ? '' : 's'}`; b.disabled = !n; }
+    };
+    $('nm-wb-b').querySelectorAll('.wb-all').forEach(a => { a.onclick = (e) => e.stopPropagation(); a.onchange = () => { a.closest('.wb-g').querySelectorAll('.wb-r input').forEach(i => { i.checked = a.checked; }); count(); }; });
+    $('nm-wb-b').querySelectorAll('.wb-sub').forEach(a => { a.onclick = (e) => e.stopPropagation(); a.onchange = () => { a.closest('.wb-dev').querySelectorAll('.wb-r input').forEach(i => { i.checked = a.checked; }); count(); }; });
+    $('nm-wb-b').querySelectorAll('.wb-r input').forEach(i => { i.onchange = count; });
+    $('nm-wb-f').innerHTML = `<span class="text-muted text-sm" style="margin-right:auto">${total} difference${total === 1 ? '' : 's'} found</span><button class="btn btn-ghost" onclick="document.getElementById('nm-wb-ov').classList.remove('open')">Close</button>${total ? '<button class="btn btn-primary" id="wb-apply">Apply</button>' : ''}`;
+    if ($('wb-apply')) $('wb-apply').onclick = wbApply;
+    count(); $('nm-wb-ov').classList.add('open');
+  }
+  async function wbApply() {
+    const ids = [...document.querySelectorAll('#nm-wb-b .wb-r input:checked')].map(i => i.dataset.id);
+    if (!ids.length || !confirm(`Apply ${ids.length} change${ids.length === 1 ? '' : 's'} to "${WB.site}"? Every change is written to the Port changes log.`)) return;
+    const b = $('wb-apply'); b.disabled = true; b.textContent = 'Applying…';
+    try {
+      const r = await apiPost('/api/netmap/workbook/apply', { site: WB.site, wb: WB.wb, ids });
+      const c = r.counts || {}, names = { devices: 'device changes', ports: 'ports', vlans: 'VLANs', rack_items: 'rack items', inventory: 'Server Inventory changes', linked: 'devices linked to Server Inventory', vms: 'virtual servers' };
+      showToast('Applied: ' + Object.entries(c).filter(([, v]) => v).map(([k, v]) => `${v} ${names[k] || k}`).join(', '));
+      if (self.NMViews) NMViews.resetRacks(); if (self.NMRacks) await NMRacks.reload().catch(() => {});
+      await load(WB.site); autoPlace(false); renderTopo(); fit();
+      const plan = await apiPost('/api/netmap/workbook/plan', { site: WB.site, wb: WB.wb }); WB.plan = plan; wbShow();
+    } catch (e) { showToast(errText(e, 'Could not apply'), 'error'); b.disabled = false; b.textContent = 'Apply'; }
   }
   const savePositions = (list) => apiPut('/api/netmap/positions', { items: list.map(d => ({ id: d.id, x: d.x, y: d.y })) }).catch(() => {});
   function exportCsv() {
@@ -416,6 +483,8 @@ const NM = (() => {
     $('nm-auto').onclick = async () => { focus = false; autoPlace(true); renderTopo(); fit(); if (D.can.edit && confirm('Save this layout for everyone?')) savePositions(D.devices); };
     $('nm-import').onclick = () => $('nm-file').click();
     $('nm-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importDoc(f); };
+    $('nm-import-x').onclick = () => $('nm-xfile').click();
+    $('nm-xfile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importWorkbook(f); };
     $('nm-export').onclick = exportCsv;
     $('nm-add').onclick = () => editDevice(0);
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.v); });

@@ -1315,3 +1315,30 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .na-fill { display: flex; gap: 6px; flex-wrap: wrap; } .na-in { display: flex; flex-direction: column; font-size: 11px; color: #64748b; } .na-in input { width: 170px; padding: 4px 6px; font-size: 12.5px; }
 .na-sum-b { display: flex; gap: 18px; align-items: center; } .na-big { font-size: 34px; font-weight: 800; color: #b45309; min-width: 60px; text-align: center; } .na-big.ok { color: #15803d; }
 .na-chip { display: inline-block; border: 1px solid var(--border); border-radius: 16px; padding: 3px 10px; font-size: 12.5px; color: #334155; text-decoration: none; margin: 2px 4px 2px 0; } .na-chip:hover { background: #eff6ff; }
+
+/* Network map: Factory Info workbook preview, retired devices */
+.wb-modal { max-width: 1150px; width: 96vw; }
+#nm-wb-b { max-height: 70vh; overflow: auto; }
+.wb-g { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 8px; background: #fff; }
+.wb-g > summary { padding: 9px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; background: #f8fafc; border-radius: 8px; }
+.wb-g[open] > summary { border-bottom: 1px solid #e2e8f0; border-radius: 8px 8px 0 0; }
+.wb-n { margin-left: auto; color: #64748b; font-size: 12.5px; }
+.wb-rows { padding: 4px 8px 8px; }
+.wb-dev { margin: 4px 0; } .wb-dev > summary { cursor: pointer; padding: 4px 4px; font-size: 13px; }
+.wb-r { display: grid; grid-template-columns: 22px minmax(180px, 300px) 1fr; gap: 2px 8px; align-items: start; padding: 5px 4px; border-bottom: 1px dashed #eef2f7; font-size: 13px; cursor: pointer; }
+.wb-r:hover { background: #f8fafc; }
+.wb-r input { margin-top: 2px; }
+.wb-t { font-weight: 600; word-break: break-word; } .wb-ft { color: #334155; word-break: break-word; } .wb-ft s { color: #94a3b8; }
+.wb-w { grid-column: 2 / -1; color: #b45309; font-size: 12.5px; }
+.wb-r.warn { background: #fffbeb; }
+.nm-retired { background: #e2e8f0; color: #475569; border-radius: 10px; padding: 1px 8px; font-size: 12px; font-weight: 600; margin-left: 4px; }
+.nm-vl-x td { background: #fffbeb; }
+
+/* Server Inventory: Servers & network / Virtual servers tabs */
+.si-tabs { display: flex; gap: 4px; margin-bottom: 14px; border-bottom: 1px solid var(--border); }
+.si-tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 14px; font-size: 14px; cursor: pointer; color: #475569; }
+.si-tabs button.on { border-bottom-color: var(--primary, #2563eb); color: #0f172a; font-weight: 600; }
+.vm-kind { font-size: 11.5px; border-radius: 9px; padding: 1px 7px; background: #e0f2fe; color: #075985; } .vm-kind.phys { background: #ede9fe; color: #5b21b6; }
+.vm-ot { font-size: 11.5px; border-radius: 9px; padding: 1px 7px; background: #fef3c7; color: #92400e; }
+#si-vm td.vm-desc { max-width: 380px; font-size: 12.5px; color: #475569; }
+#si-vm td.vm-desc { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; border-bottom: 0; }

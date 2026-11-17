@@ -53,9 +53,10 @@ router.post('/import', wrap(async (req, res) => {
     // Replace = the ports and VLANs come again from the document; devices that are still in it keep their id,
     // so rack places, map positions and Server Inventory links stay. Devices no longer in it are removed.
     const keep = devices.map(d => str(d.hostname, 80)).filter(Boolean);
-    stmts.push({ sql: 'DELETE FROM net_ports WHERE device_id IN (SELECT id FROM net_devices WHERE site = ?)', args: [site] });
-    stmts.push({ sql: `DELETE FROM net_rack_items WHERE device_id IN (SELECT id FROM net_devices WHERE site = ? AND hostname NOT IN (${keep.map(() => '?').join(',') || "''"}))`, args: [site, ...keep] });
-    stmts.push({ sql: `DELETE FROM net_devices WHERE site = ? AND hostname NOT IN (${keep.map(() => '?').join(',') || "''"})`, args: [site, ...keep] });
+    stmts.push({ sql: "DELETE FROM net_ports WHERE device_id IN (SELECT id FROM net_devices WHERE site = ? AND COALESCE(source, '') <> 'workbook')", args: [site] });
+    // Devices added from the Factory Info workbook (Palo Alto, APs, printers …) are not in the document: they stay.
+    stmts.push({ sql: `DELETE FROM net_rack_items WHERE device_id IN (SELECT id FROM net_devices WHERE site = ? AND COALESCE(source, '') <> 'workbook' AND hostname NOT IN (${keep.map(() => '?').join(',') || "''"}))`, args: [site, ...keep] });
+    stmts.push({ sql: `DELETE FROM net_devices WHERE site = ? AND COALESCE(source, '') <> 'workbook' AND hostname NOT IN (${keep.map(() => '?').join(',') || "''"})`, args: [site, ...keep] });
     stmts.push({ sql: 'DELETE FROM net_vlans WHERE site = ?', args: [site] });
   }
   for (const d of devices) {
@@ -118,6 +119,11 @@ router.put('/device/:id', wrap(async (req, res) => {
   const d = await deviceOf(req.params.id); if (!d) return res.status(404).json({ error: 'Not found' });
   const b = req.body || {};
   if ('x' in b || 'y' in b) await run('UPDATE net_devices SET x = ?, y = ? WHERE id = ?', [b.x == null ? null : Number(b.x), b.y == null ? null : Number(b.y), d.id]);
+  if ('state' in b) {
+    const st = b.state === 'retired' ? 'retired' : '';
+    await run("UPDATE net_devices SET state = ?, updated_at = datetime('now') WHERE id = ?", [st, d.id]);
+    if (st !== (d.state || '')) await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [d.site, d.hostname, '', d.state || 'in use', st || 'in use', req.user.username]);
+  }
   if ('alias' in b) {
     await run(`UPDATE net_devices SET alias = ?, role = ?, model = ?, serial = ?, mgmt_ip = ?, location = ?, notes = ?, updated_at = datetime('now') WHERE id = ?`,
       [str(b.alias), str(b.role, 40), str(b.model), str(b.serial, 60), str(b.mgmt_ip, 60), str(b.location), str(b.notes, 500), d.id]);
@@ -315,7 +321,14 @@ router.post('/racks/build', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const site = str(req.body.site, 80);
   if (req.body.replace) await batch([{ sql: 'DELETE FROM net_rack_items WHERE rack_id IN (SELECT id FROM net_racks WHERE site = ?)', args: [site] }, { sql: 'DELETE FROM net_racks WHERE site = ?', args: [site] }]);
-  const devs = await all('SELECT id, hostname, model, location, role FROM net_devices WHERE site = ?', [site]);
+  const n = await placeDevices(site);
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": racks built from device locations (${n} items)`);
+  res.json({ ok: true, items: n });
+}));
+// Put every device that is not in a rack yet where its location says; empty cabinets / MR-01 / MR-02 get their
+// patch panels, cable managers and PDU like the drawing. Returns the number of items added.
+async function placeDevices(site) {
+  const devs = await all("SELECT id, hostname, model, location, role FROM net_devices WHERE site = ? AND role NOT IN ('Access point', 'Printer')", [site]);
   const racks = new Map((await all('SELECT * FROM net_racks WHERE site = ?', [site])).map(r => [r.name, r]));
   const ensure = async (name, cabinet) => {
     if (racks.has(name)) return racks.get(name);
@@ -328,6 +341,7 @@ router.post('/racks/build', wrap(async (req, res) => {
   const stmts = [];
   // ISP lease-line routers have no location in the port tables; the rack drawing shows them at the top of MR-03.
   let ispU = 38;
+  const used = new Map();
   for (const d of devs) {
     if (placed.has(d.id)) continue;
     let p = parseLoc(d.location);
@@ -335,8 +349,13 @@ router.post('/racks/build', wrap(async (req, res) => {
     if (!p.rack) continue;
     const r = await ensure(p.rack, p.cabinet);
     const h = p.lo && p.hi > p.lo ? p.hi - p.lo + 1 : HEIGHT(d.model);
-    const u = p.lo || (p.cabinet ? 8 : null);
+    let u = p.lo || (p.cabinet ? 8 : null);
     if (!u) continue;
+    // Two devices given the same U (copied rows in a sheet): the second goes to the next free U above.
+    if (!used.has(r.id)) used.set(r.id, (await all('SELECT u, height FROM net_rack_items WHERE rack_id = ?', [r.id])).map(x => [x.u, x.u + x.height - 1]));
+    const occ = used.get(r.id), clash = (a) => occ.some(([lo, hi]) => a <= hi && lo <= a + h - 1);
+    for (let k = 0; k < r.units && clash(u); k++) { if (u + h <= r.units) u++; else break; }
+    occ.push([u, u + h - 1]);
     stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, device_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, ?, ?, 1)', args: [r.id, d.id, 'device', d.hostname, u, h] });
   }
   // Cabinets as in the drawing: patch panels + cable managers on top, the switch, the PDU at the bottom.
@@ -358,9 +377,8 @@ router.post('/racks/build', wrap(async (req, res) => {
     [6, 7, 8, 9, 10].forEach((n, i) => stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, 2, 1)', args: [mr2.id, 'patch', `MR01/PP${String(n).padStart(2, '0')} (T)`, 40 - i * 3] }));
   }
   await batch(stmts);
-  await audit(req.user, 'NETMAP', null, `Network map "${site}": racks built from device locations (${stmts.length} items)`);
-  res.json({ ok: true, items: stmts.length });
-}));
+  return stmts.length;
+}
 router.post('/rack', wrap(async (req, res) => {
   if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
   const site = str(req.body.site, 80), name = str(req.body.name, 40); if (!name) return res.status(400).json({ error: 'Name is required' });
@@ -479,5 +497,6 @@ async function inventoryCheck(site) {
   return { site, has_equipment: equip.length > 0, models, issues, doc_only: docOnly };
 }
 router.inventoryCheck = inventoryCheck;
+router.util = { str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
 
 module.exports = router;
