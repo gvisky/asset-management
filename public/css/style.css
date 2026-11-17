@@ -1307,3 +1307,9 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .ic-tbl th { background: #f8fafc; } .ic-row-bad td { background: #fff7ed; }
 .ic-ok { color: #15803d; font-weight: 600; } .ic-bad { color: #b91c1c; font-weight: 700; } .ic-warn { color: #b45309; font-weight: 700; }
 .ic-fam { font-weight: 700; margin: 12px 0 2px; color: #334155; } .ic-p { color: #b45309; } .ic-note { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.na-cnt { display: inline-block; min-width: 18px; background: #dc2626; color: #fff; border-radius: 9px; font-size: 11px; padding: 0 5px; margin-left: 4px; } .na-cnt:empty { display: none; }
+.na-q { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; } .na-q.ok { background: #f0fdf4; border-color: #bbf7d0; }
+.na-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; } .na-chips button { border: 1px solid var(--border); background: #fff; border-radius: 16px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
+.na-chips button.on { background: #1a56db; color: #fff; border-color: #1a56db; }
+.na-tag { display: inline-block; background: #fee2e2; color: #991b1b; border-radius: 4px; padding: 1px 6px; font-size: 11.5px; font-weight: 600; margin: 1px 0; }
+.na-fill { display: flex; gap: 6px; flex-wrap: wrap; } .na-in { display: flex; flex-direction: column; font-size: 11px; color: #64748b; } .na-in input { width: 170px; padding: 4px 6px; font-size: 12.5px; }

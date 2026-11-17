@@ -451,7 +451,7 @@ router.get('/inventory-check', wrap(async (req, res) => {
   for (const s of servers) { const f = familyOf(s.brand_model); if (!f) continue; const x = F(f); x.inv++; if (s.status === 'Active') x.active++; else if (s.status === 'Stock') x.stock++; else x.other++; }
   const models = [...fam.values()].map(x => {
     const want = x.doc_qty != null ? x.doc_qty : x.map;
-    return { ...x, expected: want, diff: x.inv - want, status: x.doc_qty == null && !x.map ? (x.inv ? 'notindoc' : '') : x.inv === want ? 'ok' : x.inv < want ? 'missing' : 'extra' };
+    return { ...x, expected: want, diff: x.inv - want, status: x.doc_qty == null && !x.map ? (x.inv ? 'added' : '') : x.inv === want ? 'ok' : x.inv < want ? 'missing' : 'extra' };
   }).sort((a, b) => (a.status === 'ok') - (b.status === 'ok') || a.family.localeCompare(b.family));
   // Per record
   const docSerials = new Map(); for (const d of devs) for (const sn of [d.serial, d.service_tag]) if (normSn(sn)) docSerials.set(normSn(sn), d);
