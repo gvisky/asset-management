@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: MAC address on every device",
+    "items": [
+      "Every device has a MAC address field (✏️ Device), shown in the device panel and the hover tip; type it in any spelling (689e.0b8a.e378, 68-9E-…) — it is saved as 68:9E:0B:8A:E3:78. Search the map by MAC too.",
+      "Import Factory Info fills it from the workbook where the file has one: all 57 access points (AP list / equipment list) and the 3 Zebra label printers. The workbook has no MAC for the switches, firewalls, routers, WLCs or servers — add those by hand (e.g. from 'show version').",
+      "The third Zebra printer (VNF-BPro03, IP not given yet in the file) is now added too."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: horizontal layout, groups in colour, the selected device shown in the racks",
     "items": [
       "Topology → ↔ Horizontal: the layers run left → right (ISP, firewalls, core, distribution, servers, access switches, APs / printers) with a heading per column, sized to fill the screen; inside a column devices follow what they are cabled to, so fewer lines cross. ↕ Vertical brings back the saved layout. Your choice is remembered.",

@@ -24,6 +24,8 @@ router.use((req, res, next) => (req.user && req.user.asset_access !== 0 ? next()
 const canEdit = (req) => ['admin', 'editor'].includes(req.user.role);
 const isAdmin = (req) => req.user.role === 'admin';
 const str = (v, n = 120) => String(v == null ? '' : v).trim().slice(0, n);
+// MAC address in one spelling: 68:9e:0b:8a:e3:78, 689E.0B8A.E378, 68-9E-… → 68:9E:0B:8A:E3:78 (anything else kept as typed).
+const macNorm = (v) => { const h = String(v || '').replace(/[^0-9a-f]/gi, ''); return h.length === 12 && /^[\s0-9a-f:.-]+$/i.test(String(v).trim()) ? h.toUpperCase().match(/../g).join(':') : str(v, 40); };
 const FIELDS = ['peer_host', 'peer_port', 'cable', 'mode', 'vlan', 'grp', 'patch', 'note'];
 // Order ports naturally: "GE 1/0/2" before "GE 1/0/10"; named ports (IDRAC, MGMT …) first.
 const portSort = (p) => { const n = String(p).match(/(\d+)(?:\/(\d+))?(?:\/(\d+))?\s*$/); if (!n) return 0; return (Number(n[1]) || 0) * 1e6 + (Number(n[2]) || 0) * 1e3 + (Number(n[3]) || 0) + (/^(T|TE|XE|E 1\/4[89])/i.test(p) ? 5e8 : 1e3); };
@@ -105,8 +107,8 @@ router.post('/device', wrap(async (req, res) => {
   const site = str(req.body.site, 80), h = str(req.body.hostname, 80);
   if (!h) return res.status(400).json({ error: 'Hostname is required' });
   if (await get('SELECT id FROM net_devices WHERE site = ? AND hostname = ?', [site, h])) return res.status(409).json({ error: 'This hostname already exists' });
-  await run('INSERT INTO net_devices (site, hostname, alias, role, model, serial, mgmt_ip, location, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [site, h, str(req.body.alias), str(req.body.role, 40), str(req.body.model), str(req.body.serial, 60), str(req.body.mgmt_ip, 60), str(req.body.location), str(req.body.notes, 500)]);
+  await run('INSERT INTO net_devices (site, hostname, alias, role, model, serial, mgmt_ip, mac, location, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [site, h, str(req.body.alias), str(req.body.role, 40), str(req.body.model), str(req.body.serial, 60), str(req.body.mgmt_ip, 60), macNorm(req.body.mac), str(req.body.location), str(req.body.notes, 500)]);
   const d = await get('SELECT * FROM net_devices WHERE site = ? AND hostname = ?', [site, h]);
   // Port list from a count: "GE 1/0/" × 48 etc.
   const n = Math.min(96, Number(req.body.port_count) || 0), prefix = str(req.body.port_prefix, 20);
@@ -125,8 +127,8 @@ router.put('/device/:id', wrap(async (req, res) => {
     if (st !== (d.state || '')) await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [d.site, d.hostname, '', d.state || 'in use', st || 'in use', req.user.username]);
   }
   if ('alias' in b) {
-    await run(`UPDATE net_devices SET alias = ?, role = ?, model = ?, serial = ?, mgmt_ip = ?, location = ?, notes = ?, updated_at = datetime('now') WHERE id = ?`,
-      [str(b.alias), str(b.role, 40), str(b.model), str(b.serial, 60), str(b.mgmt_ip, 60), str(b.location), str(b.notes, 500), d.id]);
+    await run(`UPDATE net_devices SET alias = ?, role = ?, model = ?, serial = ?, mgmt_ip = ?, mac = ?, location = ?, notes = ?, updated_at = datetime('now') WHERE id = ?`,
+      [str(b.alias), str(b.role, 40), str(b.model), str(b.serial, 60), str(b.mgmt_ip, 60), 'mac' in b ? macNorm(b.mac) : (d.mac || ''), str(b.location), str(b.notes, 500), d.id]);
     await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [d.site, d.hostname, '', '', 'device details edited', req.user.username]);
   }
   res.json(await deviceOf(d.id));
@@ -497,6 +499,6 @@ async function inventoryCheck(site) {
   return { site, has_equipment: equip.length > 0, models, issues, doc_only: docOnly };
 }
 router.inventoryCheck = inventoryCheck;
-router.util = { str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
+router.util = { macNorm, str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
 
 module.exports = router;

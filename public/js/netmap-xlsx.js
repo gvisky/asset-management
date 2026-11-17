@@ -152,10 +152,12 @@
     const desc = table(vmG, [/^HOSTNAME$/i, /^Description$/i, /^STT$/i], { hostname: /^HOSTNAME$/i, description: /^Description$/i, note: /^Noted$/i, location: /^LOCATION$/i });
     for (const v of vms) { const d = desc.find(x => x.hostname.toUpperCase() === v.hostname.toUpperCase()); if (d) { v.description = d.description; v.note = d.note; v.location = d.location; } }
     const printers = table(sheet(X, wb, /PRINTER/i), [/Printer IP/i], { name: /SAP PRINTER NAME/i, brand: /Printer\s+Details/i, location: /^Location$/i, ip: /Printer IP/i, share: /shared name/i, server: /Print server IP/i, ref: /Referns|Reference/i })
-      .filter(p => /^\d+\.\d+\.\d+\.\d+/.test(p.ip));
+      .filter(p => /^\d+\.\d+\.\d+\./.test(p.ip));   // "10.84.21.x" = IP not given yet, the printer still counts
     // "Printer Details" spans Model + Type columns.
     const pg = sheet(X, wb, /PRINTER/i), ph = pg.rows.findIndex(r => r.some(x => /Printer IP/i.test(x)));
-    if (ph >= 0) { const ci = pg.rows[ph].findIndex(x => /Printer\s+Details/i.test(x)); for (const p of printers) { const row = pg.rows.find(r => r.includes(p.ip) && r.includes(p.name)); if (row && ci >= 0) p.model = T(`${row[ci]} ${row[ci + 1]}`); } }
+    if (ph >= 0) { const ci = pg.rows[ph].findIndex(x => /Printer\s+Details/i.test(x)); for (const p of printers) { const row = pg.rows.find(r => r.includes(p.ip) && r.includes(p.name)); if (row && ci >= 0) p.model = T(`${row[ci]} ${row[ci + 1]}`);
+      // The MAC address is in a column without a heading (Zebra label printers).
+      if (row) p.mac = row.find(x => /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i.test(x)) || ''; } }
     const racks = rackLayout(sheet(X, wb, /RACK LAYOUT/i));
     return { file: file.name, blocks, equipment, aps, vlans, racks, vms, printers,
       counts: { blocks: blocks.length, ports: blocks.reduce((t, b) => t + b.ports.length, 0), equipment: equipment.length, aps: aps.length, vlans: vlans.length, racks: racks.length, vms: vms.length, printers: printers.length } };

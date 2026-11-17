@@ -14,7 +14,7 @@ const express = require('express');
 const router = express.Router();
 const { get, all, run, batch, audit } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
-const { str, portSort, desc, FIELDS, normSn, parseLoc, placeDevices, modelCode, CAT } = require('./netmap').util;
+const { macNorm, str, portSort, desc, FIELDS, normSn, parseLoc, placeDevices, modelCode, CAT } = require('./netmap').util;
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 router.use(requireAuth);
@@ -132,22 +132,23 @@ async function plan(site, wb) {
   for (const a of aps) {
     const host = U(a.label); if (!AP_LABEL.test(host)) continue;
     const eq = (a.serial && eqBySn(apSerial(a))) || equipment.find(e => U(e.location) === host);
-    const want = { role: 'Access point', model: str(a.model), serial: str(apSerial(a), 60), mgmt_ip: eq && /^\d/.test(eq.ip) ? ipOnly(eq.ip) : '', location: str(a.location, 120), alias: str(a.location, 120) };
+    const apMac = isMac(a.mac) ? a.mac : eq && isMac(eq.mac) ? eq.mac : eq && isMac(eq.name) ? eq.name : '';
+    const want = { mac: apMac ? macNorm(apMac) : '', role: 'Access point', model: str(a.model), serial: str(apSerial(a), 60), mgmt_ip: eq && /^\d/.test(eq.ip) ? ipOnly(eq.ip) : '', location: str(a.location, 120), alias: str(a.location, 120) };
     if (!devs.has(host)) {
       const nd = { hostname: host, ...want, alt: [], isNew: true }; devs.set(host, nd); portsOf.set(host, new Map([['ETH0', { port: 'ETH0' }]]));
       groups.ap.push({ id: `ap+:${host}`, title: `Add access point ${host}`, to: [want.model, want.mgmt_ip, want.location, want.serial && 'S/N ' + want.serial].filter(Boolean).join(' · '), on: true, data: { kind: 'add', dev: nd } });
     } else {
       const d = devs.get(host);
-      for (const f of ['model', 'serial', 'mgmt_ip', 'location']) if (want[f] && !same(want[f], d[f])) groups.ap.push({ id: `dev:${host}:${f}`, title: `${host} — ${f === 'mgmt_ip' ? 'IP' : f}`, from: d[f] || '', to: want[f], on: true, data: { kind: 'set', host, field: f, value: want[f] } });
+      for (const f of ['model', 'serial', 'mgmt_ip', 'mac', 'location']) if (want[f] && !same(want[f], d[f])) groups.ap.push({ id: `dev:${host}:${f}`, title: `${host} — ${f === 'mgmt_ip' ? 'IP' : f}`, from: d[f] || '', to: want[f], on: true, data: { kind: 'set', host, field: f, value: want[f] } });
     }
   }
   for (const p of (wb.printers || []).slice(0, 500)) {
     const host = U(p.share || p.name).replace(/\s+/g, '_'); if (!host) continue;
-    const want = { role: 'Printer', model: str(p.model || p.brand), mgmt_ip: ipOnly(p.ip), location: str(p.location, 120), alias: p.name && U(p.name) !== host ? str(p.name) : '',
+    const want = { role: 'Printer', mac: isMac(p.mac) ? macNorm(p.mac) : '', model: str(p.model || p.brand), mgmt_ip: /^\d+\.\d+\.\d+\.\d+$/.test(ipOnly(p.ip)) ? ipOnly(p.ip) : '', location: str(p.location, 120), alias: p.name && U(p.name) !== host ? str(p.name) : '',
       notes: str([p.server && `Print server ${p.server}`, p.ref && `Queue ${p.ref}`, p.name && `SAP output device ${p.name}`].filter(Boolean).join(' · '), 300) };
     if (!devs.has(host)) { const nd = { hostname: host, ...want, alt: [p.name, p.ref].filter(Boolean), isNew: true }; devs.set(host, nd); portsOf.set(host, new Map());
       groups.prn.push({ id: `prn+:${host}`, title: `Add printer ${host}`, to: [want.model, want.mgmt_ip, want.location].filter(Boolean).join(' · '), on: true, data: { kind: 'add', dev: nd } }); }
-    else { const d = devs.get(host); for (const f of ['model', 'mgmt_ip', 'location', 'notes']) if (want[f] && !same(want[f], d[f])) groups.prn.push({ id: `dev:${host}:${f}`, title: `${host} — ${f === 'mgmt_ip' ? 'IP' : f}`, from: d[f] || '', to: want[f], on: true, data: { kind: 'set', host, field: f, value: want[f] } }); }
+    else { const d = devs.get(host); for (const f of ['model', 'mgmt_ip', 'mac', 'location', 'notes']) if (want[f] && !same(want[f], d[f])) groups.prn.push({ id: `dev:${host}:${f}`, title: `${host} — ${f === 'mgmt_ip' ? 'IP' : f}`, from: d[f] || '', to: want[f], on: true, data: { kind: 'set', host, field: f, value: want[f] } }); }
   }
   // Far ends written with a rack ("MR-03/VIETTEL-LL-VNTT") that no table describes become devices too.
   { const f0 = index([...devs.values()]);
@@ -344,11 +345,11 @@ router.post('/apply', wrap(async (req, res) => {
   const st = [];
   for (const c of all_.filter(c => c.data && c.data.kind === 'add' && c.data.dev)) {
     const d = c.data.dev;
-    st.push({ sql: `INSERT INTO net_devices (site, hostname, alias, role, model, serial, mgmt_ip, location, notes, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'workbook')
-        ON CONFLICT(site, hostname) DO NOTHING`, args: [site, d.hostname, str(d.alias), str(d.role, 40), str(d.model), str(d.serial, 60), str(d.mgmt_ip, 60), str(d.location), str(d.notes, 500)] });
+    st.push({ sql: `INSERT INTO net_devices (site, hostname, alias, role, model, serial, mgmt_ip, mac, location, notes, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'workbook')
+        ON CONFLICT(site, hostname) DO NOTHING`, args: [site, d.hostname, str(d.alias), str(d.role, 40), str(d.model), str(d.serial, 60), str(d.mgmt_ip, 60), macNorm(d.mac || ''), str(d.location), str(d.notes, 500)] });
     logs.push([d.hostname, '', '', 'device added (Factory Info workbook)']);
   }
-  const DF = ['alias', 'model', 'serial', 'mgmt_ip', 'location', 'notes'];
+  const DF = ['alias', 'model', 'serial', 'mgmt_ip', 'mac', 'location', 'notes'];
   for (const c of all_.filter(c => c.data && c.data.kind === 'set' && c.data.host && DF.includes(c.data.field))) {
     st.push({ sql: `UPDATE net_devices SET ${c.data.field} = ?, updated_at = datetime('now') WHERE site = ? AND hostname = ?`, args: [str(c.data.value, 120), site, c.data.host] });
     logs.push([c.data.host, '', c.from || '', `${c.data.field}: ${c.data.value}`]);
