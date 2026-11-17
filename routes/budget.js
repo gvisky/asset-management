@@ -78,8 +78,17 @@ router.get('/', wrap(async (req, res) => {
     const s = src[k] = src[k] || { country: it.country, year: it.year, kind: it.kind, source_file: it.source_file, imported_at: it.imported_at, actual_months: 0, lines: 0 };
     s.lines++; s.actual_months = Math.max(s.actual_months, it.actual_months);
   }
-  const years = [...new Set(items.map(i => i.year))].sort();
-  res.json({ items, glMap: await loadGlMap(), meta: { countries: COUNTRIES, years, sources: Object.values(src) } });
+  const finance = (await all('SELECT * FROM fin_posting ORDER BY country, year, period, s4_gl, posting_date')).map(r => ({
+    id: r.id, country: r.country, year: Number(r.year), period: Number(r.period), ...Object.fromEntries(FIN_TEXT.map(c => [c, r[c] || ''])),
+    amount: Number(r.amount) || 0, usd: Number(r.usd) || 0, usd_calc: Number(r.usd_calc) || 0, source_file: r.source_file || '', imported_at: r.imported_at || '' }));
+  const finSrc = {};
+  finance.forEach(f => {
+    const k = f.country + '|' + f.year;
+    const x = finSrc[k] = finSrc[k] || { country: f.country, year: f.year, source_file: f.source_file, imported_at: f.imported_at, actual_months: 0, lines: 0, currency: f.currency };
+    x.lines++; if (f.kind !== 'Budget') x.actual_months = Math.max(x.actual_months, f.period);
+  });
+  const years = [...new Set(items.map(i => i.year).concat(finance.map(f => f.year)))].sort();
+  res.json({ items, finance, glMap: await loadGlMap(), meta: { countries: COUNTRIES, years, sources: Object.values(src), finSources: Object.values(finSrc) } });
 }));
 
 // Replace data per country+year (rules at the top of this file).
@@ -148,6 +157,84 @@ router.post('/import', wrap(async (req, res) => {
   if (!Array.isArray(raw)) return res.status(400).json({ error: 'No file provided' });
   try { res.json(await importRows(raw, body.file_name, req.user, !!body.dry_run)); }
   catch (e) { if (e.status) return res.status(e.status).json({ error: e.message }); throw e; }
+}));
+
+// ── Local Finance control (SAP postings, PIC = IT) ───────────────────────────
+const FIN_TEXT = ['kind', 's4_gl', 'local_gl', 'gl_desc', 's4_cc', 'cc', 'cc_name', 'doc_type', 'doc_no', 'posting_date',
+  'header_text', 'text', 'currency', 'cost_type', 'cost_group', 'pl_criteria', 'department', 'expense_type', 'io_name', 'review_note'];
+const FIN_COLS = ['country', 'year', 'period', ...FIN_TEXT, 'amount', 'usd', 'usd_calc', 'source_file', 'imported_at', 'imported_by'];
+const MONS = core.MONTHS;
+function sanitizeFin(rows) {
+  const out = [];
+  for (const r of rows) {
+    if (!r || typeof r !== 'object' || !COUNTRIES.includes(r.country)) continue;
+    const year = Number(r.year), period = Math.floor(Number(r.period));
+    if (!(year >= 2020 && year <= 2100) || !(period >= 1 && period <= 12)) continue;
+    const o = { country: r.country, year, period };
+    for (const c of FIN_TEXT) o[c] = str(r[c]);
+    if (!['Budget', 'Actual', 'Adj'].includes(o.kind)) o.kind = 'Actual';
+    o.amount = r2(r.amount); o.usd = r2(r.usd); o.usd_calc = 0;
+    out.push(o);
+  }
+  return out;
+}
+// Each monthly file has every month so far → replace the whole country+year,
+// unless the loaded data already has later months.
+async function importFinance(raw, fileNameIn, user, dryRun) {
+  const rows = sanitizeFin(raw);
+  if (!rows.length) throw Object.assign(new Error('No IT postings found in this Finance file.'), { status: 400 });
+  const fileName = str(fileNameIn, 200);
+  const groups = {};
+  rows.forEach(r => { const k = r.country + '|' + r.year; (groups[k] = groups[k] || []).push(r); });
+  const plan = [];
+  for (const k of Object.keys(groups).sort()) {
+    const g = groups[k], { country, year } = g[0];
+    const ex = await all("SELECT MAX(CASE WHEN kind <> 'Budget' THEN period END) AS mp, COUNT(*) AS n FROM fin_posting WHERE country = ? AND year = ?", [country, year]);
+    const exMonths = Number(ex[0] && ex[0].mp) || 0, exN = Number(ex[0] && ex[0].n) || 0;
+    const act = g.filter(r => r.kind !== 'Budget');
+    const inMonths = Math.max(0, ...act.map(r => r.period));
+    // Budget rows have no USD: convert at this file's average actual rate (VND per USD).
+    const vnd = act.reduce((t, r) => t + (r.usd ? r.amount : 0), 0), usd = act.reduce((t, r) => t + r.usd, 0);
+    const rate = usd ? vnd / usd : 0;
+    g.forEach(r => { if (r.kind === 'Budget' && !r.usd && rate) { r.usd = r2(r.amount / rate); r.usd_calc = 1; } });
+    let action = exN ? 'replace' : 'add', reason = '';
+    if (!inMonths) { action = 'skip'; reason = 'no IT actuals in this file'; }
+    else if (exMonths > inMonths) { action = 'skip'; reason = `loaded data is newer (actual through ${MONS[exMonths - 1]} ${year}; this file only to ${MONS[inMonths - 1]})`; }
+    plan.push({ country, year, kind: 'finance', action, reason, lines: g.length, existing: exN, actual_months: inMonths, rate: Math.round(rate),
+      budget: r2(g.filter(r => r.kind === 'Budget').reduce((t, r) => t + r.usd, 0)), actual: r2(usd),
+      budget_local: r2(g.filter(r => r.kind === 'Budget').reduce((t, r) => t + r.amount, 0)), actual_local: r2(act.reduce((t, r) => t + r.amount, 0)),
+      currency: (g.find(r => r.currency) || {}).currency || '' });
+  }
+  if (dryRun) return { plan };
+  const now = new Date().toISOString(), by = (user && user.username) || '';
+  const stmts = [];
+  let inserted = 0;
+  for (const p of plan) {
+    if (p.action === 'skip') continue;
+    stmts.push({ sql: 'DELETE FROM fin_posting WHERE country = ? AND year = ?', args: [p.country, p.year] });
+    for (const r of groups[p.country + '|' + p.year]) {
+      const v = { ...r, source_file: fileName, imported_at: now, imported_by: by };
+      stmts.push({ sql: `INSERT INTO fin_posting (${FIN_COLS.join(',')}) VALUES (${FIN_COLS.map(() => '?').join(',')})`, args: FIN_COLS.map(c => v[c] == null ? '' : v[c]) });
+      inserted++;
+    }
+  }
+  if (stmts.length) await batch(stmts);
+  const done = plan.filter(p => p.action !== 'skip').map(p => `${p.country} ${p.year} (${p.lines})`).join(', ');
+  await audit(user, 'BUDGET_IMPORT', null, `Finance control import ${fileName}: ${done || 'nothing changed'}`);
+  return { inserted, plan };
+}
+router.post('/finance-import', wrap(async (req, res) => {
+  const body = req.body || {};
+  if (!Array.isArray(body.rows)) return res.status(400).json({ error: 'No rows provided' });
+  try { res.json(await importFinance(body.rows, body.file_name, req.user, !!body.dry_run)); }
+  catch (e) { if (e.status) return res.status(e.status).json({ error: e.message }); throw e; }
+}));
+router.delete('/finance/:country/:year', wrap(async (req, res) => {
+  const { country } = req.params, year = Number(req.params.year);
+  if (!COUNTRIES.includes(country) || !year) return res.status(400).json({ error: 'Bad country/year' });
+  await run('DELETE FROM fin_posting WHERE country = ? AND year = ?', [country, year]);
+  await audit(req.user, 'BUDGET_DELETE', null, `Deleted Finance control ${country} ${year}`);
+  res.json({ ok: true });
 }));
 
 // ── PATCH /api/budget/:id/note — IT team's own note on a line ────────────────
@@ -229,3 +316,4 @@ router.get('/export.xlsx', wrap(async (req, res) => {
 
 module.exports = router;
 module.exports.importRows = importRows;
+module.exports.importFinance = importFinance;
