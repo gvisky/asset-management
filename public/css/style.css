@@ -1289,3 +1289,17 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .nm-boxl { font: 800 12px system-ui; fill: #b91c1c; letter-spacing: .04em; }
 .nm-bar { fill: #1e293b; stroke: #0f172a; } .nm-node.on .nm-bar { fill: #1d4ed8; } .nm-bart { font: 700 10px system-ui; fill: #fde047; text-anchor: middle; }
 .nm-edge { cursor: pointer; } .nm-edge:hover rect { fill: #eff6ff; }
+/* Network map: floor plans with pins */
+.pl-ov { position: fixed; inset: 0; z-index: 2000; background: #0f172a; display: flex; flex-direction: column; }
+.pl-ov[hidden] { display: none; }
+.pl-top { display: flex; align-items: center; gap: 10px; padding: 10px 16px; color: #e2e8f0; flex-wrap: wrap; }
+.pl-b { color: #e2e8f0; border-color: #475569; }
+.pl-scroll { flex: 1; overflow: auto; padding: 10px; }
+.pl-stage { position: relative; display: inline-block; background: #fff; } .pl-stage.editing { cursor: crosshair; }
+.pl-stage img { display: block; max-width: none; }
+.pl-pin { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; cursor: pointer; user-select: none; touch-action: none; }
+.pl-dot { font-size: 20px; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+.pl-lbl { background: var(--c); color: #fff; font: 700 11px system-ui; padding: 1px 6px; border-radius: 4px; white-space: nowrap; margin-top: 1px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+.pl-pin:hover .pl-lbl { outline: 2px solid #fde047; }
+.dw-pins { font-size: 11.5px; color: #0e7490; font-weight: 600; }
+.rk.rk-hl > rect:first-of-type { stroke: #facc15; stroke-width: 6; }
