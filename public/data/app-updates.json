@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: click a device to see only what is cabled to it",
+    "items": [
+      "Clicking a device now shows only that device and the devices cabled to it: ▲ in front (towards firewall / core) above, ▼ behind (towards access / servers) below, same layer left and right.",
+      "\"2 steps\" also shows the next devices along; \"Show all\" brings back the full map; \"◎ Only …\" goes back to the focused view. Click a neighbour to move the focus to it.",
+      "Import: the document's two spellings of the same switch (MR-01/ASW-01 and MR-01/DATA-ASW-01, T1/1/1 and T 1/1/1) are now joined, so the factory office switches show their uplinks — import the document again (Replace) to get them."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map · Server Inventory groups · device specs",
     "items": [
       "New page Network map (menu, after Server Inventory): the site's topology like a Cisco lab — firewalls, routers, core / distribution / access switches, WLC, servers and storage in layers; orange = fiber / SFP, blue = copper, dashed = port-channel. Drag devices, zoom with the wheel, hover a link to see its ports.",

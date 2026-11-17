@@ -8,6 +8,7 @@ const NM = (() => {
   const errText = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
   const $ = (id) => document.getElementById(id);
   let D = { site: '', sites: [], devices: [], ports: [], vlans: [], can: {} };
+  let focus = true, depth = 1, fpos = new Map();   // focus: show only the selected device and what is cabled to it
   let byHost = new Map(), byId = new Map(), portsOf = new Map(), sel = null, view = { x: 0, y: 0, w: 1600, h: 900 }, q = '', portFilter = 'all';
   const CABLES = ['', 'CAT6', 'CAT5e', 'SFP+ SR', 'SFP+ LR', 'SFP LX', 'SFP SX', 'DAC', 'Fiber', 'Console', 'Other'];
   const ROLES = ['ISP / external', 'Firewall', 'Router', 'Core switch', 'Wireless controller', 'Distribution switch', 'Server switch', 'Access switch', 'HCI server', 'Backup storage', 'Server', 'Access point', 'Other'];
@@ -95,7 +96,46 @@ const NM = (() => {
       y += rows * 110 + 40;
     }
   }
+  // Focus: the selected device in the middle, devices one layer up ("in front", towards ISP / core) above,
+  // one layer down ("behind", towards access / servers) below, same layer left and right. depth 2 = their neighbours too.
+  const focusOn = () => focus && sel && byId.has(sel);
+  function neighbours() {
+    const adj = new Map();
+    for (const l of links()) { (adj.get(l.a) || adj.set(l.a, new Set()).get(l.a)).add(l.b); (adj.get(l.b) || adj.set(l.b, new Set()).get(l.b)).add(l.a); }
+    const start = byId.get(sel).hostname, dist = new Map([[start, 0]]);
+    let frontier = [start];
+    for (let k = 1; k <= depth; k++) { const next = []; for (const h of frontier) for (const n of adj.get(h) || []) if (!dist.has(n)) { dist.set(n, k); next.push(n); } frontier = next; }
+    return dist;
+  }
+  function focusLayout() {
+    if (keepPos) { fpos = keepPos; return neighbours(); }
+    fpos = new Map();
+    const dist = neighbours(), me = byId.get(sel), t0 = TIER[me.role] ?? 6;
+    fpos.set(me.id, { x: 0, y: 0 });
+    const rows = new Map();   // "k:side" → devices; side -1 above, 0 same layer, 1 below
+    for (const [h, k] of dist) { if (!k) continue; const d = byHost.get(h), t = TIER[d.role] ?? 6, side = t < t0 ? -1 : t > t0 ? 1 : 0;
+      const key = `${k}:${side}`; if (!rows.has(key)) rows.set(key, []); rows.get(key).push(d); }
+    for (const [key, list] of rows) {
+      const [k, side] = key.split(':').map(Number);
+      list.sort((a, b) => (TIER[a.role] ?? 6) - (TIER[b.role] ?? 6) || natural(a.hostname, b.hostname));
+      // Same layer: two columns, left and right, stacked so no line passes behind another device.
+      if (side === 0) { const left = list.filter((_, i) => i % 2), right = list.filter((_, i) => !(i % 2));
+        for (const [col, sign] of [[right, 1], [left, -1]]) col.forEach((d, j) => fpos.set(d.id, { x: sign * 230 * k, y: (j - (col.length - 1) / 2) * 95 })); }
+      else { const per = 9, GAP = 165; list.forEach((d, i) => { const r = Math.floor(i / per), c = i % per, n = Math.min(per, list.length - r * per);
+        fpos.set(d.id, { x: (c - (n - 1) / 2) * GAP, y: side * (175 * k + r * 105), side }); }); }
+    }
+    return dist;
+  }
+  let keepPos = null;
+  function renderTopoKeep(keep) { keepPos = keep; renderTopo(); keepPos = null; }
+  const pos = (d) => (focusOn() ? fpos.get(d.id) : d);
   function fit() {
+    if (focusOn()) {
+      const ps = [...fpos.values()], xs = ps.map(p => p.x), ys = ps.map(p => p.y);
+      const x0 = Math.min(...xs) - 130, x1 = Math.max(...xs) + 130, y0 = Math.min(...ys) - 80, y1 = Math.max(...ys) + 90;
+      const w = Math.max(x1 - x0, 900), h = Math.max(y1 - y0, 480);
+      view = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h }; return apply();
+    }
     if (!D.devices.length) { view = { x: 0, y: 0, w: 1600, h: 900 }; return apply(); }
     const xs = D.devices.map(d => d.x), ys = D.devices.map(d => d.y);
     const x0 = Math.min(...xs) - 90, x1 = Math.max(...xs) + 90, y0 = Math.min(...ys) - 70, y1 = Math.max(...ys) + 80;
@@ -103,27 +143,40 @@ const NM = (() => {
   }
   const apply = () => $('nm-svg').setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
   function renderTopo() {
-    const L = links();
+    const F = focusOn(), dist = F ? focusLayout() : null;
+    const showing = (h) => !F || dist.has(h);
+    // Focus: only the links that lead out from the selected device (step 1 → step 2), not between neighbours.
+    const L = links().filter(l => showing(l.a) && showing(l.b) && (!F || Math.abs(dist.get(l.a) - dist.get(l.b)) === 1));
     const pairs = new Map();
     for (const l of L) { const k = [l.a, l.b].sort().join('~'); if (!pairs.has(k)) pairs.set(k, []); pairs.get(k).push(l); }
     const hl = sel ? byId.get(sel).hostname : null;
     let g = '';
     for (const [k, ls] of pairs) {
-      const [a, b] = k.split('~'), A = byHost.get(a), B = byHost.get(b);
+      const [a, b] = k.split('~'), A = pos(byHost.get(a)), B = pos(byHost.get(b));
       const fib = ls.some(l => isFiber(l.cable)), pc = ls.some(l => l.grp), on = hl && (a === hl || b === hl);
       g += `<g class="nm-link${on ? ' on' : ''}" data-k="${esc(k)}"><line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" class="hit"/>
         <line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${fib ? '#f59e0b' : '#3b82f6'}" stroke-width="${pc || ls.length > 1 ? 4 : 2}" ${pc ? 'stroke-dasharray="10 4"' : ''}/>
         ${ls.length > 1 ? `<text x="${(A.x + B.x) / 2}" y="${(A.y + B.y) / 2 - 4}" class="nm-lcnt">×${ls.length}</text>` : ''}</g>`;
     }
-    for (const d of D.devices) {
-      const s = stats(d);
-      g += `<g class="nm-node${sel === d.id ? ' on' : ''}" data-id="${d.id}" transform="translate(${d.x},${d.y})">
+    for (const d of D.devices.filter(d => showing(d.hostname))) {
+      const s = stats(d), P = pos(d);
+      g += `<g class="nm-node${sel === d.id ? ' on' : ''}${F && dist.get(d.hostname) === 2 ? ' far' : ''}" data-id="${d.id}" transform="translate(${P.x},${P.y})">
         <circle r="30" class="nm-halo"/>${icon(d.role, 0, 0, 46)}
         <text y="38" class="nm-host">${esc(d.hostname)}</text>
         ${d.alias ? `<text y="51" class="nm-alias">${esc(d.alias.length > 24 ? d.alias.slice(0, 23) + '…' : d.alias)}</text>` : ''}
         ${s.end ? `<g transform="translate(20,-22)"><rect x="-1" y="-9" width="${String(s.end).length * 7 + 8}" height="14" rx="7" fill="#0891b2"/><text x="3" y="2" class="nm-badge">${s.end}</text></g>` : ''}</g>`;
     }
+    if (F) {   // labels: in front / behind
+      const ys = [...fpos.values()].filter(p => p.side).map(p => p.y).concat([0]);
+      if (Math.min(...ys) < 0) g = `<text x="0" y="${Math.min(...ys) - 48}" class="nm-zone">▲ in front (towards firewall / core)</text>` + g;
+      if (Math.max(...ys) > 0) g = `<text x="0" y="${Math.max(...ys) + 72}" class="nm-zone">▼ behind (towards access / servers)</text>` + g;
+    }
     $('nm-svg').innerHTML = g;
+    const fb = $('nm-focus');
+    if (fb) fb.innerHTML = F ? `<b>${esc(byId.get(sel).hostname)}</b> + ${dist.size - 1} cabled device${dist.size === 2 ? '' : 's'}
+        <span class="nm-tabs small"><button class="${depth === 1 ? 'on' : ''}" onclick="NM.depth(1)">1 step</button><button class="${depth === 2 ? 'on' : ''}" onclick="NM.depth(2)">2 steps</button></span>
+        <button class="btn btn-ghost btn-sm" onclick="NM.showAll()">Show all</button>`
+      : sel ? `<button class="btn btn-ghost btn-sm" onclick="NM.focusMode()">◎ Only ${esc(byId.get(sel).hostname)} and its links</button>` : '';
   }
 
   // Pan / zoom / drag
@@ -135,19 +188,20 @@ const NM = (() => {
       view = { x: p.x - (p.x - view.x) * f, y: p.y - (p.y - view.y) * f, w: view.w * f, h: view.h * f }; apply(); }, { passive: false });
     svg.addEventListener('pointerdown', (e) => {
       const node = e.target.closest('.nm-node'), p = svgPoint(e);
-      if (node) { const d = byId.get(Number(node.dataset.id)); drag = { kind: 'node', d, dx: p.x - d.x, dy: p.y - d.y, moved: false }; }
+      if (node) { const d = byId.get(Number(node.dataset.id)), P = pos(d); drag = { kind: 'node', d, P, dx: p.x - P.x, dy: p.y - P.y, moved: false }; }
       else drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, v: { ...view }, moved: false };
       svg.setPointerCapture(e.pointerId);
     });
     svg.addEventListener('pointermove', (e) => {
       if (!drag) return hover(e);
-      if (drag.kind === 'node') { const p = svgPoint(e); drag.d.x = Math.round(p.x - drag.dx); drag.d.y = Math.round(p.y - drag.dy); drag.moved = true; renderTopo(); }
+      if (drag.kind === 'node') { const p = svgPoint(e); drag.P.x = Math.round(p.x - drag.dx); drag.P.y = Math.round(p.y - drag.dy); drag.moved = true;
+        if (focusOn()) { const keep = new Map(fpos); renderTopoKeep(keep); } else renderTopo(); }
       else { const r = svg.getBoundingClientRect(); view.x = drag.v.x - (e.clientX - drag.sx) / r.width * view.w; view.y = drag.v.y - (e.clientY - drag.sy) / r.height * view.h; drag.moved = Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 3; apply(); }
     });
     svg.addEventListener('pointerup', async (e) => {
       const d = drag; drag = null; if (!d) return;
       if (d.kind === 'node') {
-        if (d.moved) { if (D.can.edit) { try { await apiPut('/api/netmap/device/' + d.d.id, { x: d.d.x, y: d.d.y }); } catch {} } }
+        if (d.moved) { if (D.can.edit && !focusOn()) { try { await apiPut('/api/netmap/device/' + d.d.id, { x: d.d.x, y: d.d.y }); } catch {} } }
         else select(d.d.id);
       } else if (!d.moved) {
         const l = e.target.closest('.nm-link');
@@ -168,8 +222,9 @@ const NM = (() => {
 
   // ── Device panel (front panel + ports) ────────────────────────────────────
   function select(id, center, linkKey) {
-    sel = id; renderList(); renderTopo(); renderDevice(linkKey);
-    if (center) { const d = byId.get(id); view.x = d.x - view.w / 2; view.y = d.y - view.h / 2; apply(); }
+    const prev = sel; sel = id; renderList(); renderTopo(); renderDevice(linkKey);
+    if (focusOn()) { if (prev !== id) fit(); }
+    else if (center) { const d = byId.get(id); view.x = d.x - view.w / 2; view.y = d.y - view.h / 2; apply(); }
     $('nm-dev').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   const portClass = (p) => (known(p.peer_host) ? 'pt-dev' : (p.peer_host || p.patch || p.vlan || p.mode) ? 'pt-end' : 'pt-free');
@@ -340,7 +395,7 @@ const NM = (() => {
     $('nm-site').onchange = (e) => { sel = null; load(e.target.value).then(fit); };
     $('nm-q').addEventListener('input', (e) => { q = e.target.value.trim(); renderList(); });
     $('nm-fit').onclick = fit;
-    $('nm-auto').onclick = async () => { autoPlace(true); renderTopo(); fit(); if (D.can.edit && confirm('Save this layout for everyone?')) savePositions(D.devices); };
+    $('nm-auto').onclick = async () => { focus = false; autoPlace(true); renderTopo(); fit(); if (D.can.edit && confirm('Save this layout for everyone?')) savePositions(D.devices); };
     $('nm-import').onclick = () => $('nm-file').click();
     $('nm-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importDoc(f); };
     $('nm-export').onclick = exportCsv;
@@ -350,5 +405,6 @@ const NM = (() => {
   }
   document.addEventListener('DOMContentLoaded', init);
   return { select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
-    filter: (f) => { portFilter = f; renderDevice(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };
+    filter: (f) => { portFilter = f; renderDevice(); },
+    depth: (n) => { depth = n; renderTopo(); fit(); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };
 })();
