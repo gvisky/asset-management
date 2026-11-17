@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Budget: combine PYP / GL / Category, year-over-year changes",
+    "items": [
+      "Budget lines: tick any PYP, GL or Category group (switch the grouping to mix them) — the Combined selection panel adds them up: CAPEX / OPEX / total, the 12 months and the lines. Untick or ✕ to remove; each line is counted once.",
+      "Year over year: (+) Changes vs last year adds a ± column after each year (budget vs last year's budget, actual+forecast vs last year's) with %.",
+      "Country flags now show on Windows too (they appeared as \"VN\")."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: floor plans with pins",
     "items": [
       "🖼 Drawings → click any picture (fiber layout, AP layouts of Production / Hygiene / Transformer / Office floors, topology, racks) to open it full screen with zoom.",
