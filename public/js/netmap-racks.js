@@ -36,12 +36,17 @@ const NMRacks = (() => {
     const lbl = d ? d.hostname + (d.state === 'retired' ? ' (retired)' : '') : it.label;
     const tag = lbl ? `<rect x="${x + w / 2 - Math.min(w - 20, lbl.length * 6.4 + 10) / 2}" y="${y + h / 2 - 6.5}" width="${Math.min(w - 20, lbl.length * 6.4 + 10)}" height="13" rx="2" fill="#000" opacity=".85"/>
       <text x="${x + w / 2}" y="${y + h / 2 + 3.6}" class="rk-lbl">${esc(lbl)}</text>` : '';
-    return `<g class="rk-item${it.device_id ? ' dev' : ''}" data-id="${it.id}"><title>${esc(lbl || it.kind)} · U${it.u}${it.height > 1 ? '–' + (it.u + it.height - 1) : ''}${d ? ' · ' + d.model : ''}</title>${body}${tag}</g>`;
+    // The device chosen in the list / map is outlined and blinks; a group shown in the list keeps its colour, the rest fades.
+    const isSel = d && d.id === NM.selected(), g = NM.groupShown && NM.groupShown();
+    const gcls = g ? (d && NM.groupOf(d) === g ? ' grp-on' : ' grp-dim') : '';
+    const mark = isSel ? `<rect x="${x - 4}" y="${y - 3}" width="${w + 8}" height="${h + 6}" rx="3" class="rk-sel"/>` : d && g && NM.groupOf(d) === g ? `<rect x="${x - 3}" y="${y - 2}" width="${w + 6}" height="${h + 4}" rx="3" class="rk-grp" style="stroke:${NM.gcol(g)}"/>` : '';
+    return `<g class="rk-item${it.device_id ? ' dev' : ''}${isSel ? ' sel' : ''}${gcls}" data-id="${it.id}">${mark}<title>${esc(lbl || it.kind)} · U${it.u}${it.height > 1 ? '–' + (it.u + it.height - 1) : ''}${d ? ' · ' + d.model : ''}</title>${body}${tag}</g>`;
   }
   function rackSvg(r, x0, y0) {
     const H = r.units * UH, items = R.items.filter(i => i.rack_id === r.id);
     const used = items.reduce((t, i) => t + i.height, 0);
-    let s = `<g class="rk" data-rack="${r.id}"><text x="${x0 + RW / 2}" y="${y0 - 12}" class="rk-name">${esc(r.name)}</text>
+    const has = NM.selected() && items.some(i => i.device_id === NM.selected());
+    let s = `<g class="rk${has ? ' rk-has' : ''}" data-rack="${r.id}">${has ? `<rect x="${x0 - 8}" y="${y0 - 30}" width="${RW + 16}" height="${H + 58}" rx="8" class="rk-hl"/>` : ''}<text x="${x0 + RW / 2}" y="${y0 - 12}" class="rk-name">${esc(r.name)}</text>
       <text x="${x0 + RW / 2}" y="${y0 - 1}" class="rk-use">${used} / ${r.units} U used</text>
       <rect x="${x0}" y="${y0 + 4}" width="${RW}" height="${H + 16}" rx="4" fill="#3f3f46" stroke="#18181b" stroke-width="2"/>
       <rect x="${x0 + 26}" y="${y0 + 12}" width="${RW - 52}" height="${H}" fill="#f4f4f5"/>`;
@@ -67,11 +72,25 @@ const NMRacks = (() => {
     box.innerHTML = `<div class="rk-bar">${D().can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.addItem()">+ Item (patch panel, PDU …)</button><button class="btn btn-ghost btn-sm" onclick="NMRacks.addRack()">+ Rack / cabinet</button>` : ''}
         ${D().can.admin ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.build(false)" title="Place devices that are not in a rack yet">⚙ Place new devices</button>` : ''}
         ${rackDraw.length ? `<label class="text-sm"><input type="checkbox" ${showDrawing ? 'checked' : ''} onchange="NMRacks.toggleDrawing(this.checked)"> 📄 Show the document's rack drawing</label>` : ''}
-        <span class="text-muted text-sm">${D().can.edit ? 'Drag an item to move it · ' : ''}click a device to see its ports</span>
+        <span class="text-muted text-sm">${D().can.edit ? 'Drag an item to move it · ' : ''}click a device to see its ports</span><span id="rk-where" class="rk-where"></span>
         ${unplaced.length ? `<span class="text-sm" style="margin-left:auto">Not in a rack: ${unplaced.slice(0, 6).map(d => `<a href="#" onclick="NMRacks.addItem(${d.id});return false">${esc(d.hostname)}</a>`).join(', ')}${unplaced.length > 6 ? ` +${unplaced.length - 6}` : ''}</span>` : ''}</div>
       ${showDrawing ? `<div class="rk-draw">${rackDraw.map(d => `<figure><img src="/api/netmap/drawing/${d.id}" alt="${esc(d.name)}"><figcaption>${esc(d.name)}</figcaption></figure>`).join('')}</div>` : ''}
       <div class="rk-wrap"><svg id="rk-svg" class="rk-svg" viewBox="0 0 ${W} ${H1 + 70 + H2}" style="width:100%;max-width:${W}px">${svg}</svg></div>`;
     bind();
+    mark(false, true);
+  }
+  // Show the chosen device: its rack is framed, the item outlined, and scrolled into view.
+  function mark(rerender, onlyScroll) {
+    if (rerender !== false && !onlyScroll) { if (!R.racks.length) return; render(); return; }
+    const sel = document.querySelector('#rk-svg .rk-item.sel');
+    const info = $('rk-where');
+    const d = NM.selected() && D().devices.find(x => x.id === NM.selected());
+    if (info) {
+      const it = d && R.items.find(i => i.device_id === d.id), rk = it && R.racks.find(r => r.id === it.rack_id);
+      info.innerHTML = d ? (rk ? `📍 <b>${esc(d.hostname)}</b> is in <b>${esc(rk.name)}</b> U${it.u}${it.height > 1 ? '–' + (it.u + it.height - 1) : ''}${rk.area ? ' · ' + esc(rk.area) : ''}`
+        : `📍 <b>${esc(d.hostname)}</b> is not in a rack${d.location ? ` (location: ${esc(d.location)})` : ''}${D().can.edit ? ` — <a href="#" onclick="NMRacks.addItem(${d.id});return false">place it</a>` : ''}`) : '';
+    }
+    if (sel) sel.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
   }
   function bind() {
     const svg = $('rk-svg'); if (!svg) return;
@@ -163,5 +182,5 @@ const NMRacks = (() => {
   async function delDrawing(id) { if (!confirm('Delete this picture?')) return; await apiDelete('/api/netmap/drawing/' + id); await load(); renderDrawings(); }
 
   return { async show(v) { await load(); v === 'draw' ? renderDrawings() : render(); }, build, addItem, saveItem, delItem, addRack, openDrawing, delDrawing,
-    toggleDrawing: (on) => { showDrawing = on; render(); }, racksFor: (deviceId) => R.items.find(i => i.device_id === deviceId), drawings: () => drawings, reload: load };
+    toggleDrawing: (on) => { showDrawing = on; render(); }, mark: () => mark(true), racksFor: (deviceId) => R.items.find(i => i.device_id === deviceId), drawings: () => drawings, reload: load };
 })();

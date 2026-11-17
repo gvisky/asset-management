@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: horizontal layout, groups in colour, the selected device shown in the racks",
+    "items": [
+      "Topology → ↔ Horizontal: the layers run left → right (ISP, firewalls, core, distribution, servers, access switches, APs / printers) with a heading per column, sized to fill the screen; inside a column devices follow what they are cabled to, so fewer lines cross. ↕ Vertical brings back the saved layout. Your choice is remembered.",
+      "Each group has its own colour (list header, ring around the device on the map, outline in the racks). Click a group name in the list to show that group: its devices stand out and everything else fades — on the map, in the logical / physical / system views and in the racks. Click it again (or ✕) to show all.",
+      "Racks: the device you choose (in the list, on the map or in a rack) is outlined and blinks, its rack is framed in yellow, the page scrolls to it, and a line says where it is (e.g. MR-04 U10–11). The device panel has 🗄 Show where it is in the racks.",
+      "Fix: the racks are reloaded right after a Factory Info import."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: import the Factory Info workbook (Palo Alto, APs, racks, VLANs, VMs, printers)",
     "items": [
       "Network map → ⬆ Import Factory Info (.xlsx) (admins): the workbook is read in your browser and compared with the map, Server Inventory and the virtual-server list. You see every difference, grouped, and tick what to apply. Blank cells never clear what is already there.",

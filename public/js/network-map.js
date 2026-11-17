@@ -16,6 +16,15 @@ const NM = (() => {
   const TIER = { 'ISP / external': 0, Firewall: 1, Router: 1, 'Core switch': 2, 'Wireless controller': 2, 'Distribution switch': 3, 'Server switch': 3, 'HCI server': 4, 'Backup storage': 4, Server: 4, 'Access switch': 5, 'Access point': 6, Printer: 6, Other: 6, 'Retired (not in use)': 9 };
   const RETIRED = 'Retired (not in use)';
   const live = (d) => d && d.state !== 'retired';   // retired: still in its rack, not in the topology
+  // One colour per group (list, topology halo, racks) so a group is easy to pick out.
+  const GCOL = { 'ISP / external': '#64748b', Firewall: '#dc2626', Router: '#0284c7', 'Core switch': '#1e3a8a', 'Wireless controller': '#7c3aed', 'Distribution switch': '#2563eb',
+    'Server switch': '#0e7490', 'HCI server': '#0f766e', 'Backup storage': '#475569', Server: '#334155', 'Access switch': '#16a34a', 'Access point': '#d97706', Printer: '#db2777', Other: '#6b7280', 'Retired (not in use)': '#94a3b8' };
+  const gcol = (r) => GCOL[r] || '#6b7280';
+  const groupOf = (d) => (live(d) ? d.role || 'Other' : RETIRED);
+  let grp = null;                                                     // group shown (clicked in the list)
+  let orient = localStorage.getItem('nm-orient') === 'h' ? 'h' : 'v';  // layers top → bottom (v) or left → right (h)
+  let hpos = new Map(), hfix = new Map();                             // horizontal layout (computed, not saved; hand moves kept for this visit)
+  const TIER_NAME = ['ISP', 'Firewalls & routers', 'Core & wireless controllers', 'Distribution & server switches', 'Servers & storage', 'Access switches', 'Access points, printers & others'];
   const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
   const isFiber = (c) => /sfp|sr|lr|lx|sx|fib|dac/i.test(c || '');
   const known = (h) => byHost.has(h);
@@ -58,9 +67,9 @@ const NM = (() => {
     const match = (d) => !qq || `${d.hostname} ${d.alias} ${d.model} ${d.mgmt_ip} ${d.location} ${d.role}`.toLowerCase().includes(qq)
       || (portsOf.get(d.id) || []).some(p => `${p.port} ${p.peer_host} ${p.peer_port} ${p.patch} vlan${p.vlan}`.toLowerCase().includes(qq));
     const groups = new Map();
-    for (const d of D.devices.filter(match)) { const r = live(d) ? d.role || 'Other' : RETIRED; if (!groups.has(r)) groups.set(r, []); groups.get(r).push(d); }
+    for (const d of D.devices.filter(match)) { const r = groupOf(d); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(d); }
     $('nm-list').innerHTML = [...groups.entries()].sort((a, b) => (TIER[a[0]] ?? 9) - (TIER[b[0]] ?? 9)).map(([r, list]) => `
-      <div class="nm-grp"><div class="nm-grp-h">${icon(r, 0, 0, 18, true)} ${esc(r)} <span>${list.length}</span></div>
+      <div class="nm-grp${grp === r ? ' on' : ''}" style="--gc:${gcol(r)}"><div class="nm-grp-h" onclick="NM.group(${jsArg(r)})" title="Show this group on the map (click again to show all)">${icon(r, 0, 0, 18, true)} ${esc(r)} <span>${grp === r ? '✕ ' : ''}${list.length}</span></div>
       ${list.sort((a, b) => natural(a.hostname, b.hostname)).map(d => { const s = stats(d); return `<div class="nm-item${sel === d.id ? ' on' : ''}" onclick="NM.select(${d.id}, true)">
         <b>${esc(d.hostname)}</b><div class="text-muted text-sm">${esc(d.alias || d.model || '')}</div>
         <div class="nm-mini">${s.dev ? `<i class="m-dev">${s.dev}</i>` : ''}${s.end ? `<i class="m-end">${s.end}</i>` : ''}<i class="m-tot">${s.total}</i></div></div>`; }).join('')}</div>`).join('')
@@ -102,6 +111,30 @@ const NM = (() => {
       y += rows * 110 + 40;
     }
   }
+  // Horizontal: the same layers as columns, left → right; big layers wrap into more columns. Inside a column the devices
+  // follow the order of what they are cabled to in the column before (fewer crossing lines).
+  function autoPlaceH() {
+    hpos = new Map();
+    const tiers = new Map();
+    for (const d of D.devices.filter(live)) { const t = TIER[d.role] ?? 6; if (!tiers.has(t)) tiers.set(t, []); tiers.get(t).push(d); }
+    // Rows per column chosen so the whole drawing has the shape of the canvas (wide screen → fewer rows, more columns).
+    const svgEl = $('nm-svg'), aspect = (svgEl.clientWidth || 1100) / (svgEl.clientHeight || 640);
+    const size = (h) => { let w = 0; for (const l of tiers.values()) w += (Math.ceil(l.length / h) - 1) * 150 + 215; return { w, h: (h - 1) * 74 + 120 }; };
+    let H = 6, best = 1e9; for (let h = 4; h <= 40; h++) { const z = size(h), err = Math.abs(Math.log((z.w / z.h) / aspect)); if (err < best - 1e-9) { best = err; H = h; } }
+    const adj = new Map(); for (const l of links()) { (adj.get(l.a) || adj.set(l.a, []).get(l.a)).push(l.b); (adj.get(l.b) || adj.set(l.b, []).get(l.b)).push(l.a); }
+    const GX = 175, GY = 74; let x = 80; const bands = [];
+    for (const t of [...tiers.keys()].sort((a, b) => a - b)) {
+      const list = tiers.get(t);
+      const key = (d) => { const ys = (adj.get(d.hostname) || []).map(h => hpos.get((byHost.get(h) || {}).id)).filter(Boolean).map(p => p.y); return ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : 1e9; };
+      list.sort((a, b) => key(a) - key(b) || (TIER[a.role] ?? 6) - (TIER[b.role] ?? 6) || natural(a.hostname, b.hostname));
+      const cols = Math.ceil(list.length / H), per = Math.ceil(list.length / cols);
+      list.forEach((d, i) => { const c = Math.floor(i / per), r = i % per, n = Math.min(per, list.length - c * per); hpos.set(d.id, { x: x + c * 150, y: 60 + (r - (n - 1) / 2) * GY + (H - 1) * GY / 2 }); });
+      bands.push({ t, x0: x - 75, x1: x + (cols - 1) * 150 + 75 });
+      x += (cols - 1) * 150 + GX + 40;
+    }
+    for (const [id, P] of hfix) if (hpos.has(id)) hpos.set(id, P);   // moved by hand in this visit
+    hpos.bands = bands; hpos.h = (H - 1) * GY + 120;
+  }
   // Focus: the selected device in the middle, devices one layer up ("in front", towards ISP / core) above,
   // one layer down ("behind", towards access / servers) below, same layer left and right. depth 2 = their neighbours too.
   const focusOn = () => mode === 'map' && focus && sel && byId.has(sel);
@@ -130,34 +163,39 @@ const NM = (() => {
       else { const per = 9, GAP = 165; list.forEach((d, i) => { const r = Math.floor(i / per), c = i % per, n = Math.min(per, list.length - r * per);
         fpos.set(d.id, { x: (c - (n - 1) / 2) * GAP, y: side * (175 * k + r * 105), side }); }); }
     }
+    // Horizontal: in front on the left, behind on the right.
+    if (orient === 'h') for (const [id, p] of fpos) fpos.set(id, { x: p.y * 1.45, y: p.x * 0.52, side: p.side });
     return dist;
   }
-  let keepPos = null;
+  let keepPos = null, hdrag = false;
   function renderTopoKeep(keep) { keepPos = keep; renderTopo(); keepPos = null; }
-  const pos = (d) => (focusOn() ? fpos.get(d.id) : d);
+  const pos = (d) => (focusOn() ? fpos.get(d.id) : orient === 'h' ? hpos.get(d.id) || d : d);
   function fit() {
     if (mode !== 'map' && lastBounds) { view = { ...lastBounds }; return apply(); }
     if (focusOn()) {
       const ps = [...fpos.values()], xs = ps.map(p => p.x), ys = ps.map(p => p.y);
       const x0 = Math.min(...xs) - 130, x1 = Math.max(...xs) + 130, y0 = Math.min(...ys) - 80, y1 = Math.max(...ys) + 90;
-      const w = Math.max(x1 - x0, 900), h = Math.max(y1 - y0, 480);
+      const w = Math.max(x1 - x0, orient === 'h' ? 1100 : 900), h = Math.max(y1 - y0, 480);
       view = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h }; return apply();
     }
     if (!D.devices.length) { view = { x: 0, y: 0, w: 1600, h: 900 }; return apply(); }
-    const vis = D.devices.filter(live), xs = vis.map(d => d.x), ys = vis.map(d => d.y);
+    const vis = D.devices.filter(live), xs = vis.map(d => pos(d).x), ys = vis.map(d => pos(d).y);
     if (!vis.length) { view = { x: 0, y: 0, w: 1600, h: 900 }; return apply(); }
-    const x0 = Math.min(...xs) - 90, x1 = Math.max(...xs) + 90, y0 = Math.min(...ys) - 70, y1 = Math.max(...ys) + 80;
+    const x0 = Math.min(...xs) - 90, x1 = Math.max(...xs) + 90, y0 = orient === 'h' ? Math.min(-6, Math.min(...ys) - 70) : Math.min(...ys) - 70, y1 = Math.max(...ys) + 80;
     view = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }; apply();
   }
   const apply = () => $('nm-svg').setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
   let lastBounds = null;
   function renderTopo(fitIt) {
     if (mode !== 'map' && self.NMViews) {
-      NMViews.svg(mode).then(r => { $('nm-svg').innerHTML = r.svg; lastBounds = r.bounds; if (fitIt) { view = { ...r.bounds }; apply(); } const fb = $('nm-focus'); if (fb) fb.innerHTML = ''; });
+      NMViews.svg(mode).then(r => { $('nm-svg').innerHTML = r.svg; lastBounds = r.bounds; if (fitIt) { view = { ...r.bounds }; apply(); } markGroup();
+        const fb = $('nm-focus'); if (fb) fb.innerHTML = grp ? `<span class="nm-gchip" style="--gc:${gcol(grp)}">${esc(grp)} <a href="#" onclick="NM.group(null);return false">✕</a></span>` : ''; });
       return;
     }
+    if (orient === 'h' && !keepPos && !hdrag) autoPlaceH();
     const F = focusOn(), dist = F ? focusLayout() : null;
     const showing = (h) => !F || dist.has(h);
+    const inG = (h) => !grp || groupOf(byHost.get(h)) === grp;
     // Focus: only the links that lead out from the selected device (step 1 → step 2), not between neighbours.
     const L = links().filter(l => showing(l.a) && showing(l.b) && (!F || Math.abs(dist.get(l.a) - dist.get(l.b)) === 1));
     const pairs = new Map();
@@ -167,22 +205,28 @@ const NM = (() => {
     for (const [k, ls] of pairs) {
       const [a, b] = k.split('~'), A = pos(byHost.get(a)), B = pos(byHost.get(b));
       const fib = ls.some(l => isFiber(l.cable)), pc = ls.some(l => l.grp), on = hl && (a === hl || b === hl);
-      g += `<g class="nm-link${on ? ' on' : ''}" data-k="${esc(k)}"><line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" class="hit"/>
+      g += `<g class="nm-link${on ? ' on' : ''}${grp && !inG(a) && !inG(b) ? ' dim' : ''}" data-k="${esc(k)}"><line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" class="hit"/>
         <line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${fib ? '#f59e0b' : '#3b82f6'}" stroke-width="${pc || ls.length > 1 ? 4 : 2}" ${pc ? 'stroke-dasharray="10 4"' : ''}/>
         ${ls.length > 1 ? `<text x="${(A.x + B.x) / 2}" y="${(A.y + B.y) / 2 - 4}" class="nm-lcnt">×${ls.length}</text>` : ''}</g>`;
     }
     for (const d of D.devices.filter(d => showing(d.hostname) && (live(d) || d.id === sel))) {
       const s = stats(d), P = pos(d);
-      g += `<g class="nm-node${sel === d.id ? ' on' : ''}${F && dist.get(d.hostname) === 2 ? ' far' : ''}" data-id="${d.id}" transform="translate(${P.x},${P.y})">
-        <circle r="30" class="nm-halo"/>${icon(d.role, 0, 0, 46)}
+      g += `<g class="nm-node${sel === d.id ? ' on' : ''}${F && dist.get(d.hostname) === 2 ? ' far' : ''}${grp ? (inG(d.hostname) ? ' ing' : ' dim') : ''}" data-id="${d.id}" transform="translate(${P.x},${P.y})" style="--gc:${gcol(groupOf(d))}">
+        <circle r="30" class="nm-halo"/><circle r="27" class="nm-gring"/>${icon(d.role, 0, 0, 46)}
         <text y="38" class="nm-host">${esc(d.hostname)}</text>
         ${d.alias ? `<text y="51" class="nm-alias">${esc(d.alias.length > 24 ? d.alias.slice(0, 23) + '…' : d.alias)}</text>` : ''}
         ${s.end ? `<g transform="translate(20,-22)"><rect x="-1" y="-9" width="${String(s.end).length * 7 + 8}" height="14" rx="7" fill="#0891b2"/><text x="3" y="2" class="nm-badge">${s.end}</text></g>` : ''}</g>`;
     }
-    if (F) {   // labels: in front / behind
+    if (F && orient === 'h') {
+      const xs = [...fpos.values()].filter(p => p.side).map(p => p.x).concat([0]), y0 = Math.min(...[...fpos.values()].map(p => p.y)) - 60;
+      if (Math.min(...xs) < 0) g = `<text x="${Math.min(...xs)}" y="${y0}" class="nm-zone">◀ in front (towards firewall / core)</text>` + g;
+      if (Math.max(...xs) > 0) g = `<text x="${Math.max(...xs)}" y="${y0}" class="nm-zone">behind (towards access / servers) ▶</text>` + g;
+    } else if (F) {   // labels: in front / behind
       const ys = [...fpos.values()].filter(p => p.side).map(p => p.y).concat([0]);
       if (Math.min(...ys) < 0) g = `<text x="0" y="${Math.min(...ys) - 48}" class="nm-zone">▲ in front (towards firewall / core)</text>` + g;
       if (Math.max(...ys) > 0) g = `<text x="0" y="${Math.max(...ys) + 72}" class="nm-zone">▼ behind (towards access / servers)</text>` + g;
+    } else if (orient === 'h' && hpos.bands) {   // column headings
+      g = hpos.bands.map(b => `<rect x="${b.x0}" y="0" width="${b.x1 - b.x0}" height="${hpos.h}" rx="10" class="nm-band"/><text x="${(b.x0 + b.x1) / 2}" y="18" class="nm-band-t">${esc(TIER_NAME[b.t] || '')}</text>`).join('') + g;
     }
     $('nm-svg').innerHTML = g;
     const fb = $('nm-focus');
@@ -190,6 +234,19 @@ const NM = (() => {
         <span class="nm-tabs small"><button class="${depth === 1 ? 'on' : ''}" onclick="NM.depth(1)">1 step</button><button class="${depth === 2 ? 'on' : ''}" onclick="NM.depth(2)">2 steps</button></span>
         <button class="btn btn-ghost btn-sm" onclick="NM.showAll()">Show all</button>`
       : sel ? `<button class="btn btn-ghost btn-sm" onclick="NM.focusMode()">◎ Only ${esc(byId.get(sel).hostname)} and its links</button>` : '';
+    if (fb && grp) fb.innerHTML += ` <span class="nm-gchip" style="--gc:${gcol(grp)}">${esc(grp)} · ${D.devices.filter(d => groupOf(d) === grp).length} <a href="#" onclick="NM.group(null);return false" title="Show all groups">✕</a></span>`;
+  }
+  // Group shown (list header click): its devices coloured, the others faded — on the map, the views and the racks.
+  function setGroup(r) {
+    grp = r && grp !== r ? r : null; focus = grp ? false : focus;
+    renderList(); renderTopo(); if (grp) fit();
+    if (typeof NMRacks !== 'undefined' && !$('nm-view-rack').hidden) NMRacks.mark();
+  }
+  // Views (logical / physical / system) are drawn elsewhere: fade the others after drawing.
+  function markGroup() {
+    if (!grp) return;
+    document.querySelectorAll('#nm-svg .nm-node').forEach(n => { const d = byId.get(Number(n.dataset.id)); if (!d) return; n.classList.toggle('dim', groupOf(d) !== grp); n.classList.toggle('ing', groupOf(d) === grp); n.style.setProperty('--gc', gcol(groupOf(d))); });
+    document.querySelectorAll('#nm-svg .nm-link').forEach(l => { const [a, b] = (l.dataset.k || '').split('~'); l.classList.toggle('dim', ![a, b].some(h => byHost.get(h) && groupOf(byHost.get(h)) === grp)); });
   }
 
   // Pan / zoom / drag
@@ -210,7 +267,7 @@ const NM = (() => {
       if (!drag) return hover(e);
       if (drag.kind === 'click') return;
       if (drag.kind === 'node') { const p = svgPoint(e); drag.P.x = Math.round(p.x - drag.dx); drag.P.y = Math.round(p.y - drag.dy); drag.moved = true;
-        if (focusOn()) { const keep = new Map(fpos); renderTopoKeep(keep); } else renderTopo(); }
+        if (focusOn()) { const keep = new Map(fpos); renderTopoKeep(keep); } else { hdrag = true; renderTopo(); hdrag = false; } }
       else { const r = svg.getBoundingClientRect(); view.x = drag.v.x - (e.clientX - drag.sx) / r.width * view.w; view.y = drag.v.y - (e.clientY - drag.sy) / r.height * view.h; drag.moved = Math.abs(e.clientX - drag.sx) + Math.abs(e.clientY - drag.sy) > 3; apply(); }
     });
     svg.addEventListener('pointerup', async (e) => {
@@ -219,7 +276,7 @@ const NM = (() => {
       const under = document.elementFromPoint(e.clientX, e.clientY);
       if (!d.moved && under && under.closest('.nm-edge')) { NMViews.edge(true); return; }
       if (d.kind === 'node') {
-        if (d.moved) { if (D.can.edit && !focusOn()) { try { await apiPut('/api/netmap/device/' + d.d.id, { x: d.d.x, y: d.d.y }); } catch {} } }
+        if (d.moved) { if (orient === 'h') { const P = hpos.get(d.d.id); if (P) hfix.set(d.d.id, { x: P.x, y: P.y }); } else if (D.can.edit && !focusOn()) { try { await apiPut('/api/netmap/device/' + d.d.id, { x: d.d.x, y: d.d.y }); } catch {} } }
         else select(d.d.id);
       } else if (!d.moved) {
         const l = (under && under.closest('.nm-link')) || e.target.closest('.nm-link');
@@ -242,7 +299,8 @@ const NM = (() => {
   function select(id, center, linkKey) {
     const prev = sel; sel = id; renderList(); renderTopo(); renderDevice(linkKey);
     if (focusOn()) { if (prev !== id) fit(); }
-    else if (center) { const d = byId.get(id); view.x = d.x - view.w / 2; view.y = d.y - view.h / 2; apply(); }
+    else if (center && mode === 'map') { const P = pos(byId.get(id)); view.x = P.x - view.w / 2; view.y = P.y - view.h / 2; apply(); }
+    if (typeof NMRacks !== 'undefined' && !$('nm-view-rack').hidden) NMRacks.mark(true);
     // The page does not scroll: the topology stays where it is (the device panel is below it).
   }
   const portClass = (p) => (known(p.peer_host) ? 'pt-dev' : (p.peer_host || p.patch || p.vlan || p.mode) ? 'pt-end' : 'pt-free');
@@ -270,7 +328,7 @@ const NM = (() => {
         <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}${live(d) ? '' : ' <span class="nm-retired">Retired — not in use</span>'}</div>
           <div class="text-muted text-sm">${esc([d.alias, d.role, d.model].filter(Boolean).join(' · '))}</div>
           <div class="text-sm">${d.mgmt_ip ? `IP <b>${esc(d.mgmt_ip)}</b> · ` : ''}${esc(d.location || '')}${d.serial ? ` · S/N ${esc(d.serial)}` : ''}${d.service_tag && d.service_tag !== d.serial ? ` · tag ${esc(d.service_tag)}` : ''}</div>
-          ${ipList(d)}${d.server_id ? `<div class="text-sm"><a href="/server-inventory.html?view=${d.server_id}">📦 Server Inventory record #${d.server_id}</a></div>` : ''}</div>
+          ${ipList(d)}<div class="text-sm"><a href="#" onclick="NM.showInRack();return false">🗄 Show where it is in the racks</a></div>${d.server_id ? `<div class="text-sm"><a href="/server-inventory.html?view=${d.server_id}">📦 Server Inventory record #${d.server_id}</a></div>` : ''}</div>
         <span style="flex:1"></span>
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.editDevice(${d.id})">✏️ Device</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="NM.showLog(${jsArg(d.hostname)})">🕓 Changes</button></div>
@@ -393,7 +451,7 @@ const NM = (() => {
   function tab(v) {
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
     ['topo', 'rack', 'draw', 'vlan', 'log'].forEach(k => { $('nm-view-' + k).hidden = k !== v; });
-    document.querySelector('.nm-legend').style.display = v === 'topo' ? '' : 'none'; $('nm-fit').style.display = $('nm-auto').style.display = v === 'topo' ? '' : 'none'; $('nm-focus').style.display = v === 'topo' ? '' : 'none';
+    document.querySelector('.nm-legend').style.display = v === 'topo' ? '' : 'none'; $('nm-fit').style.display = v === 'topo' ? '' : 'none'; $('nm-auto').style.display = $('nm-orient').style.display = v === 'topo' && mode === 'map' ? '' : 'none'; $('nm-focus').style.display = v === 'topo' ? '' : 'none';
     if (v === 'rack' || v === 'draw') NMRacks.show(v);
     if (v === 'vlan') renderVlans();
     if (v === 'log' && !$('nm-view-log').innerHTML.trim()) showLog();
@@ -460,7 +518,7 @@ const NM = (() => {
       const r = await apiPost('/api/netmap/workbook/apply', { site: WB.site, wb: WB.wb, ids });
       const c = r.counts || {}, names = { devices: 'device changes', ports: 'ports', vlans: 'VLANs', rack_items: 'rack items', inventory: 'Server Inventory changes', linked: 'devices linked to Server Inventory', vms: 'virtual servers' };
       showToast('Applied: ' + Object.entries(c).filter(([, v]) => v).map(([k, v]) => `${v} ${names[k] || k}`).join(', '));
-      if (self.NMViews) NMViews.resetRacks(); if (self.NMRacks) await NMRacks.reload().catch(() => {});
+      if (self.NMViews) NMViews.resetRacks(); if (typeof NMRacks !== 'undefined') await NMRacks.reload().catch(() => {});
       await load(WB.site); autoPlace(false); renderTopo(); fit();
       const plan = await apiPost('/api/netmap/workbook/plan', { site: WB.site, wb: WB.wb }); WB.plan = plan; wbShow();
     } catch (e) { showToast(errText(e, 'Could not apply'), 'error'); b.disabled = false; b.textContent = 'Apply'; }
@@ -479,8 +537,10 @@ const NM = (() => {
     $('nm-site').onchange = (e) => { sel = null; load(e.target.value).then(fit); };
     $('nm-q').addEventListener('input', (e) => { q = e.target.value.trim(); renderList(); });
     $('nm-fit').onclick = fit;
-    $('nm-mode').onchange = (e) => { mode = e.target.value; $('nm-auto').style.display = mode === 'map' ? '' : 'none'; document.querySelector('.nm-legend').style.display = mode === 'map' ? '' : 'none'; renderTopo(true); };
-    $('nm-auto').onclick = async () => { focus = false; autoPlace(true); renderTopo(); fit(); if (D.can.edit && confirm('Save this layout for everyone?')) savePositions(D.devices); };
+    $('nm-mode').onchange = (e) => { mode = e.target.value; $('nm-auto').style.display = $('nm-orient').style.display = mode === 'map' ? '' : 'none'; document.querySelector('.nm-legend').style.display = mode === 'map' ? '' : 'none'; renderTopo(true); };
+    $('nm-auto').onclick = async () => { focus = false; if (orient === 'h') { hfix.clear(); renderTopo(); fit(); return; } autoPlace(true); renderTopo(); fit(); if (D.can.edit && confirm('Save this layout for everyone?')) savePositions(D.devices); };
+    const ob = $('nm-orient'), showO = () => { ob.textContent = orient === 'h' ? '↕ Vertical' : '↔ Horizontal'; ob.title = orient === 'h' ? 'Layers top → bottom (saved positions)' : 'Layers left → right — uses the width of the screen'; };
+    showO(); ob.onclick = () => { orient = orient === 'h' ? 'v' : 'h'; localStorage.setItem('nm-orient', orient); showO(); renderTopo(); fit(); };
     $('nm-import').onclick = () => $('nm-file').click();
     $('nm-file').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importDoc(f); };
     $('nm-import-x').onclick = () => $('nm-xfile').click();
@@ -495,5 +555,6 @@ const NM = (() => {
   return { data: () => D, known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); },
     outlet: (o) => { const pp = (D.patches || []).find(x => String(x.outlet).toUpperCase() === String(o).toUpperCase()); if (pp && self.NMFaces) NMFaces.panel(pp.panel); else showToast('Outlet ' + o + ' is not in the patch-panel list', 'error'); },
-    depth: (n) => { depth = n; renderTopo(); fit(); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };
+    depth: (n) => { depth = n; renderTopo(); fit(); }, group: setGroup, groupShown: () => grp, groupOf, gcol, tab: (v) => tab(v),
+    showInRack: () => { tab('rack'); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };
 })();
