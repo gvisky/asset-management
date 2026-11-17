@@ -1339,6 +1339,14 @@ async function migrate() {
       backup TEXT DEFAULT '', host_model TEXT DEFAULT '', serial TEXT DEFAULT '', cpu TEXT DEFAULT '', memory TEXT DEFAULT '',
       location TEXT DEFAULT '', notes TEXT DEFAULT '', server_id INTEGER DEFAULT NULL,
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')), UNIQUE(country, hostname));`);
+  // Backup jobs of the virtual servers (NetBackup OpsCenter "Daily Backups" report e-mails, imported in the Virtual servers tab).
+  const vscols = (await backend.all('PRAGMA table_info(virtual_servers)')).map(c => c.name);
+  if (!vscols.includes('backup_client')) await backend.run("ALTER TABLE virtual_servers ADD COLUMN backup_client TEXT DEFAULT ''");
+  await backend.script(`CREATE TABLE IF NOT EXISTS vm_backups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, country TEXT NOT NULL DEFAULT 'Vietnam', job_id TEXT NOT NULL, client TEXT NOT NULL, policy TEXT DEFAULT '',
+      status TEXT DEFAULT '', status_code INTEGER DEFAULT NULL, started_at TEXT DEFAULT '', ended_at TEXT DEFAULT '', vm_id INTEGER DEFAULT NULL,
+      report TEXT DEFAULT '', imported_by TEXT DEFAULT '', imported_at TEXT DEFAULT (datetime('now')), UNIQUE(country, job_id));
+    CREATE INDEX IF NOT EXISTS idx_vm_backups_vm ON vm_backups(vm_id, started_at);`);
 
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
