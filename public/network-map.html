@@ -66,7 +66,7 @@
       <section class="nm-center">
         <div class="card nm-canvas-card">
           <div class="nm-tools">
-            <span class="nm-tabs"><button class="on" data-v="topo">🗺 Topology</button><button data-v="vlan">🏷 VLANs</button><button data-v="log">🕓 Port changes</button></span>
+            <span class="nm-tabs"><button class="on" data-v="topo">🗺 Topology</button><button data-v="rack">🗄 Racks</button><button data-v="draw">🖼 Drawings</button><button data-v="vlan">🏷 VLANs</button><button data-v="log">🕓 Port changes</button></span>
             <span id="nm-focus" class="nm-focus"></span>
             <span style="flex:1"></span>
             <span class="nm-legend"><i class="lg-fiber"></i>fiber / SFP <i class="lg-cu"></i>copper <i class="lg-pc"></i>port-channel</span>
@@ -74,6 +74,8 @@
             <button class="btn btn-ghost btn-sm" id="nm-auto" title="Arrange by layer (core on top, access below)">⚙ Auto layout</button>
           </div>
           <div id="nm-view-topo" class="nm-view"><svg id="nm-svg" class="nm-svg"></svg><div id="nm-tip" class="nm-tip" hidden></div></div>
+          <div id="nm-view-rack" class="nm-view nm-scroll nm-tall" hidden></div>
+          <div id="nm-view-draw" class="nm-view nm-scroll nm-tall" hidden></div>
           <div id="nm-view-vlan" class="nm-view nm-scroll" hidden></div>
           <div id="nm-view-log" class="nm-view nm-scroll" hidden></div>
         </div>
@@ -97,6 +99,7 @@
 <script src="/js/alerts.js"></script>
 <script src="/js/device-specs.js?v=20261117a"></script>
 <script src="/js/netmap-doc.js?v=20261117c"></script>
-<script src="/js/network-map.js?v=20261117d"></script>
+<script src="/js/network-map.js?v=20261117e"></script>
+<script src="/js/netmap-racks.js?v=20261117b"></script>
 </body>
 </html>
