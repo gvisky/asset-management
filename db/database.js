@@ -721,6 +721,45 @@ async function initSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_budget_item_cy ON budget_item(country, year);
 
+    -- Local Finance control (IT_Opex_Control_Table_<Mon><YY>.xlsb → sheet "SAP data",
+    -- PIC = IT): the same SAP postings as the Turkey B-F report, but with the local GL
+    -- hierarchy. One row per posting (kind Actual / Adj) or budget line per month
+    -- (kind Budget). amount = local currency (VND); usd = Finance's USD (budget rows
+    -- converted at the file's average actual rate, usd_calc = 1).
+    CREATE TABLE IF NOT EXISTS fin_posting (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      country      TEXT    NOT NULL DEFAULT '',
+      year         INTEGER NOT NULL DEFAULT 0,
+      period       INTEGER NOT NULL DEFAULT 0,
+      kind         TEXT    DEFAULT '',
+      s4_gl        TEXT    DEFAULT '',
+      local_gl     TEXT    DEFAULT '',
+      gl_desc      TEXT    DEFAULT '',
+      s4_cc        TEXT    DEFAULT '',
+      cc           TEXT    DEFAULT '',
+      cc_name      TEXT    DEFAULT '',
+      doc_type     TEXT    DEFAULT '',
+      doc_no       TEXT    DEFAULT '',
+      posting_date TEXT    DEFAULT '',
+      header_text  TEXT    DEFAULT '',
+      text         TEXT    DEFAULT '',
+      currency     TEXT    DEFAULT '',
+      amount       REAL    NOT NULL DEFAULT 0,
+      usd          REAL    NOT NULL DEFAULT 0,
+      usd_calc     INTEGER NOT NULL DEFAULT 0,
+      cost_type    TEXT    DEFAULT '',
+      cost_group   TEXT    DEFAULT '',
+      pl_criteria  TEXT    DEFAULT '',
+      department   TEXT    DEFAULT '',
+      expense_type TEXT    DEFAULT '',
+      io_name      TEXT    DEFAULT '',
+      review_note  TEXT    DEFAULT '',
+      source_file  TEXT    DEFAULT '',
+      imported_at  TEXT    DEFAULT '',
+      imported_by  TEXT    DEFAULT ''
+    );
+    CREATE INDEX IF NOT EXISTS idx_fin_posting_cy ON fin_posting(country, year);
+
     -- Turkish GL (MÇ No) → Local GL mapping (from GL.xlsx).
     CREATE TABLE IF NOT EXISTS gl_map (
       gl_tr_no TEXT PRIMARY KEY,

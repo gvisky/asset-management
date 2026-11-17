@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const XLSX = require('xlsx');
 const core = require('../public/js/budget-core');
-const { importRows } = require('../routes/budget');
+const { importRows, importFinance } = require('../routes/budget');
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
@@ -21,8 +21,11 @@ if (!files.length) { console.error('Usage: node scripts/build-budget-seed.js [--
   for (const f of files) {
     if (!fs.existsSync(f)) { console.error('Not found:', f); continue; }
     const name = path.basename(f).replace(/^[0-9a-f]{8}-/, '');
-    const { items, sheets } = core.parseWithXLSX(XLSX, fs.readFileSync(f), 'buffer', name);
-    const d = await importRows(items, name, { id: null, username: 'script' }, dryRun);
+    const r = core.parseWithXLSX(XLSX, fs.readFileSync(f), 'buffer', name);
+    const { sheets } = r;
+    const d = r.source === 'finance'
+      ? await importFinance(r.finance, name, { id: null, username: 'script' }, dryRun)    // Finance control (.xlsb)
+      : await importRows(r.items, name, { id: null, username: 'script' }, dryRun);
     console.log(`${name} · sheet ${sheets.join(', ')}${dryRun ? ' · DRY RUN' : ''}`);
     d.plan.forEach(p => console.log(`  ${p.country} ${p.year} [${p.kind}] ${p.action}${p.reason ? ' (' + p.reason + ')' : ''}: ` +
       `${p.lines} lines · budget $${Math.round(p.budget).toLocaleString('en-US')} · A+F $${Math.round(p.actual).toLocaleString('en-US')}`));

@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Budget: Finance control (local SAP) vs Turkey report",
+    "items": [
+      "Upload the Finance team's IT_Opex_Control_Table_<Mon><YY>.xlsb on the Budget page (sheet \"SAP data\", PIC = IT). The newest month is enough — it has every month so far, and Finance restates earlier months; older files are skipped.",
+      "New card Finance control vs Turkey report: Finance's own budget vs actual by local cost type (USD or VND), and a reconciliation with the Turkey B-F report by S4 GL and month (✓ same, Different, Only in Turkey report, Only in Finance).",
+      "Click a GL row to see Finance's SAP postings (date, document, cost center, text, VND, USD) next to the Turkey report lines for that GL."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: import the Factory Info workbook (Palo Alto, APs, racks, VLANs, VMs, printers)",
     "items": [
       "Network map → ⬆ Import Factory Info (.xlsx) (admins): the workbook is read in your browser and compared with the map, Server Inventory and the virtual-server list. You see every difference, grouped, and tick what to apply. Blank cells never clear what is already there.",
