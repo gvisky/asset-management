@@ -439,8 +439,8 @@ const FAMILIES = [[/CT5520/i, 'Cisco 5520 WLC'], [/AP2802/i, 'Cisco AP 2802E (in
   [/R740/i, 'Dell PowerEdge R740 / R740xd'], [/DD-?6300|DATA DOMAIN/i, 'Dell Data Domain DD6300'], [/E560|VXRAIL|hội tụ/i, 'Dell VxRail E560'], [/XG\s*-?\s*210|SOPHOS/i, 'Sophos XG 210'], [/PA[- ]?440/i, 'Palo Alto PA-440'],
   [/VNPT|VIETTEL|LEASE/i, 'ISP lease-line router']];
 const familyOf = (t) => (FAMILIES.find(([re]) => re.test(String(t || ''))) || [, ''])[1];
-router.get('/inventory-check', wrap(async (req, res) => {
-  const site = str(req.query.site, 80);
+router.get('/inventory-check', wrap(async (req, res) => res.json(await inventoryCheck(str(req.query.site, 80)))));
+async function inventoryCheck(site) {
   const equip = await all('SELECT part, description, qty FROM net_equipment WHERE site = ?', [site]);
   const devs = await all('SELECT id, hostname, model, serial, service_tag, server_id, role FROM net_devices WHERE site = ?', [site]);
   const servers = await all("SELECT id, hostname, brand_model, category, serial_no, status, location, ip_address FROM servers WHERE deleted_at IS NULL");
@@ -476,7 +476,8 @@ router.get('/inventory-check', wrap(async (req, res) => {
   const invSerials = new Set(servers.map(s => normSn(s.serial_no)).filter(Boolean));
   const docOnly = devs.filter(d => familyOf(d.model + ' ' + d.hostname) && (d.serial || d.service_tag) && ![d.serial, d.service_tag].some(sn => { const n = normSn(sn); return n && (invSerials.has(n) || invSerials.has('S' + n)); }))
     .map(d => ({ hostname: d.hostname, model: d.model, serial: d.serial || d.service_tag, linked: d.server_id || null }));
-  res.json({ site, has_equipment: equip.length > 0, models, issues, doc_only: docOnly });
-}));
+  return { site, has_equipment: equip.length > 0, models, issues, doc_only: docOnly };
+}
+router.inventoryCheck = inventoryCheck;
 
 module.exports = router;

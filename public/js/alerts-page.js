@@ -24,6 +24,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const reloadOther = (key) => () => { const other = panels[key === 'missing' ? 'ad' : 'missing']; if (other) other.reload(); };
   panels.missing = NeedsAttention({ root: document.getElementById('na-missing'), mode: 'missing', maxHeight: 480, onSaved: reloadOther('missing') });
   panels.ad = NeedsAttention({ root: document.getElementById('na-ad'), mode: 'ad', maxHeight: 420, onSaved: reloadOther('ad') });
+  // Servers & network devices (Server Inventory) — hidden for accounts without asset access.
+  const sv = document.getElementById('na-servers');
+  if (sv && typeof ServerAttention !== 'undefined') {
+    const go = () => ServerAttention.panel(sv, { maxHeight: 520 });
+    const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.asset_access !== 0) { go(); if (location.hash === '#na-servers') setTimeout(() => sv.scrollIntoView({ behavior: 'smooth' }), 600); } }, 150);
+  }
   loadHrChanges();
   // Asset alerts list (moved here from Maintenance & Repairs), at the bottom of the page.
   if (typeof loadAlertBox === 'function') loadAlertBox('alert-box', 'asset');

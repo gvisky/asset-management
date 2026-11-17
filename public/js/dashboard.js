@@ -439,6 +439,10 @@ async function loadAppUpdates() {
 document.addEventListener('DOMContentLoaded', () => {
   loadStats();
   loadAppUpdates();
+  // Servers & network devices: count card (list on the Needs Attention page).
+  if (typeof ServerAttention !== 'undefined' && document.getElementById('na-servers-dash')) {
+    const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.asset_access !== 0) ServerAttention.summary(document.getElementById('na-servers-dash')); }, 150);
+  }
   naPanel = NeedsAttention({ root: document.getElementById('na-root'), mode: 'missing',
     scope: () => dashScope, showOpenLink: true });
   loadPersonnelSummary();               // User Inventory summary cards

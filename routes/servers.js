@@ -75,6 +75,33 @@ router.get('/filters', wrap(async (req, res) => {
   res.json({ roles, categories, producers, countries });
 }));
 
+// ── GET /api/servers/needs-info — Needs Attention for Server Inventory ───────────
+// Network devices / servers need Serial, Hostname, IP and Location (access points: Serial); also the
+// same serial twice and a serial that differs from the implementation document (network map).
+// Country-scoped; Broken devices are skipped. { rows: [{ server…, issues: [], doc_note }], counts, models }
+router.get('/needs-info', wrap(async (req, res) => {
+  const cf = countryFilter(req);
+  const rows = await all(`SELECT id, hostname, brand_model, category, serial_no, ip_address, location, status, country FROM servers
+      WHERE deleted_at IS NULL AND status <> 'Broken'${cf.clause ? ' AND ' + cf.clause : ''} ORDER BY category, brand_model, id`, cf.params);
+  let doc = null;
+  try { const site = await get('SELECT site FROM net_devices GROUP BY site ORDER BY COUNT(*) DESC LIMIT 1'); if (site) doc = await require('./netmap').inventoryCheck(site.site); } catch { doc = null; }
+  const sn = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const cnt = new Map(); rows.forEach(s => { const n = sn(s.serial_no); if (n) cnt.set(n, (cnt.get(n) || 0) + 1); });
+  const docIssue = new Map((doc ? doc.issues : []).map(i => [i.id, i.problems.find(p => /document's serial there is|which has no serial/.test(p))]).filter(([, p]) => p));
+  const out = [];
+  for (const s of rows) {
+    const t = [], ap = /access point/i.test(s.category || '');
+    if (!sn(s.serial_no)) t.push('Serial');
+    if (!ap) { if (!String(s.hostname || '').trim()) t.push('Hostname'); if (!String(s.ip_address || '').trim()) t.push('IP'); if (!String(s.location || '').trim()) t.push('Location'); }
+    if (sn(s.serial_no) && cnt.get(sn(s.serial_no)) > 1) t.push('Dup Serial');
+    if (docIssue.has(s.id)) t.push('Serial ≠ document');
+    if (t.length) out.push({ ...s, issues: t, doc_note: docIssue.get(s.id) || '' });
+  }
+  const counts = {}; out.forEach(r => r.issues.forEach(k => { counts[k] = (counts[k] || 0) + 1; }));
+  const byCountry = {}; out.forEach(r => { byCountry[r.country] = (byCountry[r.country] || 0) + 1; });
+  res.json({ total: out.length, counts, byCountry, rows: out, models: doc ? doc.models.filter(m => m.status === 'missing' || m.status === 'extra') : [], has_doc: !!doc });
+}));
+
 // ── GET /api/servers/:id ─────────────────────────────────────────────────────
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);

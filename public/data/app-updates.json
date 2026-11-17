@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Needs Attention: named per group, servers on the Dashboard and the Needs Attention page",
+    "items": [
+      "Each list now says what it is about: ⚠️ Needs Attention — Assets: Missing Info, — Assets: Missing AD & Asset, and — Servers & Network: Missing Info.",
+      "Dashboard: a new card with the number of servers / network devices that need info, split by issue (Serial, Hostname, IP, Location, Serial ≠ document) — Open the list → goes to the Needs Attention page.",
+      "Needs Attention page: the Servers & Network list sits under the asset lists, with the same fill-in-place inputs as in Server Inventory."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Server Inventory: Needs Attention — Missing Info",
     "items": [
       "The 'Check vs document' button is replaced by ⚠️ Needs Attention — Missing Info (with a count), like on Asset Inventory.",
