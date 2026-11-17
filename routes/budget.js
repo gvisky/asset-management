@@ -91,7 +91,7 @@ async function importRows(raw, fileNameIn, user, dryRun) {
   // Group incoming rows by country+year and decide per group.
   const groups = {};
   rows.forEach(r => { const k = r.country + '|' + r.year; (groups[k] = groups[k] || []).push(r); });
-  const existing = await all('SELECT id, country, year, kind, oc, note, ' + TEXT_COLS.join(', ') + ' FROM budget_item');
+  const existing = await all('SELECT id, country, year, kind, oc, note, actual_months, ' + TEXT_COLS.join(', ') + ' FROM budget_item');
   const plan = [];
   for (const k of Object.keys(groups).sort()) {
     const g = groups[k], { country, year, kind } = g[0];
@@ -101,6 +101,15 @@ async function importRows(raw, fileNameIn, user, dryRun) {
     let action = ex.length ? 'replace' : 'add', reason = '';
     if (kind === 'report' && !hasActuals && exKinds.includes('approved')) { action = 'skip'; reason = 'approved budget already loaded — report only has a draft for this year'; }
     if (kind === 'legacy' && exKinds.some(x => x !== 'legacy')) { action = 'skip'; reason = 'newer data already loaded'; }
+    // Never replace data that has more actual months (e.g. an older mid-year file, or a
+    // budget-only draft, over a report with actuals through Aug).
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const exMonths = Math.max(0, ...ex.map(e => Number(e.actual_months) || 0));
+    const inMonths = Math.max(0, ...g.map(r => r.actual_months));
+    if (action !== 'skip' && kind !== 'approved' && exMonths > inMonths) {
+      action = 'skip';
+      reason = `loaded data is newer (actual through ${MON[exMonths - 1]} ${year}; this file ${inMonths ? 'only to ' + MON[inMonths - 1] : 'has no actuals'})`;
+    }
     plan.push({ country, year, kind, action, reason, lines: g.length, existing: ex.length, existing_kind: exKinds.join(', '),
       budget: r2(g.reduce((s, r) => s + core.sum(r.budget), 0)), actual: r2(g.reduce((s, r) => s + core.sum(r.actual), 0)),
       actual_months: Math.max(...g.map(r => r.actual_months)) });
