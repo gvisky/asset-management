@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-17",
+    "title": "Network map: real device panels, patch panels, cable path",
+    "items": [
+      "Each device's ports are drawn where they are on the real hardware: Catalyst 9200L (48 ports in 4 groups, odd top / even bottom + 4 SFP+ uplinks), 3560-CX, Nexus 3524 / 3548 (SFP+ cages), ISR 4331, WLC 5520, R740xd and VxRail rear (iDRAC, built-in, PCIe card), Data Domain, Sophos XG 210. Green = to a network device, cyan = to a user / patch panel, grey = free; click a port to change it.",
+      "Patch panels from table 8.1 (MR01/PP01–PP10: D01–D105 data, T01–T105 phone): click a patch panel in the Racks tab, or an outlet (D07) in a port list, to see which switch port each outlet goes to.",
+      "🔎 Cable path in every port: wall outlet → patch panel port → switch port (VLAN) → uplink → distribution → core.",
+      "Import fix: \"PORT 1 (LAN)\" = \"PORT 1\" and \"PORT 01\" = \"PORT 1\" — no more duplicate ports on the OT firewall and WLCs (import the document again to apply)."
+    ]
+  },
+  {
+    "date": "2026-11-17",
     "title": "Network map: Racks and Drawings",
     "items": [
       "🗄 Racks tab: the server room (MR-01 … MR-04, 42 U) and the factory cabinets (IT-KABIN2 … HARICI-KABIN12, 12 U) drawn from where each device is ('MAIN RACK - 03 (U29)'), with patch panels (MR01/PP01–PP10), cable managers and PDUs, and 'x / 42 U used' per rack.",
