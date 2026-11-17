@@ -46,11 +46,16 @@ router.post('/import', wrap(async (req, res) => {
   const ports = Array.isArray(req.body.ports) ? req.body.ports.slice(0, 20000) : [];
   const vlans = Array.isArray(req.body.vlans) ? req.body.vlans.slice(0, 4096) : [];
   const patches = Array.isArray(req.body.patches) ? req.body.patches.slice(0, 5000) : [];
+  const equipment = Array.isArray(req.body.equipment) ? req.body.equipment.slice(0, 500) : [];
   if (!devices.length) return res.status(400).json({ error: 'No devices found in the file' });
   const stmts = [];
   if (req.body.replace) {
+    // Replace = the ports and VLANs come again from the document; devices that are still in it keep their id,
+    // so rack places, map positions and Server Inventory links stay. Devices no longer in it are removed.
+    const keep = devices.map(d => str(d.hostname, 80)).filter(Boolean);
     stmts.push({ sql: 'DELETE FROM net_ports WHERE device_id IN (SELECT id FROM net_devices WHERE site = ?)', args: [site] });
-    stmts.push({ sql: 'DELETE FROM net_devices WHERE site = ?', args: [site] });
+    stmts.push({ sql: `DELETE FROM net_rack_items WHERE device_id IN (SELECT id FROM net_devices WHERE site = ? AND hostname NOT IN (${keep.map(() => '?').join(',') || "''"}))`, args: [site, ...keep] });
+    stmts.push({ sql: `DELETE FROM net_devices WHERE site = ? AND hostname NOT IN (${keep.map(() => '?').join(',') || "''"})`, args: [site, ...keep] });
     stmts.push({ sql: 'DELETE FROM net_vlans WHERE site = ?', args: [site] });
   }
   for (const d of devices) {
@@ -60,6 +65,10 @@ router.post('/import', wrap(async (req, res) => {
         ON CONFLICT(site, hostname) DO UPDATE SET alias = excluded.alias, role = excluded.role, model = excluded.model, serial = excluded.serial,
           mgmt_ip = excluded.mgmt_ip, location = excluded.location, ips = excluded.ips, services = excluded.services, service_tag = excluded.service_tag, updated_at = datetime('now')`,
       args: [site, h, str(d.alias), str(d.role, 40), str(d.model), str(d.serial, 60), str(d.mgmt_ip, 60), str(d.location), ips, str(d.services, 120), str(d.service_tag, 40)] });
+  }
+  if (equipment.length) {
+    stmts.push({ sql: 'DELETE FROM net_equipment WHERE site = ?', args: [site] });
+    for (const e of equipment) stmts.push({ sql: 'INSERT INTO net_equipment (site, part, description, qty) VALUES (?, ?, ?, ?)', args: [site, str(e.part, 120), str(e.desc, 600), Math.max(0, Number(e.qty) || 0)] });
   }
   if (patches.length) stmts.push({ sql: 'DELETE FROM net_patch_ports WHERE site = ?', args: [site] });
   for (const x of patches) {
@@ -82,6 +91,9 @@ router.post('/import', wrap(async (req, res) => {
       args: [id, port, Number(p.sort) || portSort(port), str(p.peer_host, 80), str(p.peer_port, 40), str(p.cable, 30), str(p.mode, 20), str(p.vlan, 60), str(p.grp, 20), str(p.patch, 40), str(p.note, 200), req.user.username] });
   }
   await batch(pst);
+  // Devices already in Server Inventory under the same hostname are linked to it.
+  await run(`UPDATE net_devices SET server_id = (SELECT s.id FROM servers s WHERE s.deleted_at IS NULL AND UPPER(s.hostname) = UPPER(net_devices.hostname) LIMIT 1)
+      WHERE site = ? AND server_id IS NULL`, [site]);
   await audit(req.user, 'NETMAP', null, `Network map "${site}": imported ${ids.size} devices, ${pst.length} ports, ${vlans.length} VLANs${req.body.replace ? ' (replaced)' : ''}`);
   res.json({ ok: true, site, devices: ids.size, ports: pst.length, vlans: vlans.length, patches: patches.length });
 }));
@@ -416,6 +428,55 @@ router.put('/drawing/:id', wrap(async (req, res) => {
 router.delete('/drawing/:id', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   await run('DELETE FROM net_drawings WHERE id = ?', [Number(req.params.id)]); res.json({ ok: true });
+}));
+
+// ── Server Inventory check against the document ─────────────────────────────────
+// Per model family: quantity in the equipment list (section 2), devices in the port tables (network map),
+// records in Server Inventory (active / stock). Per record: no serial, serial twice, serial not in the
+// document, not linked to the network map. Per document device: serial not found in Server Inventory.
+const FAMILIES = [[/CT5520/i, 'Cisco 5520 WLC'], [/AP2802/i, 'Cisco AP 2802E (indoor)'], [/AP1572/i, 'Cisco AP 1572EAC (outdoor)'], [/3548P/i, 'Cisco Nexus N3K-C3548P-XL'],
+  [/3524P/i, 'Cisco Nexus N3K-C3524P-XL'], [/C9200L-48P/i, 'Cisco C9200L-48P-4X-E'], [/3560CX-12PD/i, 'Cisco WS-C3560CX-12PD-S'], [/ISR\s*4331/i, 'Cisco ISR 4331'],
+  [/R740/i, 'Dell PowerEdge R740 / R740xd'], [/DD-?6300|DATA DOMAIN/i, 'Dell Data Domain DD6300'], [/E560|VXRAIL|hội tụ/i, 'Dell VxRail E560'], [/XG\s*-?\s*210|SOPHOS/i, 'Sophos XG 210'], [/PA[- ]?440/i, 'Palo Alto PA-440'],
+  [/VNPT|VIETTEL|LEASE/i, 'ISP lease-line router']];
+const familyOf = (t) => (FAMILIES.find(([re]) => re.test(String(t || ''))) || [, ''])[1];
+router.get('/inventory-check', wrap(async (req, res) => {
+  const site = str(req.query.site, 80);
+  const equip = await all('SELECT part, description, qty FROM net_equipment WHERE site = ?', [site]);
+  const devs = await all('SELECT id, hostname, model, serial, service_tag, server_id, role FROM net_devices WHERE site = ?', [site]);
+  const servers = await all("SELECT id, hostname, brand_model, category, serial_no, status, location, ip_address FROM servers WHERE deleted_at IS NULL");
+  const fam = new Map();
+  const F = (name) => { if (!fam.has(name)) fam.set(name, { family: name, doc_qty: null, map: 0, inv: 0, active: 0, stock: 0, other: 0 }); return fam.get(name); };
+  for (const e of equip) { const f = familyOf(`${e.part} ${e.description}`); if (f) { const x = F(f); x.doc_qty = (x.doc_qty || 0) + e.qty; } }
+  for (const d of devs) { const f = familyOf(d.model + ' ' + d.hostname); if (f) F(f).map++; }
+  for (const s of servers) { const f = familyOf(s.brand_model); if (!f) continue; const x = F(f); x.inv++; if (s.status === 'Active') x.active++; else if (s.status === 'Stock') x.stock++; else x.other++; }
+  const models = [...fam.values()].map(x => {
+    const want = x.doc_qty != null ? x.doc_qty : x.map;
+    return { ...x, expected: want, diff: x.inv - want, status: x.doc_qty == null && !x.map ? (x.inv ? 'notindoc' : '') : x.inv === want ? 'ok' : x.inv < want ? 'missing' : 'extra' };
+  }).sort((a, b) => (a.status === 'ok') - (b.status === 'ok') || a.family.localeCompare(b.family));
+  // Per record
+  const docSerials = new Map(); for (const d of devs) for (const sn of [d.serial, d.service_tag]) if (normSn(sn)) docSerials.set(normSn(sn), d);
+  const findDoc = (sn) => { const n = normSn(sn); if (!n) return null; return docSerials.get(n) || docSerials.get(n.replace(/^S/, '')) || docSerials.get('S' + n) || null; };
+  const cnt = new Map(); for (const s of servers) { const n = normSn(s.serial_no); if (n) cnt.set(n, (cnt.get(n) || 0) + 1); }
+  const famWithMap = new Set(devs.map(d => familyOf(d.model + ' ' + d.hostname)).filter(Boolean));
+  const issues = [];
+  for (const s of servers) {
+    const f = familyOf(s.brand_model); if (!f) continue;
+    const p = [];
+    if (!normSn(s.serial_no)) p.push('No serial number');
+    else if (cnt.get(normSn(s.serial_no)) > 1) p.push('Serial used on another record too');
+    const linked = devs.find(d => d.server_id === s.id) || devs.find(d => s.hostname && d.hostname.toUpperCase() === String(s.hostname).toUpperCase());
+    if (famWithMap.has(f)) {
+      if (linked) { if (normSn(s.serial_no) && !findDoc(s.serial_no)) p.push(linked.serial || linked.service_tag ? `Is ${linked.hostname} in the document, but the document's serial there is ${linked.serial || linked.service_tag} — check the label on the device`
+        : `Is ${linked.hostname} in the document, which has no serial for it — confirm with the label on the device`); }
+      else if (findDoc(s.serial_no)) p.push(`Serial is ${findDoc(s.serial_no).hostname} in the document, but the record is not linked — run 🔄 Update from network map`);
+      else p.push('Not in the document\'s port tables — a spare, installed somewhere else, or its serial needs checking');
+    }
+    if (p.length) issues.push({ id: s.id, family: f, brand_model: s.brand_model, serial_no: s.serial_no, hostname: s.hostname, status: s.status, location: s.location, problems: p });
+  }
+  const invSerials = new Set(servers.map(s => normSn(s.serial_no)).filter(Boolean));
+  const docOnly = devs.filter(d => familyOf(d.model + ' ' + d.hostname) && (d.serial || d.service_tag) && ![d.serial, d.service_tag].some(sn => { const n = normSn(sn); return n && (invSerials.has(n) || invSerials.has('S' + n)); }))
+    .map(d => ({ hostname: d.hostname, model: d.model, serial: d.serial || d.service_tag, linked: d.server_id || null }));
+  res.json({ site, has_equipment: equip.length > 0, models, issues, doc_only: docOnly });
 }));
 
 module.exports = router;

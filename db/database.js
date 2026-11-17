@@ -1277,6 +1277,8 @@ async function migrate() {
     CREATE TABLE IF NOT EXISTS net_patch_ports (
       id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT NOT NULL DEFAULT '', panel TEXT NOT NULL, port INTEGER NOT NULL, outlet TEXT DEFAULT '',
       note TEXT DEFAULT '', UNIQUE(site, panel, port));
+    CREATE TABLE IF NOT EXISTS net_equipment (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT NOT NULL DEFAULT '', part TEXT DEFAULT '', description TEXT DEFAULT '', qty INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS net_drawings (
       id INTEGER PRIMARY KEY AUTOINCREMENT, site TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, category TEXT DEFAULT '',
       mime TEXT DEFAULT 'image/png', size INTEGER DEFAULT 0, data_b64 TEXT DEFAULT '', pins TEXT DEFAULT '',

@@ -109,16 +109,21 @@ function renderTable(rows) {
   for (const s of rows) { const k = s.category || 'Uncategorised'; if (!by.has(k)) by.set(k, []); by.get(k).push(s); }
   const groups = [...by.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   let html = '';
-  for (const [cat, list] of groups) {
-    if (list.length <= 4) { html += list.map(s => rowHtml(s, false)).join(''); continue; }
-    const open = sOpenGroups.has(cat);
-    const models = [...list.reduce((m, s) => m.set(s.brand_model || '—', (m.get(s.brand_model || '—') || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
-    const st = list.reduce((m, s) => { m[s.status] = (m[s.status] || 0) + 1; return m; }, {});
-    html += `<tr class="sg-grp" onclick="toggleSGroup(${jsArg(cat)})"><td colspan="12">
-      <span class="lg-caret">${open ? '▾' : '▸'}</span> <b>${sEsc(cat)}</b> <span class="sg-cnt">${list.length}</span>
-      <span class="sg-models">${models.map(([m, n]) => `<span class="sg-model">${sEsc(m)} <b>×${n}</b> ${DeviceSpecs.btn(m, cat)}</span>`).join('')}</span>
-      <span class="sg-st">${Object.entries(st).map(([k, n]) => `${statusBadge(k)} ${n}`).join(' ')}</span></td></tr>`;
-    if (open) html += list.map(s => rowHtml(s, true)).join('');
+  // Only models with more than 4 devices are grouped (e.g. 22 × C9200L); a model with 1–4 devices (2 × Nexus) stays as rows.
+  const modelCount = rows.reduce((m, s) => m.set(s.brand_model || '—', (m.get(s.brand_model || '—') || 0) + 1), new Map());
+  for (const [cat, all] of groups) {
+    const list = all.filter(s => modelCount.get(s.brand_model || '—') > 4), single = all.filter(s => modelCount.get(s.brand_model || '—') <= 4);
+    if (list.length) {
+      const open = sOpenGroups.has(cat);
+      const models = [...list.reduce((m, s) => m.set(s.brand_model || '—', (m.get(s.brand_model || '—') || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
+      const st = list.reduce((m, s) => { m[s.status] = (m[s.status] || 0) + 1; return m; }, {});
+      html += `<tr class="sg-grp" onclick="toggleSGroup(${jsArg(cat)})"><td colspan="12">
+        <span class="lg-caret">${open ? '▾' : '▸'}</span> <b>${sEsc(cat)}</b> <span class="sg-cnt">${list.length}</span>
+        <span class="sg-models">${models.map(([m, n]) => `<span class="sg-model">${sEsc(m)} <b>×${n}</b> ${DeviceSpecs.btn(m, cat)}</span>`).join('')}</span>
+        <span class="sg-st">${Object.entries(st).map(([k, n]) => `${statusBadge(k)} ${n}`).join(' ')}</span></td></tr>`;
+      if (open) html += list.map(s => rowHtml(s, true)).join('');
+    }
+    html += single.map(s => rowHtml(s, false)).join('');
   }
   tbody.innerHTML = html;
 }
@@ -387,5 +392,41 @@ async function openNetSync(keepSite) {
     try { const r = await apiPost('/api/netmap/inventory-sync', { site, net_ids: ids, choose: nsChoose }); showToast(`${r.updated} updated · ${r.added} added`); ov.classList.remove('open'); loadServers(1); loadSummary && loadSummary(); }
     catch (e) { showToast('Could not update', 'error'); }
   };
+  ov.classList.add('open');
+}
+
+// ── Check Server Inventory against the implementation document (network map) ──
+async function openInvCheck() {
+  let sites = [];
+  try { sites = (await apiGet('/api/netmap')).sites; } catch {}
+  if (!sites.length) { showToast('No network map yet — import the implementation document on the Network map page first', 'error'); return; }
+  const site = sites[0].site;
+  const d = await apiGet('/api/netmap/inventory-check?site=' + encodeURIComponent(site));
+  let ov = document.getElementById('ic-ov');
+  if (!ov) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="ic-ov"><div class="modal" style="max-width:1050px">
+      <div class="modal-header"><span class="modal-title" id="ic-t"></span><button class="modal-close" onclick="document.getElementById('ic-ov').classList.remove('open')">✕</button></div>
+      <div class="modal-body" id="ic-b" style="max-height:74vh;overflow:auto"></div></div></div>`); ov = document.getElementById('ic-ov'); }
+  const canEdit = window.CURRENT_USER && ['admin', 'editor'].includes(window.CURRENT_USER.role);
+  const ST = { ok: '<span class="ic-ok">✓ matches</span>', missing: (x) => `<span class="ic-bad">✗ ${-x.diff} missing</span>`, extra: (x) => `<span class="ic-warn">＋${x.diff} more than the document</span>` };
+  const fams = [...new Set(d.issues.map(i => i.family))];
+  document.getElementById('ic-t').textContent = `Server Inventory vs implementation document — ${site}`;
+  document.getElementById('ic-b').innerHTML = `
+    ${d.has_equipment ? '' : '<p class="ic-note">The equipment list (section 2) is not imported yet — import the document again on the Network map page; until then the expected quantity is the number of devices in the port tables.</p>'}
+    <h4 style="margin:0 0 6px">Quantity per model</h4>
+    <table class="ic-tbl"><thead><tr><th>Model</th><th>Document (equipment list)</th><th>In port tables</th><th>Server Inventory</th><th>Result</th></tr></thead><tbody>
+    ${d.models.map(x => `<tr class="${x.status === 'ok' || x.status === 'notindoc' ? '' : 'ic-row-bad'}"><td><b>${sEsc(x.family)}</b> ${DeviceSpecs.btn(x.family, '')}</td><td>${x.doc_qty == null ? '<span class="text-muted">—</span>' : x.doc_qty}</td><td>${x.map || '<span class="text-muted">—</span>'}</td>
+      <td><b>${x.inv}</b> <span class="text-muted text-sm">(${x.active} active${x.stock ? ` · ${x.stock} stock` : ''}${x.other ? ` · ${x.other} other` : ''})</span></td>
+      <td>${x.status === 'ok' ? ST.ok : x.status === 'missing' ? ST.missing(x) : x.status === 'extra' ? ST.extra(x) : x.status === 'notindoc' ? '<span class="text-muted">not in the document (other project)</span>' : ''}</td></tr>`).join('')}</tbody></table>
+    <h4 style="margin:18px 0 6px">Records to check (${d.issues.length})</h4>
+    ${d.issues.length ? fams.map(f => `<div class="ic-fam">${sEsc(f)}</div><table class="ic-tbl"><tbody>${d.issues.filter(i => i.family === f).map(i => `<tr>
+        <td style="width:70px">#${i.id}</td><td><b>${sEsc(i.hostname || '—')}</b><div class="text-muted text-sm">${sEsc(i.brand_model)} · ${statusBadge(i.status)}</div></td>
+        <td>S/N <b>${sEsc(i.serial_no || '—')}</b><div class="text-muted text-sm">${sEsc(i.location || '')}</div></td>
+        <td class="text-sm">${i.problems.map(p => `<div class="ic-p">⚠ ${sEsc(p)}</div>`).join('')}</td>
+        <td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="onView(${i.id})">👁</button>${canEdit ? ` <button class="btn btn-ghost btn-sm" onclick="onEdit(${i.id})">✏️ Add info</button>` : ''}</td></tr>`).join('')}</tbody></table>`).join('')
+      : '<p class="ic-ok">✓ Every record has a serial that the document knows.</p>'}
+    ${d.doc_only.length ? `<h4 style="margin:18px 0 6px">In the document, serial not found in Server Inventory (${d.doc_only.length})</h4>
+      <table class="ic-tbl"><thead><tr><th>Device</th><th>Model</th><th>Serial in the document</th><th></th></tr></thead><tbody>${d.doc_only.map(x => `<tr><td><b>${sEsc(x.hostname)}</b></td><td>${sEsc(x.model)}</td><td>${sEsc(x.serial)}</td>
+        <td class="text-sm">${x.linked ? `linked to record <a href="#" onclick="onView(${x.linked});return false">#${x.linked}</a> — its serial differs` : 'not linked — 🔄 Update from network map can add / link it'}</td></tr>`).join('')}</tbody></table>` : ''}
+    <p class="text-muted text-sm" style="margin-top:12px">Serials compare without spaces / dashes and with or without a leading "S" (barcode exports). Fix a record with ✏️ Add info; link records to the document with 🔄 Update from network map.</p>`;
   ov.classList.add('open');
 }
