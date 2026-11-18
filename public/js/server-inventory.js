@@ -87,7 +87,7 @@ function rowHtml(s, inGroup) {
       <td class="text-muted text-sm">${sEsc(s.producer) || '—'}</td>
       <td>${s.category ? `<span class="badge badge-office">${sEsc(s.category)}</span>` : '—'}</td>
       <td class="text-muted text-sm">${sEsc(s.ip_address) || '—'}</td>
-      <td class="text-muted text-sm">${sEsc(s.os) || '—'}</td>
+      <td class="si-sn">${sEsc(s.serial_no) || '<span class="text-muted">—</span>'}</td>
       <td><span class="badge badge-factory">${sEsc(s.country) || '—'}</span></td>
       <td class="text-muted text-sm">${sEsc(s.location) || '—'}</td>
       <td>${statusBadge(s.status)}</td>

@@ -1370,3 +1370,4 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .bk-t .bk-day td { background: #f1f5f9; font-weight: 600; font-size: 12.5px; } .bk-t .bk-fail td { background: #fef2f2; }
 .vm-st { font-size: 12px; border-radius: 10px; padding: 1px 8px; font-weight: 600; white-space: nowrap; }
 .vm-st.act { background: #dcfce7; color: #166534; } .vm-st.off { background: #e2e8f0; color: #475569; } .vm-st.mnt { background: #fef3c7; color: #92400e; } .vm-st.dec { background: #fee2e2; color: #991b1b; }
+.si-sn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; white-space: nowrap; }

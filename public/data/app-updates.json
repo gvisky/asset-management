@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-18",
+    "title": "Server Inventory: Serial # column instead of OS",
+    "items": [
+      "The server list shows the Serial # (where OS was) — handy for checking labels. The OS is still in each server's View details and in the search."
+    ]
+  },
+  {
     "date": "2026-11-17",
     "title": "Virtual servers: Status column",
     "items": [
