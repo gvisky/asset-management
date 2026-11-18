@@ -174,7 +174,7 @@ const NMRacks = (() => {
         // Drawing package (.json: name, category, mime, data_b64, pins) — e.g. a floor plan made from the CAD file, pins included.
         if (/\.json$/i.test(file.name)) {
           try { const pk = JSON.parse(await file.text()); if (!pk.data_b64) throw new Error('no picture');
-            await apiPost('/api/netmap/drawings', { site: D().site, name: pk.name || file.name.replace(/\.json$/i, ''), category: pk.category || $('dw-cat').value, mime: pk.mime || 'image/png', data_b64: pk.data_b64, pins: pk.pins || [] }); }
+            await apiPost('/api/netmap/drawings', { site: D().site, name: pk.name || file.name.replace(/\.json$/i, ''), category: pk.category || $('dw-cat').value, mime: pk.mime || 'image/png', data_b64: pk.data_b64, pins: pk.pins || [], links: pk.links || [] }); }
           catch (err) { showToast(`${file.name}: ${errText(err, 'not a drawing package')}`, 'error'); }
           continue;
         }

@@ -420,7 +420,7 @@ router.delete('/rack-item/:id', wrap(async (req, res) => {
 
 // ── Drawings (pictures of the document: racks, topology, floor plans) ─────────
 router.get('/drawings', wrap(async (req, res) => {
-  res.json(await all('SELECT id, site, name, category, mime, size, pins, uploaded_by, uploaded_at FROM net_drawings WHERE site = ? ORDER BY category, name', [str(req.query.site, 80)]));
+  res.json(await all('SELECT id, site, name, category, mime, size, pins, links, uploaded_by, uploaded_at FROM net_drawings WHERE site = ? ORDER BY category, name', [str(req.query.site, 80)]));
 }));
 router.get('/drawing/:id', wrap(async (req, res) => {
   const d = await get('SELECT mime, data_b64 FROM net_drawings WHERE id = ?', [Number(req.params.id)]);
@@ -428,22 +428,31 @@ router.get('/drawing/:id', wrap(async (req, res) => {
   res.setHeader('Content-Type', d.mime || 'image/png'); res.setHeader('Cache-Control', 'private, max-age=600');
   res.send(Buffer.from(d.data_b64 || '', 'base64'));
 }));
+const pct = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+const cleanPins = (l) => JSON.stringify((Array.isArray(l) ? l : []).slice(0, 500).map(p => ({ x: pct(p.x), y: pct(p.y), label: str(p.label, 60), kind: str(p.kind, 20), ref: str(p.ref, 80) })));
+// Cables between pins (fibre between cabinets), with the route they follow on the picture.
+const cleanLinks = (l) => JSON.stringify((Array.isArray(l) ? l : []).slice(0, 300).map(k => ({ a: str(k.a, 80), b: str(k.b, 80), name: str(k.name, 60), cores: str(k.cores, 30), len: Number(k.len) > 0 ? Math.round(Number(k.len)) : null,
+  path: (Array.isArray(k.path) ? k.path : []).slice(0, 400).map(p => [pct(p[0]), pct(p[1])]) })).filter(k => k.a && k.b));
 router.post('/drawings', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const mime = str(req.body.mime, 40);
   if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(mime)) return res.status(400).json({ error: 'PNG, JPG, SVG or WebP only' });
   const data = String(req.body.data_b64 || ''); if (data.length > 20 * 1024 * 1024) return res.status(413).json({ error: 'Picture too large (max ≈15 MB)' });
   const site = str(req.body.site, 80), name = str(req.body.name, 100) || 'Drawing';
-  // A drawing package (from a CAD export) brings its pins along: { x, y in %, kind, label, ref }.
-  const pins = Array.isArray(req.body.pins) ? JSON.stringify(req.body.pins.slice(0, 500).map(p => ({ x: Math.max(0, Math.min(100, Number(p.x) || 0)), y: Math.max(0, Math.min(100, Number(p.y) || 0)), label: str(p.label, 60), kind: str(p.kind, 20), ref: str(p.ref, 80) }))) : '';
-  await run('INSERT INTO net_drawings (site, name, category, mime, size, data_b64, pins, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [site, name, str(req.body.category, 40), mime, Math.round(data.length * 0.75), data, pins, req.user.username]);
-  await audit(req.user, 'NETMAP', null, `Network map "${site}": drawing "${name}" uploaded`);
-  res.json({ ok: true });
+  // A drawing package (from a CAD export) brings its pins and cables along.
+  const pins = Array.isArray(req.body.pins) ? cleanPins(req.body.pins) : '', links = Array.isArray(req.body.links) ? cleanLinks(req.body.links) : '';
+  // A package with the name of a drawing already there replaces it (same id, so nothing else changes).
+  const same = Array.isArray(req.body.pins) ? await get('SELECT id FROM net_drawings WHERE site = ? AND name = ?', [site, name]) : null;
+  if (same) await run('UPDATE net_drawings SET category = ?, mime = ?, size = ?, data_b64 = ?, pins = ?, links = ?, uploaded_by = ?, uploaded_at = datetime(\'now\') WHERE id = ?', [str(req.body.category, 40), mime, Math.round(data.length * 0.75), data, pins, links, req.user.username, same.id]);
+  else await run('INSERT INTO net_drawings (site, name, category, mime, size, data_b64, pins, links, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [site, name, str(req.body.category, 40), mime, Math.round(data.length * 0.75), data, pins, links, req.user.username]);
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": drawing "${name}" ${same ? 'replaced' : 'uploaded'}`);
+  res.json({ ok: true, replaced: !!same });
 }));
 router.put('/drawing/:id', wrap(async (req, res) => {
   if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
   const b = req.body;
-  if ('pins' in b) await run('UPDATE net_drawings SET pins = ? WHERE id = ?', [JSON.stringify((Array.isArray(b.pins) ? b.pins : []).slice(0, 500).map(p => ({ x: Number(p.x) || 0, y: Number(p.y) || 0, label: str(p.label, 60), kind: str(p.kind, 20), ref: str(p.ref, 80) }))), Number(req.params.id)]);
+  if ('pins' in b) await run('UPDATE net_drawings SET pins = ? WHERE id = ?', [cleanPins(b.pins), Number(req.params.id)]);
+  if ('links' in b) await run('UPDATE net_drawings SET links = ? WHERE id = ?', [cleanLinks(b.links), Number(req.params.id)]);
   if ('name' in b) await run('UPDATE net_drawings SET name = ?, category = ? WHERE id = ?', [str(b.name, 100), str(b.category, 40), Number(req.params.id)]);
   res.json({ ok: true });
 }));
