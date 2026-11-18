@@ -434,7 +434,9 @@ router.post('/drawings', wrap(async (req, res) => {
   if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(mime)) return res.status(400).json({ error: 'PNG, JPG, SVG or WebP only' });
   const data = String(req.body.data_b64 || ''); if (data.length > 20 * 1024 * 1024) return res.status(413).json({ error: 'Picture too large (max ≈15 MB)' });
   const site = str(req.body.site, 80), name = str(req.body.name, 100) || 'Drawing';
-  await run('INSERT INTO net_drawings (site, name, category, mime, size, data_b64, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)', [site, name, str(req.body.category, 40), mime, Math.round(data.length * 0.75), data, req.user.username]);
+  // A drawing package (from a CAD export) brings its pins along: { x, y in %, kind, label, ref }.
+  const pins = Array.isArray(req.body.pins) ? JSON.stringify(req.body.pins.slice(0, 500).map(p => ({ x: Math.max(0, Math.min(100, Number(p.x) || 0)), y: Math.max(0, Math.min(100, Number(p.y) || 0)), label: str(p.label, 60), kind: str(p.kind, 20), ref: str(p.ref, 80) }))) : '';
+  await run('INSERT INTO net_drawings (site, name, category, mime, size, data_b64, pins, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [site, name, str(req.body.category, 40), mime, Math.round(data.length * 0.75), data, pins, req.user.username]);
   await audit(req.user, 'NETMAP', null, `Network map "${site}": drawing "${name}" uploaded`);
   res.json({ ok: true });
 }));
