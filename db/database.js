@@ -1328,6 +1328,9 @@ async function migrate() {
   if (!ndcols2.includes('state')) await backend.run("ALTER TABLE net_devices ADD COLUMN state TEXT DEFAULT ''");
   if (!ndcols2.includes('source')) await backend.run("ALTER TABLE net_devices ADD COLUMN source TEXT DEFAULT ''");
   if (!ndcols2.includes('mac')) await backend.run("ALTER TABLE net_devices ADD COLUMN mac TEXT DEFAULT ''");
+  // Cables drawn on a floor plan (fibre between cabinets): JSON [{ a, b, name, cores, len, path: [[x %, y %] …] }].
+  const ndwcols = (await backend.all('PRAGMA table_info(net_drawings)')).map(c => c.name);
+  if (!ndwcols.includes('links')) await backend.run("ALTER TABLE net_drawings ADD COLUMN links TEXT DEFAULT ''");
   const nvcols = (await backend.all('PRAGMA table_info(net_vlans)')).map(c => c.name);
   for (const col of ['description', 'dhcp']) if (!nvcols.includes(col)) await backend.run(`ALTER TABLE net_vlans ADD COLUMN ${col} TEXT DEFAULT ''`);
   // Virtual servers (VMs and the hypervisor hosts they run on), Server Inventory → Virtual servers tab.
