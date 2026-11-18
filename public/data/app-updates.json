@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-18",
+    "title": "Network map: floor plans from the CAD drawing, with AP and cabinet pins",
+    "items": [
+      "Network map → 🖼 Drawings → ⬆ Upload pictures now also takes a drawing package (.json: the picture with its pins). Three packages were made from the CAD file 18.1 TELEPHONE AND LAN SYSTEM: Factory (44 APs + 10 cabinets), Office K1 (15 APs, two floors) and Site (31 cabinets — outdoor HARİCİ KABİN 1–12, IT / CCTV cabinets — with the fibre routes and lengths).",
+      "Each pin sits on the AP / cabinet symbol of the drawing; click an AP pin to open that access point's ports, a cabinet pin to jump to its rack."
+    ]
+  },
+  {
+    "date": "2026-11-18",
     "title": "Server Inventory: Serial # column instead of OS",
     "items": [
       "The server list shows the Serial # (where OS was) — handy for checking labels. The OS is still in each server's View details and in the search."
