@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-18",
+    "title": "Floor plans: AP → cabinet cables and an info popup on the plan",
+    "items": [
+      "🔌 Cables: each access point is joined to its cabinet with a line in the cabinet's colour — the AP name says which: K7-A5 = AP 5 of cabinet 7 → IT KABIN 7 (HK12-A1 → HARİCİ KABİN 12); if the name does not tell, the switch port it is cabled to in the map decides. Turn the lines on / off in the top bar.",
+      "Clicking an AP or a cabinet now opens a popup on the plan instead of leaving it. AP: device, model, IP, MAC, serial, the switch + port + VLAN it is on, and its cabinet. Cabinet: what is in it (with U), and the APs cabled to it — click any of them. The chosen pin's cables are highlighted, the rest fade. 🔷 Ports in the map / 🗄 Open in Racks are still there as buttons."
+    ]
+  },
+  {
+    "date": "2026-11-18",
     "title": "Network map: floor plans from the CAD drawing, with AP and cabinet pins",
     "items": [
       "Network map → 🖼 Drawings → ⬆ Upload pictures now also takes a drawing package (.json: the picture with its pins). Three packages were made from the CAD file 18.1 TELEPHONE AND LAN SYSTEM: Factory (44 APs + 10 cabinets), Office K1 (15 APs, two floors) and Site (31 cabinets — outdoor HARİCİ KABİN 1–12, IT / CCTV cabinets — with the fibre routes and lengths).",

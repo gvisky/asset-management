@@ -1371,3 +1371,16 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .vm-st { font-size: 12px; border-radius: 10px; padding: 1px 8px; font-weight: 600; white-space: nowrap; }
 .vm-st.act { background: #dcfce7; color: #166534; } .vm-st.off { background: #e2e8f0; color: #475569; } .vm-st.mnt { background: #fef3c7; color: #92400e; } .vm-st.dec { background: #fee2e2; color: #991b1b; }
 .si-sn { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; white-space: nowrap; }
+/* Floor plans: cables AP → cabinet, popup */
+.pl-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.pl-cable { fill: none; stroke-width: 2.4; vector-effect: non-scaling-stroke; stroke-dasharray: 7 4; opacity: .85; }
+.pl-cable.hot { stroke-width: 4.5; stroke-dasharray: none; opacity: 1; } .pl-cable.dim { opacity: .15; }
+.pl-pin.dim { opacity: .3; } .pl-pin.on .pl-lbl { outline: 2px solid #fde047; }
+.pl-tg { color: #e2e8f0; display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+.pl-info { position: absolute; right: 16px; top: 62px; width: 340px; max-height: calc(100% - 80px); overflow: auto; background: #fff; color: #0f172a; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.45); padding: 12px 14px; font-size: 13.5px; z-index: 5; }
+.pl-info[hidden] { display: none; }
+.pl-i-t { display: flex; align-items: center; gap: 8px; font-size: 16px; margin-bottom: 8px; } .pl-i-t .modal-close { color: #64748b; }
+.pl-i-r { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px dashed #eef2f7; } .pl-i-r span { color: #64748b; min-width: 96px; } .pl-i-r b { font-weight: 600; word-break: break-word; }
+.pl-i-h { margin: 10px 0 4px; font-weight: 700; font-size: 12px; text-transform: uppercase; color: #475569; letter-spacing: .03em; }
+.pl-i-it { padding: 2px 0; } .pl-i-chips { display: flex; flex-wrap: wrap; gap: 5px; } .pl-i-chips a { border: 1.5px solid #dc2626; border-radius: 10px; padding: 1px 8px; font-weight: 600; font-size: 12.5px; text-decoration: none; color: #0f172a; }
+.pl-i-b { margin-top: 10px; display: flex; gap: 6px; }
