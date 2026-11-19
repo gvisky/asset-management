@@ -39,7 +39,7 @@ router.post('/login', wrap(async (req, res) => {
 
   setSessionCookie(res, token);
   await audit(user, 'LOGIN', null, `Logged in · ${String(req.headers['user-agent'] || '').replace(/\s+/g, ' ').slice(0, 160)}`);
-  res.json({ id: user.id, username: user.username, full_name: user.full_name, role: user.role });
+  res.json({ id: user.id, username: user.username, full_name: user.full_name, role: user.role, team: user.team || null });
 }));
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────

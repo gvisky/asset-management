@@ -17,7 +17,7 @@ async function ensureAuth() {
     renderUserChrome();
     applyRoleGates();
     applyAssetGating();
-    loadGlobalSearch();
+    if (window.CURRENT_USER.team !== 'OT') loadGlobalSearch();
     return window.CURRENT_USER;
   } catch {
     window.location.href = '/login.html';
@@ -73,7 +73,7 @@ function canEdit()       { return window.CURRENT_USER && ['admin','editor'].incl
 function isIT()          { return window.CURRENT_USER && window.CURRENT_USER.team === 'IT'; }
 function isITAdmin()     { return isIT() && window.CURRENT_USER.role === 'admin'; }   // e.g. Viet
 function roleLabel(u)    {
-  const r = (u.role || '').charAt(0).toUpperCase() + (u.role || '').slice(1);
+  const r = (u.role || '').charAt(0).toUpperCase() + (u.role || '').slice(1) + (u.team === 'OT' ? ' · OT' : '');
   return u.country ? `${u.country} ${r}` : r;
 }
 
@@ -131,7 +131,7 @@ function renderUserChrome() {
   };
   const ico = (d) => `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${d}</svg>`;
   navAdd('nav-stocktake', '/stocktake.html', ico('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>') + ' Stocktake', '#nav-maintenance', u.asset_access !== 0);
-  navAdd('nav-netmap', '/network-map.html', ico('<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>') + ' Network map', '#nav-servers', u.asset_access !== 0);
+  navAdd('nav-netmap', '/network-map.html', ico('<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>') + ' Network map', '#nav-servers', u.asset_access !== 0 || u.team === 'OT');
   navAdd('nav-kpi', '/kpi.html', ico('<polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/>') + ' KPIs', '#nav-reports', u.asset_access !== 0);
 
   // System Health link — IT team only, right after Devices.
@@ -218,6 +218,14 @@ function renderUserChrome() {
 // Users without Asset Inventory access (e.g. HR-only) don't see Dashboard/Assets.
 function applyAssetGating() {
   const u = window.CURRENT_USER;
+  // OT team (Operation Technology): the Network map only — in its OT view (Kabin switches and what is connected to them).
+  if (u && u.team === 'OT') {
+    document.documentElement.classList.add('is-ot');
+    document.querySelectorAll('.sidebar nav a').forEach(a => { if (a.id !== 'nav-netmap') a.style.display = 'none'; });
+    document.querySelectorAll('.sidebar .nav-section-label').forEach((l, i) => { if (i > 0) l.style.display = 'none'; });
+    if (window.location.pathname !== '/network-map.html') window.location.href = '/network-map.html';
+    return;
+  }
   if (!u || u.asset_access !== 0) return;
   // Hide every asset-related destination for HR-only users.
   document.querySelectorAll([
