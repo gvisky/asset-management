@@ -164,7 +164,8 @@
   }
   document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.si-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.t); });
-    if (new URLSearchParams(location.search).get('tab') === 'vm') tab('vm');
+    const up = new URLSearchParams(location.search);
+    if (up.get('tab') === 'vm') { if (up.get('search')) q = up.get('search'); tab('vm'); }
     apiGet('/api/virtual-servers').then(r => { const c = $('vm-cnt'); if (c && r.rows.length) c.textContent = r.rows.length; }).catch(() => {});
   });
 })();

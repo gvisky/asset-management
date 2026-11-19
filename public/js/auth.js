@@ -17,11 +17,21 @@ async function ensureAuth() {
     renderUserChrome();
     applyRoleGates();
     applyAssetGating();
+    loadGlobalSearch();
     return window.CURRENT_USER;
   } catch {
     window.location.href = '/login.html';
     return null;
   }
+}
+
+// 🔍 Global search (Ctrl+K), 👤 person view and the asset timeline — one script for every page.
+function loadGlobalSearch() {
+  const ready = () => window.GlobalSearch && GlobalSearch.addButton();
+  if (window.GlobalSearch) return ready();
+  const s = document.createElement('script');
+  s.src = '/js/global-search.js?v=20261119a'; s.onload = ready;
+  document.head.appendChild(s);
 }
 
 function isAdmin()       { return window.CURRENT_USER && window.CURRENT_USER.role === 'admin'; }

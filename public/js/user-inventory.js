@@ -278,7 +278,7 @@ function renderTable(rows) {
         onclick="openEditUser(${p.id}, ${jsArg(p.display_name)}, ${jsArg(p.country)}, ${jsArg(dept)}, ${jsArg(cc)})">✏️</button> ` : '';
     return `
       <tr>
-        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${p.employee_id ? ` <span class="emp-id" title="Employee ID">ID ${esc(p.employee_id)}</span>` : ''}${resBadge}${notInAzure}${notInAd}
+        <td class="name-cell"><strong><a href="#" class="pv-link" title="Everything about this person" onclick="event.preventDefault();PersonView.open(${p.id})">${esc(p.display_name) || '—'}</a></strong>${p.employee_id ? ` <span class="emp-id" title="Employee ID">ID ${esc(p.employee_id)}</span>` : ''}${resBadge}${notInAzure}${notInAd}
           <div class="text-muted text-sm">${emailHtml(p)}</div>${managerLine(p)}</td>
         <td class="when-cell">${logonCell(p)}</td>
         <td class="assets-cell">${assetsCell}</td>
