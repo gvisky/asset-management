@@ -282,7 +282,9 @@ function renderTable(rows) {
           <div class="text-muted text-sm">${emailHtml(p)}</div>${managerLine(p)}</td>
         <td class="when-cell">${logonCell(p)}</td>
         <td class="assets-cell">${assetsCell}</td>
-        <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}${p.ad_department ? `<div class="text-muted" style="font-size:11.5px" title="Department in the AD / Entra user list">AD: ${esc(p.ad_department)}</div>` : ''}</td>
+        <td class="text-sm wrap-cell dep-cell">
+          <div class="dep-row" title="Department in the AD / Entra user list"><span class="dep-tag ad">AD</span><span class="dep-v">${p.ad_department ? esc(p.ad_department) : '<span class="text-muted">—</span>'}</span></div>
+          <div class="dep-row" title="Cost-center department (goes with the cost-center number)"><span class="dep-tag cc">Cost center</span><span class="dep-v">${dept ? esc(dept) : '<span class="text-muted">—</span>'}</span>${editBtn}</div></td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${esc(p.country)}</span></td>
         <td>

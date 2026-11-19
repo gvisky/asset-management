@@ -66,9 +66,9 @@ router.get('/', wrap(async (req, res) => {
   if (cs.clause) { conditions.push(cs.clause); params.push(...cs.params); }
 
   if (search) {
-    conditions.push("(display_name LIKE ? OR email LIKE ? OR company_name LIKE ? OR position LIKE ? OR COALESCE(employee_id, '') LIKE ? OR COALESCE(ad_department, '') LIKE ? OR COALESCE(ad_email, '') LIKE ?)");
+    conditions.push("(display_name LIKE ? OR email LIKE ? OR company_name LIKE ? OR position LIKE ? OR COALESCE(employee_id, '') LIKE ? OR COALESCE(ad_department, '') LIKE ? OR COALESCE(ad_email, '') LIKE ? OR COALESCE(department, '') LIKE ? OR COALESCE(cost_center, '') LIKE ?)");
     const like = `%${search}%`;
-    params.push(like, like, like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like, like);
   }
   if (status)    { conditions.push('status = ?');    params.push(status); }
   if (user_type) { conditions.push('user_type = ?'); params.push(user_type); }
