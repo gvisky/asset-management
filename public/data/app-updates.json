@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-19",
+    "title": "Server Inventory: OT editors can edit OT devices",
+    "items": [
+      "OT team members with the Editor role can now edit the OT devices in Server Inventory (✏️ on the row, or Edit in the record) — IP, MAC, VLAN, OT system, connected switch port, location, serial, model, status, remark … Changes go to the record's History Usage; changing Serial / Brand-Model / Asset Code locks the record as for IT (an IT admin unlocks).",
+      "They cannot edit IT devices, add or delete records, or move a device from OT to IT. OT viewers still only look."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "Server Inventory: OT devices — OT device list import, IT / OT filter, OT team view",
     "items": [
       "New ⬆ OT device list button (IT admins) on Server Inventory: upload the CMDB list (e.g. CMDB_OEE.xlsx). The preview shows which Kabin switch each switch name of the file is (the file's names differ from the map's — e.g. \"ASW-11\" is the IT-KABIN11 switch; you can change any), the devices already on the map (found by MAC), the empty switch ports that will be filled (a port with several devices gets the Moxa / hub and lists the rest behind it), the ports where the map and the file differ (never overwritten) and data problems in the file. Apply adds the devices as OT records (category, IP, MAC, VLAN, OT system, connected switch port) and fills only empty fields of existing records. Uploading the same file again changes nothing.",

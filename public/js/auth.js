@@ -220,7 +220,7 @@ function applyAssetGating() {
   const u = window.CURRENT_USER;
   // OT team (Operation Technology): the Network map only — in its OT view (Kabin switches and what is connected to them).
   if (u && u.team === 'OT') {
-    document.documentElement.classList.add('is-ot');
+    document.documentElement.classList.add('is-ot', u.role === 'editor' ? 'is-ot-editor' : 'is-ot-viewer');
     // …and the OT devices of the Server Inventory (read-only).
     document.querySelectorAll('.sidebar nav a').forEach(a => { if (a.id !== 'nav-netmap' && a.id !== 'nav-servers') a.style.display = 'none'; });
     document.querySelectorAll('.sidebar .nav-section-label').forEach((l, i) => { if (i > 0) l.style.display = 'none'; });
