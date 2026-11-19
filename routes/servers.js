@@ -123,6 +123,7 @@ router.get('/usage', wrap(async (req, res) => {
 }));
 
 router.get('/needs-info', wrap(async (req, res) => {
+  if (req.user && req.user.role === 'viewer') return res.status(403).json({ error: 'Not for viewers' });
   const cf = countryFilter(req);
   const rows = await all(`SELECT id, hostname, brand_model, category, serial_no, ip_address, location, status, country FROM servers
       WHERE deleted_at IS NULL AND status <> 'Broken'${cf.clause ? ' AND ' + cf.clause : ''} ORDER BY category, brand_model, id`, cf.params);

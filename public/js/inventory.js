@@ -123,8 +123,8 @@ async function loadSummary() {
       tile('Active', '#16a34a', 'Active'),
       tile('Broken', '#dc2626', 'Broken'),
       tile('Stock', '#d97706', 'Stock'),
-      { label: 'Needs Info', color: '#92400e', value: s.incompleteCount || 0, onClick: () => { if (naMode) closeNeedsAttention(); openNeedsAttention('missing'); },
-        splits: order.map(c => ({ country: c, count: inc[c] || 0, onClick: () => { if (naMode) closeNeedsAttention(); openNeedsAttention('missing', { country: c }); } })) },
+      ...((window.CURRENT_USER || {}).role === 'viewer' ? [] : [{ label: 'Needs Info', color: '#92400e', value: s.incompleteCount || 0, onClick: () => { if (naMode) closeNeedsAttention(); openNeedsAttention('missing'); },
+        splits: order.map(c => ({ country: c, count: inc[c] || 0, onClick: () => { if (naMode) closeNeedsAttention(); openNeedsAttention('missing', { country: c }); } })) }]),
     ]);
   } catch (e) { /* ignore */ }
 }

@@ -167,7 +167,7 @@ const NMPlans = self.NMPlans = (() => {
       const nm = U(p.label).match(/^(HK|K)(\d+)-A/), swCab = sw ? (U(sw.dev.location).match(/KABIN[\s-]*0?(\d+)/) || [])[1] : null;
       const warn = !d ? 'Not a device in the map — not in the AP list / port sheets.' : !sw ? 'No switch port is cabled to it in the map.'
         : nm && nm[1] === 'K' && nm[2] !== '1' && swCab && String(Number(nm[2])) !== swCab ? `The name says cabinet ${Number(nm[2])}, but its switch ${sw.dev.hostname} is in KABIN ${swCab}.` : '';
-      body = `${warn ? `<div class="pl-i-warn">⚠ ${esc(warn)}</div>` : ''}${d ? `${row('Device', d.hostname)}${row('Model', d.model)}${row('IP', d.mgmt_ip)}${row('MAC', d.mac)}${row('Serial', d.serial)}${row('Location', d.location)}${d.state === 'retired' ? row('State', 'Retired') : ''}`
+      body = `${warn && D().can.edit ? `<div class="pl-i-warn">⚠ ${esc(warn)}</div>` : ''}${d ? `${row('Device', d.hostname)}${row('Model', d.model)}${row('IP', d.mgmt_ip)}${row('MAC', d.mac)}${row('Serial', d.serial)}${row('Location', d.location)}${d.state === 'retired' ? row('State', 'Retired') : ''}`
           : `<p class="text-muted text-sm">${esc(p.ref || p.label)} is not a device of the map${p.ref ? '' : ' (no link set on this pin)'}.</p>`}
         ${sw ? `<div class="pl-i-h">Cabled to</div>${row('Switch', sw.dev.hostname)}${row('Port', sw.port.port)}${row('VLAN', sw.port.vlan)}${row('Patch / note', [sw.port.patch, sw.port.note].filter(Boolean).join(' · '))}${row('Switch location', sw.dev.location)}` : ''}
         ${cj ? `<div class="pl-i-h">Cabinet</div><div class="pl-i-chips"><a href="#" onclick="NMPlans.pin(${cj.c});return false" style="border-color:${colOf(cj.c)}">${esc(pins[cj.c].label)}</a></div>` : ''}
