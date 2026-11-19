@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-19",
+    "title": "Asset Inventory: 📚 Models & warranty — tidy model names, auto Asset Type, fill warranty dates",
+    "items": [
+      "New button 📚 Models & warranty (IT team) on Asset Inventory. 🧹 Clean-up groups the Brand/Model texts that are the same model typed in different ways (e.g. \"Lenovo IdeaPad5\", \"Laptop Lenovo IdeaPad5-MP20T1R1\" → \"Lenovo IdeaPad 5\"), with a suggested Asset Type. Tick, check, Apply: assets get the clean name (the old text, which often holds a serial or a person, is kept in Remark), empty Asset Types are filled and the model goes into the catalogue.",
+      "📚 Catalogue: one row per model with maker, Asset Type, warranty years and end-of-support year. New or edited assets with no Asset Type take the catalogue's type automatically.",
+      "🛡 Warranty: assets without a warranty date per maker, with the serial list (.txt / .xlsx) to check on the Lenovo / Dell / HP warranty site; upload the vendor's result file (.xlsx / .csv) to fill the dates (preview first), or estimate the rest from purchase date + the model's warranty years (marked \"estimated\" on the asset). Every change is written to History Usage."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "Reports: our app vs Snipe-IT comparison (HTML)",
     "items": [
       "New report in Reports → Overview: \"Our app vs Snipe-IT\" opens an HTML page comparing 38 features side by side (✔ / ◐ / ✘ with notes), with counts of where each is stronger, search and filters.",

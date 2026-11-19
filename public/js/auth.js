@@ -248,6 +248,8 @@ function applyRoleGates() {
   // Country pickers list the user's countries; a single-country user is locked to theirs.
   fillCountrySelects();
   if (typeof syncLocationField === 'function') syncLocationField();
+  // IT-team tools (e.g. Inventory → 📚 Models & warranty) start hidden.
+  document.querySelectorAll('[data-it-only]').forEach(el => { el.style.display = isIT() ? '' : 'none'; });
 
   if (canEdit()) return;
   // Viewers: hide all "add asset" buttons
