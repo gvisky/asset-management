@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-19",
+    "title": "Network map OT view: OT editors edit end-device ports, Drawings tab",
+    "items": [
+      "OT editors (Users & Audit → team OT, role Editor) can edit the ports of their Kabin switches that go to end devices or are free: device name (camera, Matrix access control …), its port, cable, mode, VLAN, patch point, note, or disconnect. Ports cabled to a network device (AP, uplink switch) stay locked with \"only IT can change this port\", and an end-device port can't be cabled to a network device. OT viewers only look.",
+      "In the OT view, ports to APs and uplink switches stay green (\"to network devices\") even though OT does not see those devices.",
+      "OT now sees the 🖼 Drawings tab (rack pictures, factory / office plans with AP and cabinet pins, fibre routes) — view only."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "Network map: OT view for the Operation Technology team",
     "items": [
       "New team OT (Users & Audit → team \"OT member\"): OT logins see only the Network map, read-only, in its OT view — the Kabin switches (IT-KABIN, HARICI KABIN, CCTV …, card-reader switches) with every port and what is connected to them (cameras, Matrix access control, …), the core / distribution switches they uplink to (only those uplink ports), the VLANs in use there and their port changes. No Asset Inventory, racks, drawings, search or other pages; OT logins are always viewers.",
