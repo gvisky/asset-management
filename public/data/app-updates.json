@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-11-19",
+    "title": "Floor plans: office AP cables, labels that never overlap, jump between drawings · Server Inventory: Used / stock",
+    "items": [
+      "Office K1 plan: the access points are cabled to the server room (racks MR-01…04, ground floor) and, upstairs, to the 1st-floor rack panel — where the office APs' switch (MR-01/ASW-05) is.",
+      "Pin labels never cover each other or another pin any more: a label that would overlap slides down, with a thin line to its pin (the IT + CCTV cabinet pairs are now readable).",
+      "Every drawing has Go to: buttons for the other drawings. A cabinet / AP that is also on another drawing shows 📄 buttons in its popup that open that drawing with the same pin selected (e.g. IT KABIN 7: site plan ⇄ factory plan).",
+      "Server Inventory → 📦 Used / stock: per model, how many records are in use according to the network mapping (a device of the map, or cabled on a switch port in the port sheets) and how many are stock, next to the quantity in the implementation document. Records whose status disagrees are listed (e.g. 'Active but not in the mapping' = a spare marked Active) with a button to set them to Stock / Active."
+    ]
+  },
+  {
     "date": "2026-11-18",
     "title": "Site plan: fibre cables between cabinets, along their real routes",
     "items": [

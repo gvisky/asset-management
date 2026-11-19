@@ -13,7 +13,7 @@ const NMPlans = self.NMPlans = (() => {
   function ui() {
     if (document.getElementById('pl-ov')) return;
     document.body.insertAdjacentHTML('beforeend', `<div class="pl-ov" id="pl-ov" hidden><div class="pl-top">
-        <b id="pl-t"></b><span class="text-sm" id="pl-sum" style="opacity:.8"></span><span style="flex:1"></span>
+        <b id="pl-t"></b><span class="text-sm" id="pl-sum" style="opacity:.8"></span><span id="pl-nav" class="pl-nav"></span><span style="flex:1"></span>
         <label class="text-sm pl-tg"><input type="checkbox" id="pl-cab"> 🔌 Cables</label>
         <span id="pl-edit-tools"></span>
         <button class="btn btn-ghost btn-sm pl-b" onclick="NMPlans.zoomBy(1.25)">＋</button><button class="btn btn-ghost btn-sm pl-b" onclick="NMPlans.zoomBy(0.8)">－</button>
@@ -29,18 +29,31 @@ const NMPlans = self.NMPlans = (() => {
       addPin(((e.clientX - r.left) / r.width) * 100, ((e.clientY - r.top) / r.height) * 100);
     });
   }
-  function open(id, drawings) {
-    const d = (drawings || []).find(x => x.id === id); if (!d) return false;
+  let all = [];
+  function open(id, drawings, focusRef) {
+    const d = (drawings || all).find(x => x.id === id); if (!d) return false;
+    if (drawings) all = drawings;
+    if (dirty && cur && cur.id !== id && !confirm('Pins changed but not saved. Open the other drawing anyway?')) return true;
     ui(); cur = d; zoom = 1; dirty = false; editing = false; focusI = null; info(null);
     if (!racks) apiGet('/api/netmap/racks?site=' + encodeURIComponent(D().site)).then(r => { racks = r; }).catch(() => { racks = { racks: [], items: [] }; });
     try { pins = JSON.parse(d.pins || '[]'); } catch { pins = []; }
     try { fib = JSON.parse(d.links || '[]'); } catch { fib = []; }
     document.getElementById('pl-t').textContent = d.name;
     document.getElementById('pl-img').src = '/api/netmap/drawing/' + d.id;
-    document.getElementById('pl-img').onload = () => { fitWidth(); render(); };
+    document.getElementById('pl-img').onload = () => { fitWidth(); render();
+      if (focusRef) { const j = pinByRef(focusRef); if (j >= 0) { show(j); setTimeout(() => { const el = document.querySelector(`.pl-pin[data-i="${j}"]`); if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }, 50); } } };
+    // Buttons to the other drawings of the site (plans first).
+    const others = all.filter(x => x.id !== d.id).sort((a, b) => (/plan|fiber/i.test(b.category) - /plan|fiber/i.test(a.category)) || a.name.localeCompare(b.name));
+    document.getElementById('pl-nav').innerHTML = others.length ? `<span class="pl-nav-l">Go to:</span>${others.map(x => `<button class="pl-navb" onclick="NMPlans.goto(${x.id})" title="${esc(x.category || '')}">${esc(short(x.name))}</button>`).join('')}` : '';
     document.getElementById('pl-ov').hidden = false;
     tools(); render();
     return true;
+  }
+  const short = (n) => String(n).replace(/\s*\(CAD[^)]*\)\s*$/, '').replace(/\s+—\s+/, ' — ').slice(0, 42);
+  // The same cabinet / AP on other drawings (e.g. IT KABIN 7 on the factory plan and on the site plan).
+  function elsewhere(p) {
+    const r = U(p.ref || p.label);
+    return all.filter(x => x.id !== cur.id).filter(x => { try { return JSON.parse(x.pins || '[]').some(q => U(q.ref || q.label) === r); } catch { return false; } });
   }
   function tools() {
     const can = D().can.edit;
@@ -57,13 +70,18 @@ const NMPlans = self.NMPlans = (() => {
   function cabinetOf(p) {
     const m = U(p.label).match(/^(HK|K)(\d+)-A/) || U(p.ref).match(/^(HK|K)(\d+)-AP/);
     const cabs = pins.map((c, j) => ({ c, j })).filter(x => x.c.kind === 'cabinet');
+    // Several pins can stand for the same place (server room on the ground floor + rack panel upstairs): take the nearest.
+    const nearest = (l) => (l.length ? l.reduce((b, x) => (Math.hypot(x.c.x - p.x, x.c.y - p.y) < Math.hypot(b.c.x - p.x, b.c.y - p.y) ? x : b)).j : null);
+    const server = cabs.filter(x => U(x.c.ref) === 'SERVER-ROOM');
     if (m) { const want = m[1] === 'HK' ? 'HARICI' : 'IT';
-      const hit = cabs.find(x => { const c = cabNo(x.c); return c && c.n === String(Number(m[2])) && (c.kind || 'IT') === want; }) || cabs.find(x => { const c = cabNo(x.c); return c && c.n === String(Number(m[2])); });
-      if (hit) return hit.j; }
+      if (m[1] === 'K' && Number(m[2]) === 1 && server.length) return nearest(server);   // K1 = office building = server room
+      let l = cabs.filter(x => { const c = cabNo(x.c); return c && c.n === String(Number(m[2])) && (c.kind || 'IT') === want; });
+      if (!l.length) l = cabs.filter(x => { const c = cabNo(x.c); return c && c.n === String(Number(m[2])); });
+      if (l.length) return nearest(l); }
     const sw = switchPort(p); if (!sw) return null;
     const loc = U(sw.dev.location);
-    const hit = cabs.find(x => { const c = cabNo(x.c); return c && new RegExp(`KABIN[\\s-]*0?${c.n}\\b`).test(loc); });
-    return hit ? hit.j : null;
+    if (/MAIN RACK/.test(loc) && server.length) return nearest(server);
+    return nearest(cabs.filter(x => { const c = cabNo(x.c); return c && new RegExp(`KABIN[\\s-]*0?${c.n}\\b`).test(loc); }));
   }
   function deviceOf(p) { const h = U(p.ref || p.label); return D().devices.find(x => x.hostname === h) || null; }
   function switchPort(p) {
@@ -89,8 +107,20 @@ const NMPlans = self.NMPlans = (() => {
     document.getElementById('pl-lines').innerHTML = cables ? L.map(l => { const a = pins[l.a], c = pins[l.c], hot = focusI != null && (l.a === focusI || l.c === focusI);
       return `<path d="M${a.x} ${a.y} H${c.x} V${c.y}" class="pl-cable${hot ? ' hot' : focusI != null ? ' dim' : ''}" style="stroke:${colOf(l.c)}"/>`; }).join('')
       + fib.map(l => { const hot = fHot.includes(l); return `<polyline points="${l.path.map(p => p.join(',')).join(' ')}" class="pl-fib${hot ? ' hot' : focusI != null ? ' dim' : ''}" style="stroke:${fibCol(l)}"/>`; }).join('') : '';
+    // Labels never cover each other: place them one by one (top to bottom); a label that would overlap one already
+    // placed slides down in steps (a thin line keeps it tied to its pin). E.g. the IT + CCTV cabinet pairs.
+    const img = document.getElementById('pl-img'), W = img.clientWidth || 1000, H = img.clientHeight || 600;
+    const off = pins.map(() => ({ dx: 0, dy: 0 })), placed = [];
+    const hit = (r) => placed.some(q => r[0] < q[2] && q[0] < r[2] && r[1] < q[3] && q[1] < r[3]);
+    pins.forEach(p => { const px = p.x / 100 * W, py = p.y / 100 * H; placed.push([px - 10, py - 40, px + 10, py - 17]); });   // the pins' icons
+    pins.map((p, i) => i).sort((a, c) => pins[a].y - pins[c].y || pins[a].x - pins[c].x).forEach(i => {
+      const p = pins[i], px = p.x / 100 * W, py = p.y / 100 * H, w = String(p.label).length * 6.6 + 14;
+      let dy = 0;
+      for (let k = 0; k < 10; k++) { const r = [px - w / 2, py - 16 + dy, px + w / 2, py + dy]; if (!hit(r)) { placed.push(r); break; } dy += 17; if (k === 9) placed.push(r); }
+      off[i].dy = dy;
+    });
     box.innerHTML = pins.map((p, i) => { const k = KIND[p.kind] || KIND.note;
-      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
+      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
     const cnt = Object.keys(KIND).map(k => [k, pins.filter(p => p.kind === k).length]).filter(([, n]) => n);
     document.getElementById('pl-sum').textContent = cnt.length ? ' · ' + cnt.map(([k, n]) => `${n} ${KIND[k][2].toLowerCase()}${n > 1 ? 's' : ''}`).join(' · ') : ' · no pins yet';
     // Length labels on the cables of the chosen cabinet (in the pin layer, so the text is not stretched).
@@ -143,6 +173,8 @@ const NMPlans = self.NMPlans = (() => {
         ${cj ? `<div class="pl-i-h">Cabinet</div><div class="pl-i-chips"><a href="#" onclick="NMPlans.pin(${cj.c});return false" style="border-color:${colOf(cj.c)}">${esc(pins[cj.c].label)}</a></div>` : ''}
         ${d ? `<div class="pl-i-b"><button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${d.id})">🔷 Ports in the map</button></div>` : ''}`;
     }
+    const also = elsewhere(p);
+    if (also.length) body += `<div class="pl-i-h">Also on</div><div class="pl-i-b" style="margin-top:2px;flex-wrap:wrap">${also.map(x => `<button class="btn btn-ghost btn-sm" onclick="NMPlans.goto(${x.id}, ${jsArg(p.ref || p.label)})">📄 ${esc(short(x.name))}</button>`).join('')}</div>`;
     box.innerHTML = `<div class="pl-i-t"><span>${k[0]}</span><b>${esc(p.label)}</b><span class="text-muted text-sm">${esc(k[2])}</span><span style="flex:1"></span><button class="modal-close" aria-label="Close" onclick="NMPlans.unfocus()">✕</button></div>${body}`;
     box.hidden = false;
   }
@@ -182,5 +214,6 @@ const NMPlans = self.NMPlans = (() => {
     document.getElementById('pl-ov').hidden = true; dirty = false;
   }
   return { open, close, save, pin: show, unfocus: () => { focusI = null; info(null); render(); },
-    dev: (id) => { close(); NM.select(id, true); }, rack: (i) => go(pins[i]), edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); } };
+    dev: (id) => { close(); NM.select(id, true); }, rack: (i) => go(pins[i]), edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); render(); },
+    goto: (id, ref) => open(id, null, ref) };
 })();

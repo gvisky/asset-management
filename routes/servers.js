@@ -79,6 +79,49 @@ router.get('/filters', wrap(async (req, res) => {
 // Network devices / servers need Serial, Hostname, IP and Location (access points: Serial); also the
 // same serial twice and a serial that differs from the implementation document (network map).
 // Country-scoped; Broken devices are skipped. { rows: [{ server…, issues: [], doc_note }], counts, models }
+// ── GET /api/servers/usage — used / stock per model, from the network mapping ─────────────────
+// Used = the record is a device of the network map (linked, or the same serial) that is not retired.
+// Stock = not in the mapping (and not broken). Flags: "Active but not in the mapping", "Stock but in the mapping".
+router.get('/usage', wrap(async (req, res) => {
+  const nm = require('./netmap'), { familyOf, normSn } = nm.util;
+  const cf = countryFilter(req);
+  const servers = await all(`SELECT id, hostname, brand_model, category, serial_no, status, location, country, ip_address FROM servers WHERE deleted_at IS NULL${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
+  const devs = await all("SELECT id, site, hostname, role, model, serial, service_tag, location, server_id, COALESCE(state, '') AS state FROM net_devices");
+  const key = (sn) => normSn(sn).replace(/^0+/, '').replace(/^S(?=[A-Z]{3}\d)/, '');
+  const bySn = new Map(); for (const d of devs) for (const sn of [d.serial, d.service_tag]) if (key(sn)) bySn.set(key(sn), d);
+  const byLink = new Map(devs.filter(d => d.server_id).map(d => [d.server_id, d]));
+  // Same device written two ways: "K7-AP6_OUTDOOR" = "K7-AP6-OUTDOOR".
+  const HK = (h) => String(h || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const byHost = new Map(devs.map(d => [HK(d.hostname), d]));
+  // Names cabled on a switch port in the port sheets (APs, printers … that are not map devices themselves).
+  const ports = await all("SELECT p.peer_host, p.port, d.hostname AS sw FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE p.peer_host <> ''");
+  const onPort = new Map(); for (const pt of ports) if (!onPort.has(HK(pt.peer_host))) onPort.set(HK(pt.peer_host), pt);
+  const fam = new Map(), rows = [];
+  for (const s of servers) {
+    let d = byLink.get(s.id) || bySn.get(key(s.serial_no)) || null, how = d ? 'serial' : '';
+    if (!d && HK(s.hostname).length > 3 && byHost.has(HK(s.hostname))) { d = byHost.get(HK(s.hostname)); how = 'hostname'; }
+    const pt = !d && HK(s.hostname).length > 3 ? onPort.get(HK(s.hostname)) : null;
+    const used = (!!d && d.state !== 'retired') || !!pt;
+    const f = familyOf(s.brand_model) || s.category || s.brand_model || 'Other';
+    const state = s.status === 'Broken' ? 'broken' : used ? 'used' : 'stock';
+    const snDiff = how === 'hostname' && key(d.serial) && key(s.serial_no) && key(d.serial) !== key(s.serial_no) ? `serial differs: map ${d.serial}, record ${s.serial_no}` : '';
+    const flag = used && s.status === 'Stock' ? 'Stock but in the mapping' : !used && s.status === 'Active' ? (d ? 'Active but retired in the map' : 'Active but not in the mapping') : snDiff;
+    rows.push({ id: s.id, family: f, hostname: s.hostname, brand_model: s.brand_model, serial_no: s.serial_no, status: s.status, location: s.location, country: s.country,
+      state, flag, map: d ? { hostname: d.hostname, site: d.site, location: d.location, role: d.role, retired: d.state === 'retired', how }
+        : pt ? { hostname: pt.peer_host, location: `cabled on ${pt.sw} ${pt.port}`, how: 'port' } : null });
+    if (!fam.has(f)) fam.set(f, { family: f, total: 0, used: 0, stock: 0, broken: 0, flags: 0 });
+    const x = fam.get(f); x.total++; x[state]++; if (flag) x.flags++;
+  }
+  // Quantity in the implementation document (equipment list) and map devices with no inventory record.
+  let doc = null; try { const site = await get('SELECT site FROM net_devices GROUP BY site ORDER BY COUNT(*) DESC LIMIT 1'); if (site) doc = await nm.inventoryCheck(site.site); } catch { doc = null; }
+  if (doc) for (const m of doc.models) { const x = fam.get(m.family); if (x) x.doc_qty = m.doc_qty; }
+  const matched = new Set(rows.filter(r => r.map).map(r => HK(r.map.hostname)));
+  const missing = devs.filter(d => d.state !== 'retired' && !matched.has(HK(d.hostname)) && familyOf(`${d.model} ${d.hostname}`) && !['Printer'].includes(d.role))
+    .map(d => ({ hostname: d.hostname, model: d.model, serial: d.serial || d.service_tag, family: familyOf(`${d.model} ${d.hostname}`) }));
+  const families = [...fam.values()].sort((a, b) => b.total - a.total);
+  res.json({ families, rows, missing, totals: { total: rows.length, used: rows.filter(r => r.state === 'used').length, stock: rows.filter(r => r.state === 'stock').length, broken: rows.filter(r => r.state === 'broken').length, flags: rows.filter(r => r.flag).length } });
+}));
+
 router.get('/needs-info', wrap(async (req, res) => {
   const cf = countryFilter(req);
   const rows = await all(`SELECT id, hostname, brand_model, category, serial_no, ip_address, location, status, country FROM servers

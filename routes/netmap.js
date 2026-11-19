@@ -510,6 +510,6 @@ async function inventoryCheck(site) {
   return { site, has_equipment: equip.length > 0, models, issues, doc_only: docOnly };
 }
 router.inventoryCheck = inventoryCheck;
-router.util = { macNorm, str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
+router.util = { familyOf, macNorm, str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
 
 module.exports = router;

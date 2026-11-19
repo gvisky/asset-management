@@ -51,6 +51,7 @@
     <span class="topbar-title">Server Inventory</span>
     <span id="total-label" class="text-muted text-sm"></span>
     <button class="btn btn-ghost btn-sm" id="btn-missing" onclick="openMissing()" title="Devices with missing serial, hostname, IP or location — fill them in here">⚠️ Needs Attention — Servers &amp; Network: Missing Info <span class="na-cnt" id="na-cnt"></span></button>
+    <button class="btn btn-ghost btn-sm" onclick="ServerUsage.open()" title="How many devices of each model are in use (network mapping) and how many are stock">📦 Used / stock</button>
     <button class="btn btn-ghost btn-sm" id="btn-netsync" style="display:none" onclick="openNetSync()" title="Fill hostname, IP, rack location and IP list from the network map (implementation document); add devices that are missing">🔄 Update from network map</button>
     <button class="btn btn-primary btn-sm" id="btn-add">+ Add Server</button>
   </header>
@@ -177,6 +178,7 @@
 <script src="/js/device-specs.js?v=20261117a"></script>
 <script src="/js/server-attention.js?v=20261117a"></script>
 <script src="/js/server-inventory.js?v=20261118a"></script>
+<script src="/js/server-usage.js?v=20261119a"></script>
 <script src="/js/virtual-servers.js?v=20261117c"></script>
 </body>
 </html>
