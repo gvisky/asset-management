@@ -125,7 +125,7 @@ router.get('/asset/:id/timeline', wrap(async (req, res) => {
     const m = line.match(HIST_LINE);
     if (!m) { earlier.push(line); continue; }
     const t = m[3];
-    const kind = /created by/i.test(t) ? 'created' : /User:|AD Name:|holder|handover|hand over/i.test(t) ? 'holder'
+    const kind = /♻ disposed/.test(t) ? 'dispose' : /reuse step|reuse flow/i.test(t) ? 'reuse' : /created by/i.test(t) ? 'created' : /User:|AD Name:|holder|handover|hand over/i.test(t) ? 'holder'
       : /Status:/i.test(t) ? 'status' : /locked|unlock/i.test(t) ? 'lock' : /warranty/i.test(t) ? 'warranty' : 'edit';
     add(`${m[1]} ${m[2] || '00:00'}`, kind, t);
   }
@@ -144,7 +144,8 @@ router.get('/asset/:id/timeline', wrap(async (req, res) => {
   for (const c of await all('SELECT result, note, signed_name, confirmed_at FROM asset_confirmations WHERE asset_id = ?', [a.id]))
     add(c.confirmed_at, 'confirm', `${c.signed_name || 'Holder'} ${c.result === 'have' ? 'confirmed they have it (My devices)' : c.result === 'not_have' ? 'said it is NOT with them (My devices)' : 'answered: ' + c.result}${c.note ? ' — ' + c.note : ''}`);
   for (const l of await all(`SELECT action, details, username, created_at FROM audit_log WHERE asset_id = ? AND action IN ('DELETE', 'RESTORE', 'PRINT', 'UNLOCK', 'STOCKTAKE', 'DISPOSE', 'REUSE')
-      AND details NOT LIKE '%server%'`, [a.id]))
+      AND details NOT LIKE '%server%'
+      AND NOT (action = 'DISPOSE' AND details LIKE 'Disposed %') AND action <> 'REUSE'`, [a.id]))
     add(l.created_at, l.action.toLowerCase(), `${l.details} (${l.username})`);
   if (/^\d{4}-\d{2}-\d{2}/.test(a.warranty_expiry || '')) add(a.warranty_expiry, 'warranty-end', `Warranty ${a.warranty_expiry > new Date().toISOString().slice(0, 10) ? 'ends' : 'ended'}${a.warranty_source === 'estimated' ? ' (estimated)' : ''}`, { future: a.warranty_expiry > new Date().toISOString().slice(0, 10) });
   ev.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0));

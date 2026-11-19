@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-19",
+    "title": "♻ Stock & disposal: return → ready-to-reuse flow and disposal / write-off records",
+    "items": [
+      "New button ♻ Stock & disposal on Asset Inventory. 🔄 Return → ready to reuse: a board of Stock assets — Returned → Wiped → Checked (condition grade A / B / C, optional photo) → Ready to reuse, with \"Ready today\" per asset type. A signed ↩ Return to Stock (or setting an Active asset to Stock) puts it in Returned; a ✍ Hand over takes it out.",
+      "🗑 Dispose / write off (IT admin, from the asset or a board card): sold / recycled / donated / scrapped / returned to vendor / lost — date, reason, data wiped (required for laptops, phones, tablets…), buyer / recycler, price and a certificate (PDF / photo). The asset goes to the Recycle Bin; the record keeps codes, cost center, cost and book value at disposal.",
+      "Disposals tab: list per year, 📊 Write-off list for Finance (.xlsx) and a SAP tick when Finance has written the asset off. Each step and disposal shows in the asset's 🕑 Timeline."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "🔍 Search everything (Ctrl+K), 👤 person view and 🕑 asset timeline",
     "items": [
       "A search box in the top bar of every page (or press Ctrl+K): type a name, email, employee ID, serial, asset code, hostname, IP, MAC or switch-port name and jump straight to the asset, person, server, virtual server, network device, switch port or Intune device. You only see what you may open, in your countries.",

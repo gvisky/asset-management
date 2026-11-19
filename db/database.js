@@ -1366,6 +1366,29 @@ async function migrate() {
   // Where Warranty Expiry came from: '' typed by hand / imported, 'vendor' (vendor warranty file), 'estimated' (purchase date + model years).
   const wcols = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!wcols.includes('warranty_source')) await backend.run("ALTER TABLE assets ADD COLUMN warranty_source TEXT DEFAULT ''");
+  // Return → ready-to-reuse flow for Stock assets: '' (not in the flow) | returned | wiped | checked | ready, with a condition grade A/B/C.
+  for (const [col, type] of [['reuse_state', "TEXT DEFAULT ''"], ['reuse_grade', "TEXT DEFAULT ''"], ['reuse_note', "TEXT DEFAULT ''"], ['reuse_at', 'TEXT DEFAULT NULL'], ['reuse_by', "TEXT DEFAULT ''"]])
+    if (!wcols.includes(col)) await backend.run(`ALTER TABLE assets ADD COLUMN ${col} ${type}`);
+  // Disposal & write-off: one row per disposed asset (the asset itself goes to the Recycle Bin). A copy of the asset's identity
+  // and value is kept here so the Finance / SAP write-off list never depends on the asset row.
+  await backend.script(`CREATE TABLE IF NOT EXISTS asset_disposals (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id      INTEGER NOT NULL,
+      country       TEXT DEFAULT '',
+      asset_s4      TEXT DEFAULT '', asset_code TEXT DEFAULT '', asset_type TEXT DEFAULT '', brand_model TEXT DEFAULT '', serial_no TEXT DEFAULT '',
+      cost_center   TEXT DEFAULT '', cost TEXT DEFAULT '', purchase_date TEXT DEFAULT '', book_value TEXT DEFAULT '',
+      disposed_on   TEXT NOT NULL,
+      method        TEXT NOT NULL,
+      reason        TEXT DEFAULT '',
+      wiped         TEXT DEFAULT '',
+      wipe_method   TEXT DEFAULT '',
+      buyer         TEXT DEFAULT '',
+      price         TEXT DEFAULT '',
+      cert_name     TEXT DEFAULT '', cert_mime TEXT DEFAULT '', cert_b64 TEXT DEFAULT '',
+      sap_done      INTEGER NOT NULL DEFAULT 0, sap_by TEXT DEFAULT '', sap_at TEXT DEFAULT NULL,
+      created_by    TEXT DEFAULT '',
+      created_at    TEXT DEFAULT (datetime('now')));
+    CREATE INDEX IF NOT EXISTS idx_disposals_asset ON asset_disposals(asset_id);`);
 
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);

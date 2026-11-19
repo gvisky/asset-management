@@ -785,6 +785,12 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
      keep(incoming.asset_type, existing.asset_type), userLockNow,
      req.params.id]);
 
+  // Reuse flow: an asset set to Stock from Active (taken back without a signed return) starts at "Returned";
+  // leaving Stock (given out, Broken) takes it out of the flow.
+  if (status !== undefined && norm(status) !== norm(existing.status)) {
+    if (norm(status) === 'Stock' && norm(existing.status) === 'Active') await run("UPDATE assets SET reuse_state = 'returned', reuse_grade = '', reuse_note = '', reuse_at = datetime('now'), reuse_by = ? WHERE id = ?", [req.user.username, req.params.id]);
+    else if (norm(status) !== 'Stock') await run("UPDATE assets SET reuse_state = '' WHERE id = ?", [req.params.id]);
+  }
   // A warranty typed by hand is no longer "estimated" / "from the vendor file".
   if (warranty_expiry !== undefined && norm(warranty_expiry) !== norm(existing.warranty_expiry)) await run("UPDATE assets SET warranty_source = '' WHERE id = ?", [req.params.id]);
   // Still no Asset Type → take the model catalogue's type for this Brand/Model.
