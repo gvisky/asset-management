@@ -56,8 +56,8 @@ const NM = (() => {
 
   function applyView() {
     const ot = D.view === 'ot', team = D.team || {};
-    document.querySelectorAll('.nm-tools .nm-tabs button[data-v="rack"]').forEach(b => { b.style.display = ot ? 'none' : ''; });
-    if (ot && !$('nm-view-rack').hidden) tab('topo');
+    // OT view: Racks = factory cabinets only (the server decides); reload them when switching views.
+    if (typeof NMRacks !== 'undefined' && (!$('nm-view-rack').hidden || !$('nm-view-draw').hidden)) NMRacks.show(!$('nm-view-rack').hidden ? 'rack' : 'draw');
     [...$('nm-mode').options].forEach(o => { o.hidden = ot && (o.value === 'physical' || o.value === 'system'); });
     if (ot && (mode === 'physical' || mode === 'system')) { mode = 'map'; $('nm-mode').value = 'map'; }
     $('nm-ot').innerHTML = team.isIT ? `<span class="nm-tabs small" title="OT view = what the OT team sees: Kabin switches and what is connected to them"><button class="${ot ? '' : 'on'}" data-o="it">IT view</button><button class="${ot ? 'on' : ''}" data-o="ot">OT view</button></span>`

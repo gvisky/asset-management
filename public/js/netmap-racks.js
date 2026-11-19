@@ -14,7 +14,8 @@ const NMRacks = (() => {
   const dev = (id) => D().devices.find(d => d.id === id);
   async function load() {
     const site = D().site;
-    [R, drawings] = await Promise.all([((D().team || {}).isOT ? Promise.resolve({ racks: [], items: [] }) : apiGet('/api/netmap/racks?site=' + encodeURIComponent(site)).catch(() => ({ racks: [], items: [] }))), apiGet('/api/netmap/drawings?site=' + encodeURIComponent(site)).catch(() => [])]);
+    const v = D().view === 'ot' ? '&view=ot' : '';   // OT view: factory cabinets only, no server-room racks / pictures
+    [R, drawings] = await Promise.all([apiGet('/api/netmap/racks?site=' + encodeURIComponent(site) + v).catch(() => ({ racks: [], items: [] })), apiGet('/api/netmap/drawings?site=' + encodeURIComponent(site) + v).catch(() => [])]);
   }
 
   // Face of one rack item (x, y = top-left, w, h in px).
@@ -60,19 +61,19 @@ const NMRacks = (() => {
       box.innerHTML = `<div class="empty-state" style="padding:30px">No racks yet.${D().can.admin ? ` <button class="btn btn-primary btn-sm" onclick="NMRacks.build(false)">⚙ Build racks from the device locations</button>` : ''}</div>`; return;
     }
     const main = R.racks.filter(r => r.kind !== 'cabinet'), cab = R.racks.filter(r => r.kind === 'cabinet');
-    const W1 = main.length * (RW + GAP) + GAP, H1 = Math.max(...main.map(r => r.units), 0) * UH + 70;
+    const W1 = main.length * (RW + GAP) + GAP, H1 = main.length ? Math.max(...main.map(r => r.units)) * UH + 70 : -22;   // no server room (OT view): cabinets at the top
     const per = Math.max(4, Math.floor(W1 / (RW + GAP)) || 4), rowsC = Math.ceil(cab.length / per), H2 = rowsC * (12 * UH + 80);
     const W = Math.max(W1, per * (RW + GAP) + GAP);
-    let svg = `<text x="${GAP}" y="20" class="rk-area">SERVER ROOM</text>`;
+    let svg = main.length ? `<text x="${GAP}" y="20" class="rk-area">SERVER ROOM</text>` : '';
     main.forEach((r, i) => { svg += rackSvg(r, GAP + i * (RW + GAP), TOP + 20); });
     if (cab.length) { svg += `<text x="${GAP}" y="${H1 + 40}" class="rk-area">FACTORY CABINETS</text>`;
       cab.forEach((r, i) => { const c = i % per, row = Math.floor(i / per); svg += rackSvg(r, GAP + c * (RW + GAP), H1 + 70 + row * (12 * UH + 80)); }); }
-    const unplaced = D().devices.filter(d => !R.items.some(i => i.device_id === d.id) && !['Access point', 'Printer'].includes(d.role) && d.state !== 'retired');
+    const unplaced = D().can.edit ? D().devices.filter(d => !R.items.some(i => i.device_id === d.id) && !['Access point', 'Printer'].includes(d.role) && d.state !== 'retired') : [];
     const rackDraw = drawings.filter(d => /rack/i.test(d.category + ' ' + d.name));
     box.innerHTML = `<div class="rk-bar">${D().can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.addItem()">+ Item (patch panel, PDU …)</button><button class="btn btn-ghost btn-sm" onclick="NMRacks.addRack()">+ Rack / cabinet</button>` : ''}
         ${D().can.admin ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.build(false)" title="Place devices that are not in a rack yet">⚙ Place new devices</button>` : ''}
         ${rackDraw.length ? `<label class="text-sm"><input type="checkbox" ${showDrawing ? 'checked' : ''} onchange="NMRacks.toggleDrawing(this.checked)"> 📄 Show the document's rack drawing</label>` : ''}
-        <span class="text-muted text-sm">${D().can.edit ? 'Drag an item to move it · ' : ''}click a device to see its ports</span><span id="rk-where" class="rk-where"></span>
+        <span class="text-muted text-sm">Click a device to see its ports${D().can.edit ? ' · click a patch panel / PDU to edit it' : ''}</span><span id="rk-where" class="rk-where"></span>
         ${unplaced.length ? `<span class="text-sm" style="margin-left:auto">Not in a rack: ${unplaced.slice(0, 6).map(d => `<a href="#" onclick="NMRacks.addItem(${d.id});return false">${esc(d.hostname)}</a>`).join(', ')}${unplaced.length > 6 ? ` +${unplaced.length - 6}` : ''}</span>` : ''}</div>
       ${showDrawing ? `<div class="rk-draw">${rackDraw.map(d => `<figure><img src="/api/netmap/drawing/${d.id}" alt="${esc(d.name)}"><figcaption>${esc(d.name)}</figcaption></figure>`).join('')}</div>` : ''}
       <div class="rk-wrap"><svg id="rk-svg" class="rk-svg" viewBox="0 0 ${W} ${H1 + 70 + H2}" style="width:100%;max-width:${W}px">${svg}</svg></div>`;
@@ -92,35 +93,15 @@ const NMRacks = (() => {
     }
     if (sel) sel.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
   }
+  // Click only — moving items by dragging is switched off (an item's rack / U can still be changed in its edit form).
   function bind() {
     const svg = $('rk-svg'); if (!svg) return;
-    let drag = null;
-    const pt = (e) => { const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal; return { x: (e.clientX - r.left) / r.width * vb.width, y: (e.clientY - r.top) / r.height * vb.height }; };
-    svg.addEventListener('pointerdown', (e) => {
+    svg.addEventListener('click', (e) => {
       const g = e.target.closest('.rk-item'); if (!g) return;
-      const it = R.items.find(i => i.id === Number(g.dataset.id));
-      drag = { it, g, p0: pt(e), moved: false }; svg.setPointerCapture(e.pointerId);
-    });
-    svg.addEventListener('pointermove', (e) => {
-      if (!drag || !D().can.edit) return;
-      const p = pt(e), dx = p.x - drag.p0.x, dy = p.y - drag.p0.y;
-      if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
-      drag.g.setAttribute('transform', `translate(${dx},${dy})`); drag.g.classList.add('drag');
-    });
-    svg.addEventListener('pointerup', async (e) => {
-      const d = drag; drag = null; if (!d) return;
-      if (!d.moved) { d.g.removeAttribute('transform'); if (d.it.device_id) { NM.select(d.it.device_id); } else if (d.it.kind === 'patch' && self.NMFaces && NMFaces.panelName(d.it.label) && NMFaces.panel(d.it.label)) { /* patch panel window */ } else if (D().can.edit) editItem(d.it.id); return; }
-      // Which rack / U was it dropped on?
-      const p = pt(e); let target = null;
-      for (const g of svg.querySelectorAll('.rk')) { const b = g.getBBox(); if (p.x >= b.x && p.x <= b.x + b.width && p.y >= b.y && p.y <= b.y + b.height) target = R.racks.find(r => r.id === Number(g.dataset.rack)); }
-      if (!target) { render(); return; }
-      const g = svg.querySelector(`.rk[data-rack="${target.id}"] rect:nth-of-type(2)`), top = Number(g.getAttribute('y'));
-      const topU = target.units - Math.floor((p.y - top) / UH);
-      const u = Math.max(1, Math.min(target.units - d.it.height + 1, topU - Math.floor(d.it.height / 2)));
-      const clash = R.items.find(i => i.id !== d.it.id && i.rack_id === target.id && u <= i.u + i.height - 1 && i.u <= u + d.it.height - 1);
-      if (clash && !confirm(`U${u} overlaps ${clash.label || (dev(clash.device_id) || {}).hostname || clash.kind}. Move anyway?`)) { render(); return; }
-      try { await apiPut('/api/netmap/rack-item/' + d.it.id, { rack_id: target.id, u }); await load(); render(); showToast(`Moved to ${target.name} U${u}`); }
-      catch (err) { showToast(errText(err, 'Could not move'), 'error'); render(); }
+      const it = R.items.find(i => i.id === Number(g.dataset.id)); if (!it) return;
+      if (it.device_id) { if (dev(it.device_id)) NM.select(it.device_id); else showToast((it.label || 'This device') + ' is not on the map', 'error'); }
+      else if (it.kind === 'patch' && self.NMFaces && NMFaces.panelName(it.label) && NMFaces.panel(it.label)) { /* patch panel window */ }
+      else if (D().can.edit) editItem(it.id);
     });
   }
 
