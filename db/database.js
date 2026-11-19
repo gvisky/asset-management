@@ -1351,6 +1351,22 @@ async function migrate() {
       report TEXT DEFAULT '', imported_by TEXT DEFAULT '', imported_at TEXT DEFAULT (datetime('now')), UNIQUE(country, job_id));
     CREATE INDEX IF NOT EXISTS idx_vm_backups_vm ON vm_backups(vm_id, started_at);`);
 
+  // Model catalogue (Inventory → 📚 Models): one clean name per model with its asset type, warranty years and end of support.
+  // Assets keep Brand/Model as text and match a catalogue row by name (case-insensitive).
+  await backend.script(`CREATE TABLE IF NOT EXISTS asset_models (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      name           TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      maker          TEXT DEFAULT '',
+      asset_type     TEXT DEFAULT '',
+      warranty_years REAL DEFAULT NULL,
+      eos_year       INTEGER DEFAULT NULL,
+      note           TEXT DEFAULT '',
+      updated_by     TEXT DEFAULT '',
+      updated_at     TEXT DEFAULT (datetime('now')));`);
+  // Where Warranty Expiry came from: '' typed by hand / imported, 'vendor' (vendor warranty file), 'estimated' (purchase date + model years).
+  const wcols = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
+  if (!wcols.includes('warranty_source')) await backend.run("ALTER TABLE assets ADD COLUMN warranty_source TEXT DEFAULT ''");
+
   // Broken laptops: which parts can still be used as spares (JSON, see routes/maintenance.js PARTS).
   const acolsP = (await backend.all('PRAGMA table_info(assets)')).map(c => c.name);
   if (!acolsP.includes('parts')) await backend.run("ALTER TABLE assets ADD COLUMN parts TEXT DEFAULT ''");

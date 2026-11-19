@@ -445,7 +445,7 @@ async function onView(id) {
       ['Date Assigned', a.date_assigned],
       ['Purchase Date', a.purchase_date],
       ['Years in Use',  yearsInUse(a.purchase_date)],
-      ['Warranty',      warrantyBadge(a.warranty_expiry) || esc(a.warranty_expiry)],
+      ['Warranty',      (warrantyBadge(a.warranty_expiry) || esc(a.warranty_expiry)) + (a.warranty_source === 'estimated' ? ' <span class="text-muted text-sm" title="Purchase date + the model\'s warranty years (📚 Models)">estimated</span>' : a.warranty_source === 'vendor' ? ' <span class="text-muted text-sm" title="From the vendor\'s warranty file">vendor</span>' : '')],
       ['Vendor',        a.vendor],
       ['Cost',          a.cost],
       ['Book value',    bookValueHtml(a.depreciation)],

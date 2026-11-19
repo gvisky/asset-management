@@ -38,6 +38,14 @@ const { normCountry } = require('../lib/countries');
 const { knownCountries } = require('../lib/country-list');
 const { scopeList, inScope, countrySql, singleScope, resolveScopedCountry } = require('../lib/scope');
 
+// Empty Asset Type + a Brand/Model that is in the model catalogue → the catalogue's type.
+async function catalogType(brandModel) {
+  const name = String(brandModel || '').trim();
+  if (!name) return '';
+  try { const m = await get("SELECT asset_type FROM asset_models WHERE name = ? COLLATE NOCASE AND asset_type <> ''", [name]); return m ? m.asset_type : ''; }
+  catch { return ''; }
+}
+
 // Only this account may edit the History Usage audit log (configurable via env).
 const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
 
@@ -572,7 +580,7 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
     [loc, finalCountry, department, computer_no, brand_model, date_assigned,
      serial_no, mk, asset_code, user_name, ad_name, hist, remark, status,
      purchase_date, warranty_expiry, vendor, cost, po_number,
-     cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc, normalizeAssetType(asset_type)]);
+     cost_center, ecc_cc, asset_s4, asset_description, cost_center_desc, normalizeAssetType(asset_type) || await catalogType(brand_model)]);
 
   const created = await get('SELECT * FROM assets WHERE id = ?', [result.lastInsertRowid]);
   await audit(req.user, 'CREATE', created.id, `Created asset "${created.asset_code || created.brand_model || 'untitled'}" (${finalCountry})`);
@@ -777,6 +785,11 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
      keep(incoming.asset_type, existing.asset_type), userLockNow,
      req.params.id]);
 
+  // A warranty typed by hand is no longer "estimated" / "from the vendor file".
+  if (warranty_expiry !== undefined && norm(warranty_expiry) !== norm(existing.warranty_expiry)) await run("UPDATE assets SET warranty_source = '' WHERE id = ?", [req.params.id]);
+  // Still no Asset Type → take the model catalogue's type for this Brand/Model.
+  const typeNow = keep(incoming.asset_type, existing.asset_type);
+  if (!norm(typeNow)) { const ct = await catalogType(keep(brand_model, existing.brand_model)); if (ct) await run("UPDATE assets SET asset_type = ? WHERE id = ? AND (asset_type IS NULL OR asset_type = '')", [ct, req.params.id]); }
   const updated = await get('SELECT * FROM assets WHERE id = ?', [req.params.id]);
   await audit(req.user, 'UPDATE', updated.id, `Updated asset "${updated.asset_code || updated.brand_model || 'untitled'}"`);
   res.json(updated);
