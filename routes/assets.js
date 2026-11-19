@@ -70,6 +70,7 @@ const ASSET_ORDER = {
 router.get('/', wrap(async (req, res) => {
   const { search = '', status = '', location = '', brand = '', department = '',
           cost_center = '', asset_type = '', incomplete = '', ad_issue = '', page = 1, limit = 50, sort = 'updated' } = req.query;
+  if ((ad_issue || incomplete) && req.user && req.user.role === 'viewer') return res.status(403).json({ error: 'Not for viewers' });
 
   const conditions = ['deleted_at IS NULL'];
   const params = [];
@@ -376,6 +377,7 @@ router.get('/filters', wrap(async (req, res) => {
 
 // ── GET /api/assets/incomplete — missing key identifiers OR duplicate serial ──
 router.get('/incomplete', wrap(async (req, res) => {
+  if (req.user && req.user.role === 'viewer') return res.status(403).json({ error: 'Not for viewers' });
   const cf = countryFilter(req);
   const base = cf.clause ? ` AND ${cf.clause}` : '';
 

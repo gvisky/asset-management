@@ -1406,3 +1406,7 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .us-bar2 { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 16px 0 6px; }
 .us-st { font-size: 11.5px; border-radius: 9px; padding: 0 7px; font-weight: 600; } .us-st.used { background: #dcfce7; color: #166534; } .us-st.stock { background: #fef3c7; color: #92400e; } .us-st.broken { background: #fee2e2; color: #991b1b; }
 .us-fl td { background: #faf5ff; } .us-why { color: #7e22ce; font-size: 12px; }
+
+/* Viewers: nothing of "Needs Attention" (things to fix / to add) */
+.is-viewer #nav-alerts, .is-viewer #btn-incomplete, .is-viewer #btn-adaudit, .is-viewer #btn-missing, .is-viewer #na-root, .is-viewer #na-servers-dash,
+.is-viewer #alert-box, .is-viewer #alert-btn-slot, .is-viewer .na-only, .is-viewer .pl-i-warn { display: none !important; }

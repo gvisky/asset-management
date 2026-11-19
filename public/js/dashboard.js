@@ -441,13 +441,16 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAppUpdates();
   // Servers & network devices: count card (list on the Needs Attention page).
   if (typeof ServerAttention !== 'undefined' && document.getElementById('na-servers-dash')) {
-    const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.asset_access !== 0) ServerAttention.summary(document.getElementById('na-servers-dash')); }, 150);
+    const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.asset_access !== 0 && window.CURRENT_USER.role !== 'viewer') ServerAttention.summary(document.getElementById('na-servers-dash')); }, 150);
   }
-  naPanel = NeedsAttention({ root: document.getElementById('na-root'), mode: 'missing',
-    scope: () => dashScope, showOpenLink: true });
+  // Needs Attention (missing info) and the alerts: not for viewers (things to fix / to add).
+  const t2 = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t2); if (window.CURRENT_USER.role === 'viewer') return;
+    naPanel = NeedsAttention({ root: document.getElementById('na-root'), mode: 'missing', scope: () => dashScope, showOpenLink: true }); }, 100);
   loadPersonnelSummary();               // User Inventory summary cards
   // Consolidated notifications (all scopes) — next to Top Models; keep the box when there are none.
-  Promise.resolve(loadAlertBox('alert-box', '')).then(() => {
+  const viewer = () => (window.CURRENT_USER || {}).role === 'viewer';
+  if (!viewer()) Promise.resolve(loadAlertBox('alert-box', '')).then(() => {
+    if (viewer()) { const b = document.getElementById('alert-box'); if (b) b.innerHTML = ''; return; }
     const box = document.getElementById('alert-box');
     if (box && !box.innerHTML.trim()) {
       box.innerHTML = '<div class="card"><div class="card-header"><span class="card-title">🔔 Alerts</span></div><div class="card-body"><div class="text-muted text-sm">No alerts.</div></div></div>';

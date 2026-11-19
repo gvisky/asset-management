@@ -9,6 +9,11 @@ async function ensureAuth() {
     const r = await fetch('/api/auth/me');
     if (!r.ok) throw new Error('not auth');
     window.CURRENT_USER = await r.json();
+    // Viewers only look: nothing of "Needs Attention" (things to fix / to add) is shown to them.
+    if (window.CURRENT_USER.role === 'viewer') {
+      document.documentElement.classList.add('is-viewer');
+      if (window.location.pathname === '/alerts.html') { window.location.href = '/'; return null; }
+    }
     renderUserChrome();
     applyRoleGates();
     applyAssetGating();
@@ -90,7 +95,7 @@ function renderUserChrome() {
   // Quick Actions: drop "Add Asset"; add "Needs Attention" (alerts) for asset users.
   const addLink = document.getElementById('nav-add');
   if (addLink) addLink.style.display = 'none';
-  if (u.asset_access !== 0) {
+  if (u.asset_access !== 0 && u.role !== 'viewer') {
     const nav = document.querySelector('.sidebar nav');
     if (nav && !document.getElementById('nav-alerts')) {
       const link = document.createElement('a');
