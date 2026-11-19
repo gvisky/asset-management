@@ -1410,3 +1410,5 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 /* Viewers: nothing of "Needs Attention" (things to fix / to add) */
 .is-viewer #nav-alerts, .is-viewer #btn-incomplete, .is-viewer #btn-adaudit, .is-viewer #btn-missing, .is-viewer #na-root, .is-viewer #na-servers-dash,
 .is-viewer #alert-box, .is-viewer #alert-btn-slot, .is-viewer .na-only, .is-viewer .pl-i-warn { display: none !important; }
+
+.emp-id { font-size: 11px; font-weight: 600; color: #475569; background: #f1f5f9; border-radius: 8px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
