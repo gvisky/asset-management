@@ -13,10 +13,15 @@ const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
 const PROTECTED_FIELDS = { serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' };
 
 router.use(requireAuth);
-// OT team (Operation Technology): read-only, and only the OT devices (it_ot = 'OT') — list, filters, one record.
+// OT team (Operation Technology): only the OT devices (it_ot = 'OT') — list, filters, one record; OT editors may also edit
+// an OT record (never an IT one, never delete).
 const isOT = (req) => !!req.user && req.user.team === 'OT';
 router.use((req, res, next) => {
-  if (isOT(req)) return req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path) ? next() : res.status(403).json({ error: 'OT: read-only list of OT devices' });
+  if (isOT(req)) {
+    if (req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path)) return next();
+    if (req.method === 'PUT' && /^\/\d+$/.test(req.path) && req.user.role === 'editor') return next();
+    return res.status(403).json({ error: 'OT: the OT devices only (editors can edit them)' });
+  }
   if (req.user && req.user.asset_access === 0) {
     return res.status(403).json({ error: 'No access to Asset Inventory' });
   }
@@ -250,6 +255,10 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Server not found' });
   if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
+  if (isOT(req)) {
+    if (existing.it_ot !== 'OT') return res.status(404).json({ error: 'Server not found' });
+    req.body.it_ot = 'OT';   // an OT editor cannot move a device to IT
+  }
 
   const finalCountry = resolveCountry(req, req.body.country !== undefined ? req.body.country : existing.country);
   const incoming = { country: finalCountry };
@@ -273,7 +282,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     if (existing.fields_locked) {
       return res.status(403).json({ error: 'Serial, Brand/Model and Asset Code are locked. An IT admin must unlock this record first.' });
     }
-    if (req.user.team !== 'IT') {
+    if (req.user.team !== 'IT' && !(isOT(req) && existing.it_ot === 'OT')) {
       return res.status(403).json({ error: 'Only IT members can edit Serial, Brand/Model or Asset Code.' });
     }
   }
