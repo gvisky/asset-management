@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-19",
+    "title": "Network map: OT sees the factory cabinets; rack items no longer move by dragging",
+    "items": [
+      "OT view: the 🗄 Racks tab shows every factory cabinet (IT-KABIN, CCTV-KABIN, HARICI KABIN) — never the server-room racks; the Drawings tab no longer lists the server-room rack pictures. Click a switch in a cabinet to open its ports.",
+      "Racks: dragging an item to another rack / U is switched off for everyone (no accidental moves). Click a device to see its ports; editors click a patch panel / PDU to edit it, where rack and U can still be changed."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "Network map OT view: OT editors edit end-device ports, Drawings tab",
     "items": [
       "OT editors (Users & Audit → team OT, role Editor) can edit the ports of their Kabin switches that go to end devices or are free: device name (camera, Matrix access control …), its port, cable, mode, VLAN, patch point, note, or disconnect. Ports cabled to a network device (AP, uplink switch) stay locked with \"only IT can change this port\", and an end-device port can't be cabled to a network device. OT viewers only look.",

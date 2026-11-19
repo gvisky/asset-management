@@ -284,7 +284,10 @@ router.get('/log', wrap(async (req, res) => {
   res.json(await all(`SELECT * FROM net_port_log WHERE site = ?${dev ? ' AND device = ?' : ''} ORDER BY id DESC LIMIT 300`, dev ? [site, dev] : [site]));
 }));
 // Everything below (Server Inventory sync, racks, drawing uploads) is not part of the OT view — except looking at the drawings.
-router.use((req, res, next) => (isOT(req) && !(req.method === 'GET' && /^\/drawings?(\/|$)/.test(req.path)) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
+router.use((req, res, next) => (isOT(req) && !(req.method === 'GET' && /^\/(drawings?|racks)(\/|$)/.test(req.path)) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
+// OT view: only the factory cabinets (IT / CCTV / HARICI KABIN), never the server-room racks or their pictures.
+const otRack = (r) => r.kind === 'cabinet' || /KABIN/i.test(r.name || '');
+const otDrawing = (d) => !/server\s*room|system\s*room|main\s*rack/i.test(`${d.name || ''} ${d.category || ''}`);
 
 // ── Server Inventory ← Network map (the implementation document) ───────────────
 // Matches each network device to a Server Inventory record by serial / service tag (ignoring a leading "S"
@@ -377,8 +380,9 @@ function parseLoc(loc) {
 }
 router.get('/racks', wrap(async (req, res) => {
   const site = str(req.query.site, 80);
-  const racks = await all('SELECT * FROM net_racks WHERE site = ? ORDER BY sort, name', [site]);
-  const items = racks.length ? await all(`SELECT i.* FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id WHERE r.site = ? ORDER BY i.rack_id, i.u DESC`, [site]) : [];
+  let racks = await all('SELECT * FROM net_racks WHERE site = ? ORDER BY sort, name', [site]);
+  let items = racks.length ? await all(`SELECT i.* FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id WHERE r.site = ? ORDER BY i.rack_id, i.u DESC`, [site]) : [];
+  if (otView(req)) { racks = racks.filter(otRack); const ids = new Set(racks.map(r => r.id)); items = items.filter(i => ids.has(i.rack_id)); }
   res.json({ racks, items });
 }));
 router.post('/racks/build', wrap(async (req, res) => {
@@ -482,11 +486,12 @@ router.delete('/rack-item/:id', wrap(async (req, res) => {
 
 // ── Drawings (pictures of the document: racks, topology, floor plans) ─────────
 router.get('/drawings', wrap(async (req, res) => {
-  res.json(await all('SELECT id, site, name, category, mime, size, pins, links, uploaded_by, uploaded_at FROM net_drawings WHERE site = ? ORDER BY category, name', [str(req.query.site, 80)]));
+  const rows = await all('SELECT id, site, name, category, mime, size, pins, links, uploaded_by, uploaded_at FROM net_drawings WHERE site = ? ORDER BY category, name', [str(req.query.site, 80)]);
+  res.json(otView(req) ? rows.filter(otDrawing) : rows);
 }));
 router.get('/drawing/:id', wrap(async (req, res) => {
-  const d = await get('SELECT mime, data_b64 FROM net_drawings WHERE id = ?', [Number(req.params.id)]);
-  if (!d) return res.status(404).end();
+  const d = await get('SELECT name, category, mime, data_b64 FROM net_drawings WHERE id = ?', [Number(req.params.id)]);
+  if (!d || (isOT(req) && !otDrawing(d))) return res.status(404).end();
   res.setHeader('Content-Type', d.mime || 'image/png'); res.setHeader('Cache-Control', 'private, max-age=600');
   res.send(Buffer.from(d.data_b64 || '', 'base64'));
 }));
