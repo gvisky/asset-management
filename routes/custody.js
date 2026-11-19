@@ -103,6 +103,9 @@ async function record(req, res, a, { kind, person, holder, status, note, sig }) 
   await run(`UPDATE assets SET user_name = ?, ad_name = ?, status = COALESCE(?, status), date_assigned = CASE WHEN ? = 'handover' THEN date('now') ELSE date_assigned END,
        history_usage = ?, user_locked = ? WHERE id = ?`,
     [holder.user_name, holder.ad_name, status || null, kind, history, lock, a.id]);
+  // Reuse flow: a return to Stock starts at "Returned"; a handover takes the asset out of the flow.
+  if (kind === 'return' && status === 'Stock') await run("UPDATE assets SET reuse_state = 'returned', reuse_grade = '', reuse_note = '', reuse_at = datetime('now'), reuse_by = ? WHERE id = ?", [req.user.username, a.id]);
+  else await run("UPDATE assets SET reuse_state = '' WHERE id = ?", [a.id]);
   await audit(req.user, kind === 'return' ? 'RETURN' : 'HANDOVER', a.id,
     `${kind === 'return' ? 'Return' : 'Handover'} of "${a.asset_s4 || a.asset_code || a.brand_model || '#' + a.id}" ${kind === 'return' ? 'from' : 'to'} ${person.name || '—'} (e-signed, record #${docId})`);
   res.json({ ok: true, docId, sha256: sha, locked: !!lock });

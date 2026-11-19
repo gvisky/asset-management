@@ -46,6 +46,7 @@ app.use('/api/leavers', require('./routes/leavers'));
 app.use('/api/kpi', require('./routes/kpi'));
 app.use('/api/catalog', require('./routes/catalog'));
 app.use('/api/lookup', require('./routes/lookup'));
+app.use('/api/lifecycle', require('./routes/lifecycle'));
 app.use('/api/netmap/workbook', require('./routes/netmap-workbook'));
 app.use('/api/netmap', require('./routes/netmap'));
 app.use('/api/confirm-forms', require('./routes/confirm').forms);

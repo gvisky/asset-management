@@ -475,6 +475,7 @@ async function onView(id) {
         <div id="cus-docs" class="text-muted text-sm">Loading…</div>
         <div id="qr-hist"></div>
       </div>
+      ${typeof Lifecycle !== 'undefined' ? Lifecycle.assetBox(a) : ''}
       <details class="tl-box" style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px" ontoggle="if(this.open&&!this.dataset.l){this.dataset.l=1;AssetTimeline.html(${a.id}).then(h=>{document.getElementById('asset-tl').innerHTML=h})}">
         <summary style="cursor:pointer"><strong style="font-size:13.5px">🕑 Timeline</strong> <span class="text-muted text-sm">bought, holders, handovers, repairs, scans — everything that happened to this asset</span></summary>
         <div id="asset-tl" class="text-muted text-sm" style="margin-top:10px">Loading…</div>
@@ -502,6 +503,7 @@ async function onView(id) {
     `;
     document.getElementById('view-overlay').classList.add('open');
     window._viewAsset = a;
+    if (typeof Lifecycle !== 'undefined') Lifecycle.wireBox(a, () => onView(a.id));
     custodyDocsHtml(a.id).then(h => { const el = document.getElementById('cus-docs'); if (el) el.innerHTML = h; });
     qrHistoryHtml(a.id).then(h => { const el = document.getElementById('qr-hist'); if (el) el.innerHTML = h; });
     loadMaintenance(id);

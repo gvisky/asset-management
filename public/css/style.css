@@ -1470,3 +1470,23 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .atl-t { flex: 1; }
 .atl-e.fut { opacity: .65; }
 .pv-link { color: inherit; text-decoration: none; } .pv-link:hover { color: #1a56db; text-decoration: underline; }
+
+/* ♻ Stock & disposal */
+.lc-board { display: grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap: 10px; overflow-x: auto; }
+.lc-col { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-height: 120px; }
+.lc-col.ready { background: #f0fdf4; border-color: #bbf7d0; }
+.lc-h { font-weight: 700; font-size: 12.5px; text-transform: uppercase; letter-spacing: .03em; color: #475569; margin-bottom: 8px; display: flex; justify-content: space-between; }
+.lc-h span { background: #e2e8f0; border-radius: 9px; padding: 0 7px; font-size: 11.5px; }
+.lc-card { background: #fff; border: 1px solid var(--border); border-radius: 7px; padding: 7px 9px; margin-bottom: 7px; font-size: 12.5px; }
+.lc-t { font-weight: 600; font-size: 13px; } .lc-t a { color: inherit; text-decoration: none; } .lc-t a:hover { color: #1a56db; }
+.lc-s { color: #64748b; } .lc-n { color: #92400e; margin-top: 2px; }
+.lc-b { display: flex; gap: 6px; margin-top: 6px; } .lc-b .btn { padding: 2px 8px; font-size: 12px; }
+.lc-g { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 0 5px; }
+.lc-g.gA { background: #dcfce7; color: #166534; } .lc-g.gB { background: #fef9c3; color: #854d0e; } .lc-g.gC { background: #fee2e2; color: #991b1b; }
+.lc-empty { color: #94a3b8; font-size: 12px; text-align: center; padding: 6px; }
+.lc-grades { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+.lc-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; } .lc-form label { font-size: 12.5px; color: #475569; display: flex; flex-direction: column; gap: 3px; } .lc-form .full { grid-column: 1 / -1; }
+.lc-box { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.lc-pill { font-size: 12px; font-weight: 600; border-radius: 9px; padding: 1px 9px; background: #e2e8f0; color: #334155; }
+.lc-pill.returned { background: #fef3c7; color: #92400e; } .lc-pill.wiped { background: #e0e7ff; color: #3730a3; } .lc-pill.checked { background: #cffafe; color: #155e75; } .lc-pill.ready { background: #dcfce7; color: #166534; }
+tr.lc-rest td { opacity: .55; }
