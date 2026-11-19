@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hayat Asset Management vs Snipe-IT — comparison</title>
+<style>
+  :root { --bg:#f1f5f9; --card:#fff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --us:#1d4ed8; --us-bg:#dbeafe; --sn:#b45309; --sn-bg:#fef3c7; --eq:#475569; --eq-bg:#e2e8f0; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width:1180px; margin:0 auto; padding:24px 18px 60px; }
+  .top { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .top a { color:var(--us); text-decoration:none; font-weight:600; }
+  h1 { font-size:24px; margin:10px 0 2px; }
+  h2 { font-size:17px; margin:0 0 10px; }
+  .sub { color:var(--muted); margin:0 0 18px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px 18px; margin-bottom:16px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px; cursor:pointer; }
+  .kpi.on { outline:2px solid var(--us); }
+  .kpi b { display:block; font-size:28px; line-height:1.1; }
+  .kpi span { color:var(--muted); font-size:12.5px; }
+  .kpi.us b { color:var(--us); } .kpi.sn b { color:var(--sn); } .kpi.eq b { color:var(--eq); }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:800px){ .two { grid-template-columns:1fr; } }
+  ul { margin:6px 0 0; padding-left:20px; } li { margin:3px 0; }
+  .tools { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .tools input { flex:1; min-width:200px; padding:7px 10px; border:1px solid var(--border); border-radius:6px; font:inherit; }
+  .tools button { border:1px solid var(--border); background:#fff; border-radius:6px; padding:6px 10px; cursor:pointer; font:inherit; font-size:13px; }
+  .tools button.on { background:var(--text); color:#fff; border-color:var(--text); }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; vertical-align:top; padding:8px 10px; border-top:1px solid var(--border); }
+  th { font-size:12px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); background:#f8fafc; position:sticky; top:0; }
+  tr.grp td { background:#f8fafc; font-weight:700; font-size:12.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  td.f { font-weight:600; width:20%; }
+  td.c { width:31%; }
+  td.w { width:90px; white-space:nowrap; }
+  .m { display:inline-block; width:20px; text-align:center; font-weight:700; margin-right:4px; }
+  .m.y { color:#15803d; } .m.p { color:#b45309; } .m.n { color:#b91c1c; }
+  .tag { display:inline-block; font-size:11.5px; font-weight:700; border-radius:4px; padding:1px 7px; }
+  .tag.us { background:var(--us-bg); color:var(--us); } .tag.sn { background:var(--sn-bg); color:var(--sn); } .tag.eq { background:var(--eq-bg); color:var(--eq); }
+  .note { color:var(--muted); font-size:12.5px; }
+  .legend { color:var(--muted); font-size:12.5px; }
+  .src { font-size:12.5px; color:var(--muted); }
+  .src a { color:var(--us); }
+  @media print { .tools, .top a.btn { display:none; } body { background:#fff; } .card, .kpi { break-inside:avoid; } th { position:static; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><a href="/reports.html">← Reports</a><span style="flex:1"></span><a href="#" class="btn" onclick="window.print();return false">🖨 Print / save as PDF</a></div>
+  <h1>Hayat Asset Management vs Snipe-IT</h1>
+  <p class="sub">Feature-by-feature comparison · 19 Nov 2026 · Snipe-IT v8.8 (open-source edition, GitHub <code>grokability/snipe-it</code>)</p>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="two">
+    <div class="card">
+      <h2>🟦 Where our app is stronger</h2>
+      <ul>
+        <li><b>Built around how Hayat works</b>: 3 countries with per-country scope, cost centres, HR + IT teams, SAP holder-change list and locks.</li>
+        <li><b>Microsoft 365 / Intune / Entra / AD checks</b>: compares devices with assets, shows last sign-in and compliance, lists M365 licences to reclaim, and finds AD accounts to check.</li>
+        <li><b>Leavers process</b>: a return checklist (assets, Intune device, M365 licence, AD account) and 7-day recovery per country.</li>
+        <li><b>Network and server side</b>: network map with topology, ports, VLANs, racks and floor plans with AP and fibre cables. Server inventory shows used / stock from the mapping. Virtual servers include NetBackup results. System Health has live monitoring.</li>
+        <li><b>Management reporting</b>: KPIs per asset type × country, budget tracking, and Excel / PDF / HTML reports with charts. Data-quality checks are in Needs Attention.</li>
+        <li><b>Excel round trip</b>: download an inventory, edit it in Excel and upload it to sync.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>🟧 Where Snipe-IT is stronger</h2>
+      <ul>
+        <li><b>More kinds of items</b>: accessories, consumables, components and pre-defined kits, each with its own stock count. Users can request assets.</li>
+        <li><b>Check-out / check-in workflow</b>: assign to a user, location or asset. Users accept with a EULA, and Slack, Teams or email messages go out on each check-out.</li>
+        <li><b>Integrations</b>: full public JSON REST API. Live LDAP / AD login and sync, SAML SSO and SCIM provisioning. About 25 MDM / RMM sync adapters, including Microsoft Intune, Jamf and Apple Business Manager, that update records automatically.</li>
+        <li><b>Flexibility</b>: custom fields and fieldsets for each category, plus multiple depreciation schedules. It is translated into more than 55 languages.</li>
+        <li><b>Maturity</b>: a large open-source community (300+ contributors) with frequent releases, a Docker image and one-click backups.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Feature table</h2>
+    <div class="tools">
+      <input id="q" type="search" placeholder="Search a feature…">
+      <span id="flt"></span>
+    </div>
+    <div class="legend" style="margin-bottom:8px"><span class="m y">✔</span>has it &nbsp; <span class="m p">◐</span>partly / with a workaround &nbsp; <span class="m n">✘</span>not available (natively)</div>
+    <div style="overflow:auto"><table><thead><tr><th>Feature</th><th>Hayat app</th><th>Snipe-IT</th><th>Edge</th></tr></thead><tbody id="tb"></tbody></table></div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2>💰 Cost &amp; running it</h2>
+      <ul>
+        <li><b>Hayat app</b>: built in-house. It runs on the current Render web service and Turso database. There is no licence fee; the cost is hosting plus IT time for changes. New needs, such as the network map or the leavers checklist, can be added within days.</li>
+        <li><b>Snipe-IT self-hosted</b>: free and open source under the <b>AGPL-3.0</b> licence. It needs our own server (PHP 8.2, Laravel 12, MySQL / MariaDB) and someone to install, upgrade and back it up. Changing its code means keeping a fork.</li>
+        <li><b>Snipe-IT hosted (cloud)</b>: a paid yearly subscription priced by number of assets. Check the current tiers at <a href="https://snipeitapp.com/pricing" target="_blank" rel="noopener">snipeitapp.com/pricing</a>; they were not read for this report. Some add-ons that need files on the server do not work on the hosted version.</li>
+        <li><b>Moving to Snipe-IT</b> means re-importing every asset by CSV. Hayat-specific parts would have no place there and would be lost or need custom fields / separate tools: network map, budget, KPIs, leavers, M365 reclaim, SAP locks, servers / VMs / backups.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>✅ Recommendation</h2>
+      <ul>
+        <li><b>Keep the Hayat app</b> as the main system. Most of what we use every day (country scope, HR leavers flow, Microsoft checks, network and server mapping, budget, KPIs) is not in Snipe-IT.</li>
+        <li><b>Ideas worth borrowing from Snipe-IT</b>, by value:
+          <ol style="padding-left:18px;margin:4px 0 0">
+            <li>An <b>Accessories / consumables</b> list with stock counts: mice, headsets, adapters, toner.</li>
+            <li><b>Automatic Intune sync</b> through the Microsoft Graph API instead of uploading exports.</li>
+            <li><b>Email notice on handover</b> with an acceptance link. Our e-signed PDF already covers the signature.</li>
+            <li><b>Microsoft (Entra) single sign-on</b> instead of local passwords.</li>
+            <li><b>Kits</b>: a standard new-joiner bundle (laptop, bag, mouse, headset) handed over in one step.</li>
+          </ol></li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="src">Sources for Snipe-IT: the official README, LICENSE (AGPL-3.0), <code>composer.json</code> and route files of <a href="https://github.com/grokability/snipe-it" target="_blank" rel="noopener">github.com/grokability/snipe-it</a> (read 19 Nov 2026), plus its public documentation. Snipe-IT's website could not be reached from the build environment, so hosted prices are not quoted. Our app: the current production feature set (see the Dashboard's "New app function update").</p>
+</div>
+
+<script>
+// [feature, ours (y/p/n), ours note, snipe (y/p/n), snipe note]
+const G = [
+ ['Core inventory', [
+  ['Hardware asset register', 'y', 'Asset Inventory: 3 countries, filters by type / location / status / department, Needs Attention data checks', 'y', 'Hardware assets with models, categories, status labels, locations'],
+  ['Custom fields', 'n', 'Fixed column set (added by IT in code)', 'y', 'Custom fields + fieldsets per model / category'],
+  ['Accessories, consumables, components', 'p', 'Spare parts of broken laptops only', 'y', 'Separate modules with stock quantities and minimum-stock alerts'],
+  ['Kits (bundles)', 'n', '', 'y', 'Pre-defined kits for faster check-out'],
+  ['Software licences', 'y', 'Seats, users, renewal dates', 'y', 'Seats, check-out to users / assets, expiry'],
+  ['Microsoft 365 licence reclaim', 'y', 'Leavers still licensed, inactive 30–180 days, never active — per country', 'n', ''],
+  ['Server inventory', 'y', 'Separate list; spec popup; used / stock computed from the network mapping', 'p', 'As ordinary assets with custom fields'],
+  ['Virtual servers + backups', 'y', 'VM list with status; NetBackup report results per VM', 'n', ''],
+  ['Multi-company / country scope', 'y', 'Users limited to one or more countries; regional admins', 'y', 'Multiple companies with full company support'],
+ ]],
+ ['People & lifecycle', [
+  ['User / personnel list', 'y', 'User Inventory with HR fields (user type, leaving date), cost centre and AD department, employee ID', 'y', 'Users with departments, managers, locations'],
+  ['AD / LDAP', 'p', 'AD export upload (department, employee ID, last logon), matched to people', 'y', 'Live AD / LDAP login and scheduled user sync, Google Secure LDAP'],
+  ['SAML SSO / SCIM provisioning', 'n', 'Local accounts (scrypt passwords, roles, teams)', 'y', 'SAML SSO; SCIM for automatic provisioning'],
+  ['Check-out / check-in workflow', 'p', 'Holder fields + e-signed handover / return; History Usage log', 'y', 'Check-out to user / location / asset, expected check-in, transfer between users'],
+  ['Acceptance with signature', 'y', 'E-signed handover / return PDF (VN / EN) with SHA-256; "My devices" confirmation link', 'y', 'EULA acceptance with optional digital signature'],
+  ['Leavers / offboarding', 'y', 'Checklist: assets, Intune device, M365, AD — 7-day recovery per country', 'p', 'Check in everything a user holds; no HR / M365 / AD checklist'],
+  ['Requestable assets', 'n', '', 'y', 'Users request assets from a self-service list'],
+ ]],
+ ['Microsoft & devices', [
+  ['Intune / Entra device data', 'y', 'Upload Intune + Entra exports; compliance, last check-in / sign-in, linked to assets; differences list', 'y', 'Native Microsoft Intune sync adapter (automatic)'],
+  ['Other MDM / RMM (Jamf, ABM, NinjaOne…)', 'n', '', 'y', 'About 25 built-in sync adapters'],
+  ['User activity (AD + Intune + Entra)', 'y', 'Days since last seen across all three; who needs a check', 'n', ''],
+ ]],
+ ['Network & infrastructure', [
+  ['Network topology map', 'y', 'Per site, layered / horizontal, groups, Cisco-style icons, drag & zoom', 'n', 'Not an infrastructure tool'],
+  ['Switch ports, VLANs, cable trace', 'y', 'Editable ports with mirrored far end, VLANs, patch panels, port log, workbook import', 'n', ''],
+  ['Racks', 'y', 'Rack layouts linked to devices; highlight where a device sits', 'n', ''],
+  ['Floor plans / site drawings', 'y', 'AP and cabinet pins, AP→cabinet and fibre cables, links between drawings', 'p', 'Location records with an image'],
+  ['Live system health monitoring', 'y', 'SNMP / ping / HTTP collector, status history', 'n', ''],
+ ]],
+ ['Audit, maintenance & finance', [
+  ['QR labels', 'y', 'Label printing with purpose log; every scan logged', 'y', 'Labels with QR / barcodes, many label formats'],
+  ['Stocktake / audit', 'y', 'Phone QR stocktake by campaign; found / elsewhere / missing; ghost assets in KPIs', 'y', 'Audit with due / overdue dates, scan to audit'],
+  ['Maintenance & warranty', 'y', 'Maintenance log for assets & servers; warranty due; broken laptop parts check', 'y', 'Asset maintenances (repair, upgrade, PAT test…) with cost; warranty'],
+  ['Depreciation', 'y', 'Straight line, years per country; book value per asset', 'y', 'Multiple depreciation schedules, depreciation report'],
+  ['Budget tracking', 'y', 'Approved budget vs actual / forecast per country & year; Excel round trip', 'n', ''],
+  ['Change history', 'y', 'History Usage, holder locks, SAP update list, deleted-items restore', 'y', 'Activity log on every item'],
+ ]],
+ ['Reports & integration', [
+  ['Reports', 'y', '20+ reports as Excel dashboards with charts, PDF and interactive HTML', 'p', 'Activity, custom asset report, audit, depreciation, licences, maintenances, unaccepted — mainly CSV'],
+  ['KPI dashboard', 'y', 'Utilisation, ghost assets, data quality, repair time, leaver recovery per country', 'n', ''],
+  ['Import / bulk update', 'y', 'Excel download → edit → upload sync; AD, Intune, workbook, NetBackup imports', 'y', 'CSV importer for all item types'],
+  ['Public REST API', 'p', 'Internal JSON API (session login) — no API tokens for other systems', 'y', 'Full JSON REST API with personal tokens'],
+  ['Notifications', 'p', 'In-app alerts per audience and region', 'y', 'Email, Slack, Teams on check-out / check-in, expiring items'],
+  ['Languages', 'p', 'English UI; handover PDF in VN / EN', 'y', '55+ languages, per user'],
+  ['Mobile use', 'y', 'Phone layout; QR scan and stocktake by phone', 'y', 'Mobile-friendly web UI'],
+  ['Backups', 'p', 'Script backup / restore (all tables to JSON) + hosted DB', 'y', 'One-click or scheduled backups in the UI'],
+ ]],
+];
+const M = { y: '✔', p: '◐', n: '✘' };
+const score = { y: 2, p: 1, n: 0 };
+const edge = (a, b) => score[a] > score[b] ? 'us' : score[a] < score[b] ? 'sn' : 'eq';
+const EL = { us: 'Hayat app', sn: 'Snipe-IT', eq: 'Even' };
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let only = '', q = '';
+const all = G.flatMap(([, rows]) => rows.map(r => edge(r[1], r[3])));
+const n = (k) => all.filter(e => e === k).length;
+function kpis() {
+  document.getElementById('kpis').innerHTML = [['', all.length, 'features compared', ''], ['us', n('us'), 'better in our app', 'us'], ['sn', n('sn'), 'better in Snipe-IT', 'sn'], ['eq', n('eq'), 'about even', 'eq']]
+    .map(([k, v, l, c]) => `<div class="kpi ${c} ${only === k ? 'on' : ''}" data-k="${k}"><b>${v}</b><span>${l}</span></div>`).join('');
+  document.querySelectorAll('.kpi').forEach(d => d.onclick = () => { only = d.dataset.k; draw(); });
+  document.getElementById('flt').innerHTML = [['', 'All'], ['us', 'Hayat app better'], ['sn', 'Snipe-IT better'], ['eq', 'Even']]
+    .map(([k, l]) => `<button class="${only === k ? 'on' : ''}" data-k="${k}">${l}</button>`).join(' ');
+  document.querySelectorAll('#flt button').forEach(b => b.onclick = () => { only = b.dataset.k; draw(); });
+}
+function draw() {
+  kpis();
+  const cell = (m, t) => `<span class="m ${m}">${M[m]}</span>${t ? `<span class="note">${esc(t)}</span>` : ''}`;
+  let h = '';
+  for (const [g, rows] of G) {
+    const list = rows.filter(r => (!only || edge(r[1], r[3]) === only) && (!q || r.join(' ').toLowerCase().includes(q)));
+    if (!list.length) continue;
+    h += `<tr class="grp"><td colspan="4">${esc(g)}</td></tr>` + list.map(r => { const e = edge(r[1], r[3]);
+      return `<tr><td class="f">${esc(r[0])}</td><td class="c">${cell(r[1], r[2])}</td><td class="c">${cell(r[3], r[4])}</td><td class="w"><span class="tag ${e}">${EL[e]}</span></td></tr>`; }).join('');
+  }
+  document.getElementById('tb').innerHTML = h || '<tr><td colspan="4" class="note">No feature matches.</td></tr>';
+}
+document.getElementById('q').oninput = (e) => { q = e.target.value.trim().toLowerCase(); draw(); };
+draw();
+</script>
+</body>
+</html>

@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-19",
+    "title": "Reports: our app vs Snipe-IT comparison (HTML)",
+    "items": [
+      "New report in Reports → Overview: \"Our app vs Snipe-IT\" opens an HTML page comparing 38 features side by side (✔ / ◐ / ✘ with notes), with counts of where each is stronger, search and filters.",
+      "Also covers cost and running it (Snipe-IT is free AGPL-3.0 self-hosted or a paid hosted plan), a recommendation, and ideas worth borrowing (accessories / consumables, automatic Intune sync, email on handover, Microsoft single sign-on, kits). Print / save as PDF from the page."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "User Inventory: AD department and cost-center department side by side, never mixed",
     "items": [
       "The Department column shows two separate lines: AD — the department in the AD user list (e.g. Sales), and Cost center — the department that goes with the cost-center number (e.g. HV - Distributor - North Vietnam), with its ✏️ edit button. The cost-center number stays in its own column.",

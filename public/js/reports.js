@@ -1,6 +1,7 @@
 /* Reports & Export page logic */
 
 const REPORTS = [
+  { group: 'Overview', id: 'snipeit', title: 'Our app vs Snipe-IT', desc: 'Feature-by-feature comparison with the open-source Snipe-IT: where each is stronger, cost & running it, ideas to borrow.', href: '/snipeit-comparison.html' },
   { group: 'Overview', id: 'kpi', title: 'KPIs', desc: 'Utilisation and data quality by asset type × country; ghost assets, repair time, leaver recovery and depreciation per country.' },
   { group: 'Inventory', id: 'assets',   title: 'Asset Inventory',  desc: 'Every field we hold, keyed by ID — edit & re-upload below to sync.' },
   { group: 'Inventory', id: 'users',    title: 'User Inventory',   desc: 'All people, keyed by ID — edit & re-upload below to sync.' },
@@ -31,10 +32,11 @@ function card(r) {
   return `<div class="rep-row">
     <div class="rep-info"><div class="rep-name">${r.title}${r.admin ? ' <span class="rep-tag">admins</span>' : r.teams ? ` <span class="rep-tag">${r.teams.join(' & ')}</span>` : ''}</div>
       <div class="rep-desc">${r.desc}</div></div>
-    <div class="rep-btns">
+    <div class="rep-btns">${r.href ? `
+      <a class="btn btn-sm rep-html" href="${r.href}" target="_blank" rel="noopener" title="Open the comparison page (print / save as PDF from there)">🌐 HTML</a>` : `
       <a class="btn btn-sm rep-xlsx" href="/api/reports/${r.id}.xlsx?t=${t}" download title="Dashboard with charts + raw data sheets">📊 Excel</a>
       <a class="btn btn-sm rep-pdf" href="/api/reports/${r.id}.pdf?t=${t}" download title="Dashboard with charts">📄 PDF</a>
-      <a class="btn btn-sm rep-html" href="/api/reports/${r.id}.html?t=${t}" target="_blank" rel="noopener" title="Interactive page: switch country, sort, hover the bars, search the data, CSV">🌐 HTML</a>
+      <a class="btn btn-sm rep-html" href="/api/reports/${r.id}.html?t=${t}" target="_blank" rel="noopener" title="Interactive page: switch country, sort, hover the bars, search the data, CSV">🌐 HTML</a>`}
     </div>
   </div>`;
 }
