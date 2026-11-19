@@ -19,8 +19,8 @@ function normCountry(c) {
   const uniq = [...new Set(list)];
   return uniq.length ? uniq.join(',') : null;
 }
-// Team: 'IT' / 'HR' / null (none).
-function normTeam(t) { return (t === 'IT' || t === 'HR') ? t : null; }
+// Team: 'IT' / 'HR' / 'OT' (Operation Technology — Network map OT view only, no Asset Inventory) / null (none).
+function normTeam(t) { return (t === 'IT' || t === 'HR' || t === 'OT') ? t : null; }
 // Asset Inventory access flag (0 = User-Inventory-only, e.g. HR-only members).
 function normAccess(v) { return (v === 0 || v === '0' || v === false || v === 'false') ? 0 : 1; }
 
@@ -48,7 +48,7 @@ router.post('/', wrap(async (req, res) => {
 
   const result = await run(
     'INSERT INTO users (username, full_name, password_hash, role, country, team, asset_access) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [username.trim(), full_name.trim(), hashPassword(password), role, normCountry(country), normTeam(team), normAccess(asset_access)]
+    [username.trim(), full_name.trim(), hashPassword(password), normTeam(team) === 'OT' ? 'viewer' : role, normCountry(country), normTeam(team), normTeam(team) === 'OT' ? 0 : normAccess(asset_access)]
   );
   await audit(req.user, 'USER', null, `Created login "${username.trim()}" — ${role}${normTeam(team) ? `, team ${normTeam(team)}` : ''}, ${normCountry(country) || 'all countries'}`);
   res.status(201).json(await get('SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [result.lastInsertRowid]));
@@ -64,7 +64,8 @@ router.put('/:id', wrap(async (req, res) => {
     return res.status(400).json({ error: 'Invalid role' });
   }
 
-  const newRole = role || user.role;
+  const teamNext = ('team' in req.body) ? normTeam(req.body.team) : (user.team || null);
+  const newRole = teamNext === 'OT' ? 'viewer' : (role || user.role);   // OT members are always viewers
   const newCountry = (country !== undefined) ? normCountry(country) : (user.country || null);
   const wasGlobalAdmin = user.role === 'admin' && !user.country;
   const willBeGlobalAdmin = newRole === 'admin' && !newCountry;
@@ -75,7 +76,8 @@ router.put('/:id', wrap(async (req, res) => {
   }
 
   const newTeam   = ('team' in req.body) ? normTeam(req.body.team) : (user.team || null);
-  const newAccess = ('asset_access' in req.body) ? normAccess(req.body.asset_access) : user.asset_access;
+  // OT members only read the Network map (OT view): never Asset Inventory, never more than viewer.
+  const newAccess = newTeam === 'OT' ? 0 : ('asset_access' in req.body) ? normAccess(req.body.asset_access) : user.asset_access;
   await run('UPDATE users SET full_name = ?, role = ?, country = ?, team = ?, asset_access = ? WHERE id = ?',
             [full_name !== undefined ? full_name : user.full_name, newRole, newCountry, newTeam, newAccess, req.params.id]);
 

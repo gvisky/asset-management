@@ -12,6 +12,8 @@ router.use(requireAuth);
 //  - audience 'all', or matching the user's team (IT/HR)
 //  - country NULL (global), or matching a region-scoped user's country
 function visibility(req) {
+  // OT members only use the Network map: they see notifications addressed to the OT team, nothing else.
+  if (req.user.team === 'OT') return { clause: "audience = 'OT'", params: [] };
   const conds = ["(audience = 'all'"];
   const params = [];
   if (req.user.team) { conds[0] += ' OR audience = ?'; params.push(req.user.team); }

@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-19",
+    "title": "Network map: OT view for the Operation Technology team",
+    "items": [
+      "New team OT (Users & Audit → team \"OT member\"): OT logins see only the Network map, read-only, in its OT view — the Kabin switches (IT-KABIN, HARICI KABIN, CCTV …, card-reader switches) with every port and what is connected to them (cameras, Matrix access control, …), the core / distribution switches they uplink to (only those uplink ports), the VLANs in use there and their port changes. No Asset Inventory, racks, drawings, search or other pages; OT logins are always viewers.",
+      "IT team: an IT view / OT view switch next to the site lets you check exactly what OT sees. Each device has \"OT team can see it?\" (Automatic / Yes / No) in ✏️ Device, and switches shown to OT carry an OT badge in the list.",
+      "Server Inventory OT devices will follow when the data file is ready."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "♻ Stock & disposal: return → ready-to-reuse flow and disposal / write-off records",
     "items": [
       "New button ♻ Stock & disposal on Asset Inventory. 🔄 Return → ready to reuse: a board of Stock assets — Returned → Wiped → Checked (condition grade A / B / C, optional photo) → Ready to reuse, with \"Ready today\" per asset type. A signed ↩ Return to Stock (or setting an Active asset to Stock) puts it in Returned; a ✍ Hand over takes it out.",

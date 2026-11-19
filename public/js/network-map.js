@@ -30,8 +30,13 @@ const NM = (() => {
   const known = (h) => byHost.has(h);
 
   // ── Data ──────────────────────────────────────────────────────────────────
+  // OT view (Operation Technology): only the Kabin switches and what is cabled to them, read-only. The OT team always
+  // gets it; the IT team can switch between the IT and OT views to check what OT sees.
+  let otMode = localStorage.getItem('nm-view') === 'ot';
   async function load(site) {
-    D = await apiGet('/api/netmap' + (site != null ? '?site=' + encodeURIComponent(site) : ''));
+    const qs = new URLSearchParams(); if (site != null) qs.set('site', site); if (otMode) qs.set('view', 'ot');
+    D = await apiGet('/api/netmap' + (qs.toString() ? '?' + qs : ''));
+    applyView();
     byHost = new Map(D.devices.map(d => [d.hostname, d])); byId = new Map(D.devices.map(d => [d.id, d]));
     portsOf = new Map(); for (const p of D.ports) { if (!portsOf.has(p.device_id)) portsOf.set(p.device_id, []); portsOf.get(p.device_id).push(p); }
     for (const l of portsOf.values()) l.sort((a, b) => natural(a.port, b.port));
@@ -39,10 +44,22 @@ const NM = (() => {
     $('nm-import').style.display = D.can.admin ? '' : 'none';
     $('nm-import-x').style.display = D.can.admin ? '' : 'none';
     $('nm-add').style.display = D.can.edit && D.site ? '' : 'none';
-    $('nm-sub').textContent = D.devices.length ? `· ${D.devices.length} devices · ${D.ports.length} ports · ${links().length} links` : '· ports & links';
+    $('nm-sub').textContent = D.devices.length ? `${D.view === 'ot' ? '· OT view ' : ''}· ${D.devices.length} devices · ${D.ports.length} ports · ${links().length} links` : '· ports & links';
     if (sel && !byId.has(sel)) sel = null;
     autoPlace(false); renderList(); renderTopo(); renderDevice();
     if (!D.devices.length) $('nm-svg').innerHTML = `<text x="800" y="420" text-anchor="middle" font-size="22" fill="#64748b">${D.can.admin ? 'No devices yet — ⬆ Import the implementation document (.docx) or + add devices' : 'No devices yet'}</text>`;
+  }
+
+  function applyView() {
+    const ot = D.view === 'ot', team = D.team || {};
+    document.querySelectorAll('.nm-tools .nm-tabs button[data-v="rack"], .nm-tools .nm-tabs button[data-v="draw"]').forEach(b => { b.style.display = ot ? 'none' : ''; });
+    if (ot && (!$('nm-view-rack').hidden || !$('nm-view-draw').hidden)) tab('topo');
+    [...$('nm-mode').options].forEach(o => { o.hidden = ot && (o.value === 'physical' || o.value === 'system'); });
+    if (ot && (mode === 'physical' || mode === 'system')) { mode = 'map'; $('nm-mode').value = 'map'; }
+    $('nm-ot').innerHTML = team.isIT ? `<span class="nm-tabs small" title="OT view = what the OT team sees: Kabin switches and what is connected to them"><button class="${ot ? '' : 'on'}" data-o="it">IT view</button><button class="${ot ? 'on' : ''}" data-o="ot">OT view</button></span>`
+      : ot ? '<span class="nm-otbadge" title="Kabin switches (IT / CCTV Kabin) and the devices connected to them">OT view</span>' : '';
+    $('nm-ot').querySelectorAll('button[data-o]').forEach(b => { b.onclick = () => { otMode = b.dataset.o === 'ot'; localStorage.setItem('nm-view', otMode ? 'ot' : 'it'); sel = null; load(D.site).then(fit); }; });
+    document.body.classList.toggle('nm-is-ot', ot);
   }
 
   // Links between two devices of the site (each pair of ports once).
@@ -71,7 +88,7 @@ const NM = (() => {
     $('nm-list').innerHTML = [...groups.entries()].sort((a, b) => (TIER[a[0]] ?? 9) - (TIER[b[0]] ?? 9)).map(([r, list]) => `
       <div class="nm-grp${grp === r ? ' on' : ''}" style="--gc:${gcol(r)}"><div class="nm-grp-h" onclick="NM.group(${jsArg(r)})" title="Show this group on the map (click again to show all)">${icon(r, 0, 0, 18, true)} ${esc(r)} <span>${grp === r ? '✕ ' : ''}${list.length}</span></div>
       ${list.sort((a, b) => natural(a.hostname, b.hostname)).map(d => { const s = stats(d); return `<div class="nm-item${sel === d.id ? ' on' : ''}" onclick="NM.select(${d.id}, true)">
-        <b>${esc(d.hostname)}</b><div class="text-muted text-sm">${esc(d.alias || d.model || '')}</div>
+        <b>${esc(d.hostname)}</b>${D.view === 'it' && d.ot_on ? ' <span class="nm-otb" title="Shown to the OT team">OT</span>' : ''}${d.ot_context ? ' <span class="nm-otb ctx" title="Uplink switch, shown so the Kabins connect on the map: only its ports to Kabin switches">uplink</span>' : ''}<div class="text-muted text-sm">${esc(d.alias || d.model || '')}</div>
         <div class="nm-mini">${s.dev ? `<i class="m-dev">${s.dev}</i>` : ''}${s.end ? `<i class="m-end">${s.end}</i>` : ''}<i class="m-tot">${s.total}</i></div></div>`; }).join('')}</div>`).join('')
       || '<p class="text-muted" style="padding:12px">No devices.</p>';
   }
@@ -328,7 +345,8 @@ const NM = (() => {
         <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}${live(d) ? '' : ' <span class="nm-retired">Retired — not in use</span>'}</div>
           <div class="text-muted text-sm">${esc([d.alias, d.role, d.model].filter(Boolean).join(' · '))}</div>
           <div class="text-sm">${d.mgmt_ip ? `IP <b>${esc(d.mgmt_ip)}</b> · ` : ''}${d.mac ? `MAC <b>${esc(d.mac)}</b> · ` : ''}${esc(d.location || '')}${d.serial ? ` · S/N ${esc(d.serial)}` : ''}${d.service_tag && d.service_tag !== d.serial ? ` · tag ${esc(d.service_tag)}` : ''}</div>
-          ${ipList(d)}<div class="text-sm"><a href="#" onclick="NM.showInRack();return false">🗄 Show where it is in the racks</a></div>${d.server_id ? `<div class="text-sm"><a href="/server-inventory.html?view=${d.server_id}">📦 Server Inventory record #${d.server_id}</a></div>` : ''}</div>
+          ${ipList(d)}${D.view === 'ot' ? (d.ot_context ? '<div class="text-sm text-muted">Uplink switch — only its ports to the Kabin switches are shown.</div>' : '')
+            : `<div class="text-sm"><a href="#" onclick="NM.showInRack();return false">🗄 Show where it is in the racks</a>${d.ot_on ? ' · <span class="nm-otb" title="The OT team sees this switch and everything connected to it">visible to OT</span>' : ''}</div>${d.server_id ? `<div class="text-sm"><a href="/server-inventory.html?view=${d.server_id}">📦 Server Inventory record #${d.server_id}</a></div>` : ''}`}</div>
         <span style="flex:1"></span>
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.editDevice(${d.id})">✏️ Device</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="NM.showLog(${jsArg(d.hostname)})">🕓 Changes</button></div>
@@ -406,6 +424,8 @@ const NM = (() => {
     $('nm-dev-b').innerHTML = `<div class="qe-grid">${f('hostname', 'Hostname *', 'e.g. MR-01/ASW-06')}${f('alias', 'Name / description')}
       <div class="form-group"><label class="form-label">Role</label><select class="form-control" id="nd-role">${ROLES.map(r => `<option${r === d.role ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
       ${f('model', 'Model', 'e.g. C9200L-48P-4X-E')}${f('mgmt_ip', 'Management IP')}${f('mac', 'MAC address', 'e.g. 68:9E:0B:8A:E3:78')}${f('location', 'Location / rack', 'e.g. MAIN RACK - 01 (U38)')}${f('serial', 'Serial')}${f('notes', 'Notes')}
+      ${id ? `<div class="form-group"><label class="form-label">OT team can see it?</label><select class="form-control" id="nd-ot">
+        <option value=""${d.ot == null ? ' selected' : ''}>Automatic — ${d.ot_auto ? 'yes (Kabin / CCTV / card-reader switch)' : 'no'}</option><option value="1"${d.ot === 1 ? ' selected' : ''}>Yes — always show to OT</option><option value="0"${d.ot === 0 ? ' selected' : ''}>No — never show to OT</option></select></div>` : ''}
       ${id ? `<div class="form-group"><label class="form-label">In use?</label><select class="form-control" id="nd-state"><option value="">In use</option><option value="retired"${d.state === 'retired' ? ' selected' : ''}>Retired — stays in the rack, hidden from the topology</option></select></div>` : ''}
       ${id ? '' : `<div class="form-group"><label class="form-label">Ports: name before the number</label><input class="form-control" id="nd-prefix" placeholder="e.g. GE 1/0/"></div>
         <div class="form-group"><label class="form-label">How many</label><input class="form-control" id="nd-count" type="number" min="0" max="96" placeholder="48"></div>`}</div>`;
@@ -417,6 +437,7 @@ const NM = (() => {
     const v = (k) => ($('nd-' + k) ? $('nd-' + k).value.trim() : '');
     const body = { site: D.site, hostname: v('hostname'), alias: v('alias'), role: v('role'), model: v('model'), serial: v('serial'), mgmt_ip: v('mgmt_ip'), mac: v('mac'), location: v('location'), notes: v('notes'), port_prefix: v('prefix'), port_count: v('count') };
     if (id && $('nd-state')) body.state = $('nd-state').value;
+    if (id && $('nd-ot')) body.ot = $('nd-ot').value === '' ? null : Number($('nd-ot').value);
     try {
       const r = id ? await apiPut('/api/netmap/device/' + id, body) : await apiPost('/api/netmap/device', body);
       $('nm-dev-ov').classList.remove('open'); showToast('Saved'); await load(D.site); select(r.id);

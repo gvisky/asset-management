@@ -20,9 +20,32 @@ const { requireAuth } = require('../middleware/auth');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 router.use(requireAuth);
-router.use((req, res, next) => (req.user && req.user.asset_access !== 0 ? next() : res.status(403).json({ error: 'No access' })));
-const canEdit = (req) => ['admin', 'editor'].includes(req.user.role);
-const isAdmin = (req) => req.user.role === 'admin';
+// Asset users, and the OT team (Operation Technology) — OT only reads, and only its OT view.
+const isOT = (req) => !!req.user && req.user.team === 'OT';
+router.use((req, res, next) => (req.user && (req.user.asset_access !== 0 || isOT(req)) ? next() : res.status(403).json({ error: 'No access' })));
+const canEdit = (req) => ['admin', 'editor'].includes(req.user.role) && !isOT(req);
+const isAdmin = (req) => req.user.role === 'admin' && !isOT(req);
+// OT view: the Kabin switches (IT-KABIN, HARICI KABIN, CCTV …, card readers) and everything cabled to them. A device's "ot"
+// column overrides the rule (1 = show, 0 = hide). IT can preview it with ?view=ot.
+const otView = (req) => isOT(req) || req.query.view === 'ot';
+const otAuto = (d) => /switch/i.test(d.role || '') && (/KABIN/i.test(d.location || '') || /CCTV|CAMERA|CARD.?READER|ACCESS.?CONTROL|SECURITY/i.test(`${d.hostname} ${d.alias || ''}`));
+const otOn = (d) => (d.ot === 1 ? true : d.ot === 0 ? false : otAuto(d));
+// Only the OT team's part of a site: OT switches with all their ports, plus the core / distribution switches they uplink to
+// (only the ports that lead to an OT switch), so the topology still shows how the Kabins hang together.
+function otSlice(devices, ports) {
+  const vis = devices.filter(d => d.state !== 'retired' && otOn(d));
+  const visIds = new Set(vis.map(d => d.id)), visHosts = new Set(vis.map(d => d.hostname));
+  const byHost = new Map(devices.map(d => [d.hostname, d]));
+  const ctx = new Map();
+  for (const p of ports) if (visIds.has(p.device_id) && p.peer_host && !visHosts.has(p.peer_host)) {
+    const d = byHost.get(p.peer_host);
+    if (d && d.state !== 'retired' && /core|distribution/i.test(d.role || '')) ctx.set(d.id, d);
+  }
+  const outPorts = ports.filter(p => visIds.has(p.device_id) || (ctx.has(p.device_id) && visHosts.has(p.peer_host)));
+  const strip = (d, context) => ({ id: d.id, site: d.site, hostname: d.hostname, alias: d.alias, role: d.role, model: d.model, serial: context ? '' : d.serial,
+    mgmt_ip: d.mgmt_ip, mac: context ? '' : d.mac, location: d.location, notes: context ? '' : d.notes, x: d.x, y: d.y, state: d.state, ips: context ? '' : d.ips, ot_context: context ? 1 : 0 });
+  return { devices: [...vis.map(d => strip(d, false)), ...[...ctx.values()].map(d => strip(d, true))], ports: outPorts };
+}
 const str = (v, n = 120) => String(v == null ? '' : v).trim().slice(0, n);
 // MAC address in one spelling: 68:9e:0b:8a:e3:78, 689E.0B8A.E378, 68-9E-… → 68:9E:0B:8A:E3:78 (anything else kept as typed).
 const macNorm = (v) => { const h = String(v || '').replace(/[^0-9a-f]/gi, ''); return h.length === 12 && /^[\s0-9a-f:.-]+$/i.test(String(v).trim()) ? h.toUpperCase().match(/../g).join(':') : str(v, 40); };
@@ -34,11 +57,23 @@ const desc = (p) => (p && (p.peer_host || p.peer_port || p.patch) ? `${p.peer_ho
 router.get('/', wrap(async (req, res) => {
   const sites = (await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY site')).map(r => ({ site: r.site, devices: r.n }));
   const site = req.query.site != null ? str(req.query.site, 80) : (sites[0] ? sites[0].site : '');
-  const devices = await all('SELECT * FROM net_devices WHERE site = ? ORDER BY hostname', [site]);
-  const ports = devices.length ? await all(`SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ? ORDER BY p.device_id, p.sort, p.port`, [site]) : [];
-  const vlans = await all('SELECT * FROM net_vlans WHERE site = ? ORDER BY CAST(vlan AS INTEGER)', [site]);
-  const patches = await all('SELECT panel, port, outlet, note FROM net_patch_ports WHERE site = ? ORDER BY panel, port', [site]);
-  res.json({ site, sites, devices, ports, vlans, patches, can: { edit: canEdit(req), admin: isAdmin(req) } });
+  let devices = await all('SELECT * FROM net_devices WHERE site = ? ORDER BY hostname', [site]);
+  let ports = devices.length ? await all(`SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ? ORDER BY p.device_id, p.sort, p.port`, [site]) : [];
+  let vlans = await all('SELECT * FROM net_vlans WHERE site = ? ORDER BY CAST(vlan AS INTEGER)', [site]);
+  let patches = await all('SELECT panel, port, outlet, note FROM net_patch_ports WHERE site = ? ORDER BY panel, port', [site]);
+  const team = { isOT: isOT(req), isIT: req.user.team === 'IT' };
+  if (otView(req)) {
+    // Read-only slice for the OT team (or IT previewing it): no racks, drawings, patch panels or other devices.
+    const sl = otSlice(devices, ports);
+    const used = new Set(); sl.ports.forEach(p => String(p.vlan || '').split(/[,\s]+/).filter(Boolean).forEach(v => used.add(v)));
+    const otSites = [];
+    for (const s2 of sites) { const n = s2.site === site ? sl.devices.filter(d => !d.ot_context).length
+      : (await all('SELECT * FROM net_devices WHERE site = ?', [s2.site])).filter(d => d.state !== 'retired' && otOn(d)).length; if (n) otSites.push({ site: s2.site, devices: n }); }
+    return res.json({ site, sites: otSites, devices: sl.devices, ports: sl.ports, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
+      can: { edit: false, admin: false }, team });
+  }
+  devices = devices.map(d => ({ ...d, ot_on: otOn(d) ? 1 : 0, ot_auto: otAuto(d) ? 1 : 0 }));
+  res.json({ site, sites, devices, ports, vlans, patches, view: 'it', can: { edit: canEdit(req), admin: isAdmin(req) }, team });
 }));
 
 router.post('/import', wrap(async (req, res) => {
@@ -121,6 +156,11 @@ router.put('/device/:id', wrap(async (req, res) => {
   const d = await deviceOf(req.params.id); if (!d) return res.status(404).json({ error: 'Not found' });
   const b = req.body || {};
   if ('x' in b || 'y' in b) await run('UPDATE net_devices SET x = ?, y = ? WHERE id = ?', [b.x == null ? null : Number(b.x), b.y == null ? null : Number(b.y), d.id]);
+  if ('ot' in b) {
+    const ot = b.ot === 1 || b.ot === '1' ? 1 : b.ot === 0 || b.ot === '0' ? 0 : null;
+    if (ot !== d.ot) { await run('UPDATE net_devices SET ot = ? WHERE id = ?', [ot, d.id]);
+      await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [d.site, d.hostname, '', `OT view: ${d.ot == null ? 'auto' : d.ot ? 'shown' : 'hidden'}`, `OT view: ${ot == null ? 'auto' : ot ? 'shown' : 'hidden'}`, req.user.username]); }
+  }
   if ('state' in b) {
     const st = b.state === 'retired' ? 'retired' : '';
     await run("UPDATE net_devices SET state = ?, updated_at = datetime('now') WHERE id = ?", [st, d.id]);
@@ -221,8 +261,15 @@ router.post('/port/move', wrap(async (req, res) => {
 
 router.get('/log', wrap(async (req, res) => {
   const site = str(req.query.site, 80), dev = str(req.query.device, 80);
+  if (otView(req)) {
+    const hosts = (await all('SELECT * FROM net_devices WHERE site = ?', [site])).filter(d => d.state !== 'retired' && otOn(d)).map(d => d.hostname).filter(h => !dev || h === dev);
+    if (!hosts.length) return res.json([]);
+    return res.json(await all(`SELECT * FROM net_port_log WHERE site = ? AND device IN (${hosts.map(() => '?').join(',')}) AND port <> '' ORDER BY id DESC LIMIT 300`, [site, ...hosts]));
+  }
   res.json(await all(`SELECT * FROM net_port_log WHERE site = ?${dev ? ' AND device = ?' : ''} ORDER BY id DESC LIMIT 300`, dev ? [site, dev] : [site]));
 }));
+// Everything below (Server Inventory sync, racks, drawings) is not part of the OT view.
+router.use((req, res, next) => (isOT(req) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
 
 // ── Server Inventory ← Network map (the implementation document) ───────────────
 // Matches each network device to a Server Inventory record by serial / service tag (ignoring a leading "S"

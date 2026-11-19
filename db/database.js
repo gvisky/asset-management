@@ -1328,6 +1328,8 @@ async function migrate() {
   if (!ndcols2.includes('state')) await backend.run("ALTER TABLE net_devices ADD COLUMN state TEXT DEFAULT ''");
   if (!ndcols2.includes('source')) await backend.run("ALTER TABLE net_devices ADD COLUMN source TEXT DEFAULT ''");
   if (!ndcols2.includes('mac')) await backend.run("ALTER TABLE net_devices ADD COLUMN mac TEXT DEFAULT ''");
+  // OT view of the Network map: NULL = automatic (Kabin / CCTV / card-reader switches), 1 = always shown to OT, 0 = never.
+  if (!ndcols2.includes('ot')) await backend.run('ALTER TABLE net_devices ADD COLUMN ot INTEGER DEFAULT NULL');
   // Cables drawn on a floor plan (fibre between cabinets): JSON [{ a, b, name, cores, len, path: [[x %, y %] …] }].
   const ndwcols = (await backend.all('PRAGMA table_info(net_drawings)')).map(c => c.name);
   if (!ndwcols.includes('links')) await backend.run("ALTER TABLE net_drawings ADD COLUMN links TEXT DEFAULT ''");

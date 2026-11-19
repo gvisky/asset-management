@@ -19,8 +19,9 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
       const data = await r.json().catch(() => ({}));
       throw new Error(data.error || 'Login failed');
     }
-    // Success → go to dashboard
-    window.location.href = '/';
+    // Success → go to dashboard (the OT team straight to its Network map view)
+    const me = await r.json().catch(() => ({}));
+    window.location.href = me.team === 'OT' ? '/network-map.html' : '/';
   } catch (err) {
     errEl.textContent = err.message;
     errEl.style.display = 'block';

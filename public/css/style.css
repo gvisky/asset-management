@@ -1490,3 +1490,9 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .lc-pill { font-size: 12px; font-weight: 600; border-radius: 9px; padding: 1px 9px; background: #e2e8f0; color: #334155; }
 .lc-pill.returned { background: #fef3c7; color: #92400e; } .lc-pill.wiped { background: #e0e7ff; color: #3730a3; } .lc-pill.checked { background: #cffafe; color: #155e75; } .lc-pill.ready { background: #dcfce7; color: #166534; }
 tr.lc-rest td { opacity: .55; }
+
+/* Network map — OT view */
+.nm-otb { display: inline-block; font-size: 10.5px; font-weight: 700; color: #9a3412; background: #ffedd5; border-radius: 4px; padding: 0 5px; vertical-align: 1px; }
+.nm-otb.ctx { color: #475569; background: #e2e8f0; }
+.nm-otbadge { display: inline-block; font-size: 12px; font-weight: 700; color: #fff; background: #ea580c; border-radius: 6px; padding: 3px 10px; }
+#nm-ot .nm-tabs button.on[data-o="ot"] { background: #ea580c; }
