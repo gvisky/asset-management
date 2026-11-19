@@ -475,6 +475,10 @@ async function onView(id) {
         <div id="cus-docs" class="text-muted text-sm">Loading…</div>
         <div id="qr-hist"></div>
       </div>
+      <details class="tl-box" style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px" ontoggle="if(this.open&&!this.dataset.l){this.dataset.l=1;AssetTimeline.html(${a.id}).then(h=>{document.getElementById('asset-tl').innerHTML=h})}">
+        <summary style="cursor:pointer"><strong style="font-size:13.5px">🕑 Timeline</strong> <span class="text-muted text-sm">bought, holders, handovers, repairs, scans — everything that happened to this asset</span></summary>
+        <div id="asset-tl" class="text-muted text-sm" style="margin-top:10px">Loading…</div>
+      </details>
       <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <strong style="font-size:13.5px">🔧 Maintenance &amp; Repairs</strong>
@@ -787,6 +791,8 @@ function applyUrlFilters() {
   if (assetType)  { const el = document.getElementById('filter-asset-type'); if (el) el.value = assetType; }
   // Needs Attention links (e.g. from the Dashboard) open the panel with the same country / site / type.
   const naInitial = { country: country || null, site: location, type: assetType };
+  // ?view=<id> (global search, links) → open that asset's detail.
+  if (Number(p.get('view'))) onView(Number(p.get('view')));
   if (p.get('incomplete'))    openNeedsAttention('missing', naInitial);
   else if (p.get('ad_issue')) openNeedsAttention('ad', naInitial);
 }

@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-19",
+    "title": "🔍 Search everything (Ctrl+K), 👤 person view and 🕑 asset timeline",
+    "items": [
+      "A search box in the top bar of every page (or press Ctrl+K): type a name, email, employee ID, serial, asset code, hostname, IP, MAC or switch-port name and jump straight to the asset, person, server, virtual server, network device, switch port or Intune device. You only see what you may open, in your countries.",
+      "👤 Person view (HR & IT): click a name in User Inventory or a person in the search — identity & AD (employee ID, AD department, last logon, manager), Microsoft 365 licence and last activity, their assets, Intune / Entra devices, signed handovers / returns, leaver checklist, My devices answers and changes, on one page.",
+      "🕑 Timeline in each asset's detail: bought, added, assigned, every change from History Usage, signed handovers / returns (with PDF), repairs, QR scans, photos, My devices answers and warranty end — newest first."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "Asset Inventory: 📚 Models & warranty — tidy model names, auto Asset Type, fill warranty dates",
     "items": [
       "New button 📚 Models & warranty (IT team) on Asset Inventory. 🧹 Clean-up groups the Brand/Model texts that are the same model typed in different ways (e.g. \"Lenovo IdeaPad5\", \"Laptop Lenovo IdeaPad5-MP20T1R1\" → \"Lenovo IdeaPad 5\"), with a suggested Asset Type. Tick, check, Apply: assets get the clean name (the old text, which often holds a serial or a person, is kept in Remark), empty Asset Types are filled and the model goes into the catalogue.",
