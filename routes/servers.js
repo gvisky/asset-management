@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { get, all, run, audit, notify } = require('../db/database');
+const { get, all, run, batch, audit, notify } = require('../db/database');
+const OTImport = require('../lib/ot-import');
 const { requireAuth, requireRole, requireITAdmin } = require('../middleware/auth');
 
 const { normCountry } = require('../lib/countries');
@@ -12,12 +13,20 @@ const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
 const PROTECTED_FIELDS = { serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' };
 
 router.use(requireAuth);
+// OT team (Operation Technology): read-only, and only the OT devices (it_ot = 'OT') — list, filters, one record.
+const isOT = (req) => !!req.user && req.user.team === 'OT';
 router.use((req, res, next) => {
+  if (isOT(req)) return req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path) ? next() : res.status(403).json({ error: 'OT: read-only list of OT devices' });
   if (req.user && req.user.asset_access === 0) {
     return res.status(403).json({ error: 'No access to Asset Inventory' });
   }
   next();
 });
+// IT / OT filter: ?it_ot=IT|OT (OT users always OT). IT = everything not marked OT.
+function itOtClause(req) {
+  const v = isOT(req) ? 'OT' : String(req.query.it_ot || '').toUpperCase();
+  return v === 'OT' ? "COALESCE(it_ot, '') = 'OT'" : v === 'IT' ? "COALESCE(it_ot, '') <> 'OT'" : '';
+}
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const countryFilter = (req) => countrySql(req, 'country');
@@ -30,11 +39,13 @@ router.get('/', wrap(async (req, res) => {
   const cf = countryFilter(req);
   if (cf.clause) { conditions.push(cf.clause); params.push(...cf.params); }
 
+  const io = itOtClause(req); if (io) conditions.push(io);
   if (search) {
     conditions.push(`(hostname LIKE ? OR brand_model LIKE ? OR serial_no LIKE ? OR
-      asset_code LIKE ? OR ip_address LIKE ? OR os LIKE ? OR role LIKE ? OR producer LIKE ? OR category LIKE ?)`);
+      asset_code LIKE ? OR ip_address LIKE ? OR os LIKE ? OR role LIKE ? OR producer LIKE ? OR category LIKE ?
+      OR mac LIKE ? OR REPLACE(REPLACE(mac, ':', ''), '-', '') LIKE ? OR vlan = ? OR ot_system LIKE ? OR switch_port LIKE ?)`);
     const like = `%${search}%`;
-    params.push(like, like, like, like, like, like, like, like, like);
+    params.push(like, like, like, like, like, like, like, like, like, like, `%${String(search).replace(/[^0-9a-f]/gi, '')}%`, search, like, like);
   }
   if (status)   { conditions.push('status = ?');   params.push(status); }
   if (location) { conditions.push('location = ?'); params.push(location); }
@@ -67,7 +78,8 @@ router.get('/stats', wrap(async (req, res) => {
 // ── GET /api/servers/filters ────────────────────────────────────────────────────
 router.get('/filters', wrap(async (req, res) => {
   const cf = countryFilter(req);
-  const extra = cf.clause ? ` AND ${cf.clause}` : '';
+  const io = itOtClause(req);
+  const extra = (cf.clause ? ` AND ${cf.clause}` : '') + (io ? ` AND ${io}` : '');
   const roles = (await all(`SELECT DISTINCT role AS v FROM servers WHERE deleted_at IS NULL AND role <> ''${extra} ORDER BY role COLLATE NOCASE`, cf.params)).map(r => r.v);
   const categories = (await all(`SELECT DISTINCT category AS v FROM servers WHERE deleted_at IS NULL AND category <> ''${extra} ORDER BY category COLLATE NOCASE`, cf.params)).map(r => r.v);
   const producers = (await all(`SELECT DISTINCT producer AS v FROM servers WHERE deleted_at IS NULL AND producer <> ''${extra} ORDER BY producer COLLATE NOCASE`, cf.params)).map(r => r.v);
@@ -85,7 +97,7 @@ router.get('/filters', wrap(async (req, res) => {
 router.get('/usage', wrap(async (req, res) => {
   const nm = require('./netmap'), { familyOf, normSn } = nm.util;
   const cf = countryFilter(req);
-  const servers = await all(`SELECT id, hostname, brand_model, category, serial_no, status, location, country, ip_address FROM servers WHERE deleted_at IS NULL${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
+  const servers = await all(`SELECT id, hostname, brand_model, category, serial_no, status, location, country, ip_address FROM servers WHERE deleted_at IS NULL AND COALESCE(it_ot, '') <> 'OT'${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
   const devs = await all("SELECT id, site, hostname, role, model, serial, service_tag, location, server_id, COALESCE(state, '') AS state FROM net_devices");
   const key = (sn) => normSn(sn).replace(/^0+/, '').replace(/^S(?=[A-Z]{3}\d)/, '');
   const bySn = new Map(); for (const d of devs) for (const sn of [d.serial, d.service_tag]) if (key(sn)) bySn.set(key(sn), d);
@@ -126,7 +138,7 @@ router.get('/needs-info', wrap(async (req, res) => {
   if (req.user && req.user.role === 'viewer') return res.status(403).json({ error: 'Not for viewers' });
   const cf = countryFilter(req);
   const rows = await all(`SELECT id, hostname, brand_model, category, serial_no, ip_address, location, status, country FROM servers
-      WHERE deleted_at IS NULL AND status <> 'Broken'${cf.clause ? ' AND ' + cf.clause : ''} ORDER BY category, brand_model, id`, cf.params);
+      WHERE deleted_at IS NULL AND status <> 'Broken' AND COALESCE(it_ot, '') <> 'OT'${cf.clause ? ' AND ' + cf.clause : ''} ORDER BY category, brand_model, id`, cf.params);
   let doc = null;
   try { const site = await get('SELECT site FROM net_devices GROUP BY site ORDER BY COUNT(*) DESC LIMIT 1'); if (site) doc = await require('./netmap').inventoryCheck(site.site); } catch { doc = null; }
   const sn = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -149,7 +161,7 @@ router.get('/needs-info', wrap(async (req, res) => {
 // ── GET /api/servers/:id ─────────────────────────────────────────────────────
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);
-  if (!row) return res.status(404).json({ error: 'Server not found' });
+  if (!row || (isOT(req) && row.it_ot !== 'OT')) return res.status(404).json({ error: 'Server not found' });
   if (!inScope(req, row.country)) return res.status(403).json({ error: 'Not in your region' });
   res.json(row);
 }));
@@ -160,7 +172,61 @@ function resolveCountry(req, requested) {
 
 const FIELDS = ['location', 'hostname', 'brand_model', 'producer', 'category', 'serial_no', 'asset_code', 'ip_address',
   'os', 'cpu', 'ram', 'storage', 'role', 'status', 'purchase_date', 'warranty_expiry',
-  'vendor', 'cost', 'po_number', 'remark'];
+  'vendor', 'cost', 'po_number', 'remark', 'it_ot', 'mac', 'vlan', 'ot_system', 'switch_port'];
+
+// ── POST /api/servers/ot-import — OT device list (CMDB .xlsx, read in the browser) ─────────────────
+// body { site, aoa: [[…header], […row] …], overrides: { "<file switch name>": net device id | 0 }, dry,
+//        apply: { servers: true, ports: true } }  → plan (lib/ot-import.js); without dry: adds / fills Server Inventory
+// records (IT/OT = OT; only empty fields of existing records) and fills EMPTY switch ports of the network map. IT admins.
+router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
+  const b = req.body || {};
+  const aoa = Array.isArray(b.aoa) ? b.aoa.slice(0, 3000).map(r => (Array.isArray(r) ? r.slice(0, 40).map(c => String(c == null ? '' : c).slice(0, 200)) : [])) : [];
+  const { rows, error } = OTImport.readRows(aoa);
+  if (error) return res.status(400).json({ error });
+  const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
+  const site = String(b.site || (sites[0] && sites[0].site) || '').slice(0, 80);
+  const devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  const ports = await all('SELECT p.*, d.hostname FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]);
+  const servers = await all('SELECT * FROM servers WHERE deleted_at IS NULL');
+  const p = OTImport.plan(rows, { devices, ports, servers }, b.overrides && typeof b.overrides === 'object' ? b.overrides : {});
+  const switches = devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired').map(d => ({ id: d.id, hostname: d.hostname, location: d.location })).sort((x, y) => x.hostname.localeCompare(y.hostname));
+  if (b.dry) return res.json({ site, sites: sites.map(x => x.site), switches, ...p });
+  const doServers = !b.apply || b.apply.servers !== false, doPorts = !b.apply || b.apply.ports !== false;
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const done = { added: 0, updated: 0, ports: 0 };
+  if (doServers) {
+    const stmts = [];
+    for (const r of p.rows) {
+      if (r.action === 'add') {
+        const f = { ...r.fields, it_ot: 'OT', status: 'Active', remark: 'From the OT device list (CMDB)' };
+        const cols = Object.keys(f);
+        stmts.push({ sql: `INSERT INTO servers (${cols.join(', ')}, history_usage) VALUES (${cols.map(() => '?').join(', ')}, ?)`,
+          args: [...cols.map(c => f[c]), `${ts}: added from the OT device list by ${req.user.username}`] });
+        done.added++;
+      } else if (r.action === 'update') {
+        const cols = Object.keys(r.fill);
+        const line = `${ts}: filled ${cols.join(', ')} from the OT device list by ${req.user.username}`;
+        stmts.push({ sql: `UPDATE servers SET ${cols.map(c => c + ' = ?').join(', ')}, history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END WHERE id = ?`,
+          args: [...cols.map(c => r.fill[c]), line, line, r.server_id] });
+        done.updated++;
+      }
+    }
+    if (stmts.length) await batch(stmts);
+  }
+  if (doPorts && p.fills.length) {
+    const stmts = [];
+    for (const f of p.fills) {
+      // Only while the port is still empty (nobody changed it since the preview).
+      stmts.push({ sql: `UPDATE net_ports SET peer_host = ?, vlan = ?, mode = ?, note = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND COALESCE(peer_host, '') = ''`,
+        args: [f.peer_host, f.vlan, f.mode, f.note, req.user.username, f.port_id] });
+      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [site, f.hostname, f.port, '(free)', `${f.peer_host}${f.vlan ? ' vlan ' + f.vlan : ''} ACCESS (OT device list)`, req.user.username] });
+    }
+    await batch(stmts); done.ports = p.fills.length;
+  }
+  await audit(req.user, 'CREATE', null, `OT device list: ${done.added} OT device(s) added, ${done.updated} filled in Server Inventory; ${done.ports} switch port(s) filled on the network map "${site}"`);
+  res.json({ ok: true, ...done });
+}));
 
 // ── POST /api/servers — create (admin/editor) ─────────────────────────────────
 router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {

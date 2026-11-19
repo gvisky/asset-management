@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-19",
+    "title": "Server Inventory: OT devices — OT device list import, IT / OT filter, OT team view",
+    "items": [
+      "New ⬆ OT device list button (IT admins) on Server Inventory: upload the CMDB list (e.g. CMDB_OEE.xlsx). The preview shows which Kabin switch each switch name of the file is (the file's names differ from the map's — e.g. \"ASW-11\" is the IT-KABIN11 switch; you can change any), the devices already on the map (found by MAC), the empty switch ports that will be filled (a port with several devices gets the Moxa / hub and lists the rest behind it), the ports where the map and the file differ (never overwritten) and data problems in the file. Apply adds the devices as OT records (category, IP, MAC, VLAN, OT system, connected switch port) and fills only empty fields of existing records. Uploading the same file again changes nothing.",
+      "Server Inventory has IT / OT now: an IT & OT / IT only / OT only filter, an OT badge, and IT / OT, MAC, VLAN, OT system and Connected to in the record. OT devices stay out of Needs Attention and Used / stock.",
+      "OT team logins see Server Inventory as \"OT devices\": only the OT records, read-only."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "Network map: OT sees the factory cabinets; rack items no longer move by dragging",
     "items": [
       "OT view: the 🗄 Racks tab shows every factory cabinet (IT-KABIN, CCTV-KABIN, HARICI KABIN) — never the server-room racks; the Drawings tab no longer lists the server-room rack pictures. Click a switch in a cabinet to open its ports.",
