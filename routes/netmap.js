@@ -28,6 +28,9 @@ const isAdmin = (req) => req.user.role === 'admin' && !isOT(req);
 // OT view: the Kabin switches (IT-KABIN, HARICI KABIN, CCTV …, card readers) and everything cabled to them. A device's "ot"
 // column overrides the rule (1 = show, 0 = hide). IT can preview it with ?view=ot.
 const otView = (req) => isOT(req) || req.query.view === 'ot';
+// OT editors may change the ports of their switches that go to end devices (cameras, access control, PCs …) or are free —
+// never a port cabled to a network device, and never cable one to a network device.
+const otPortEdit = (req) => isOT(req) && req.user.role === 'editor';
 const otAuto = (d) => /switch/i.test(d.role || '') && (/KABIN/i.test(d.location || '') || /CCTV|CAMERA|CARD.?READER|ACCESS.?CONTROL|SECURITY/i.test(`${d.hostname} ${d.alias || ''}`));
 const otOn = (d) => (d.ot === 1 ? true : d.ot === 0 ? false : otAuto(d));
 // Only the OT team's part of a site: OT switches with all their ports, plus the core / distribution switches they uplink to
@@ -42,9 +45,12 @@ function otSlice(devices, ports) {
     if (d && d.state !== 'retired' && /core|distribution/i.test(d.role || '')) ctx.set(d.id, d);
   }
   const outPorts = ports.filter(p => visIds.has(p.device_id) || (ctx.has(p.device_id) && visHosts.has(p.peer_host)));
+  // Network devices behind the visible ports that OT does not see (APs, other switches): their ports stay "to network devices".
+  const shown = new Set([...visHosts, ...[...ctx.values()].map(d => d.hostname)]);
+  const netHosts = [...new Set(outPorts.map(p => p.peer_host).filter(h => h && byHost.has(h) && !shown.has(h)))];
   const strip = (d, context) => ({ id: d.id, site: d.site, hostname: d.hostname, alias: d.alias, role: d.role, model: d.model, serial: context ? '' : d.serial,
     mgmt_ip: d.mgmt_ip, mac: context ? '' : d.mac, location: d.location, notes: context ? '' : d.notes, x: d.x, y: d.y, state: d.state, ips: context ? '' : d.ips, ot_context: context ? 1 : 0 });
-  return { devices: [...vis.map(d => strip(d, false)), ...[...ctx.values()].map(d => strip(d, true))], ports: outPorts };
+  return { devices: [...vis.map(d => strip(d, false)), ...[...ctx.values()].map(d => strip(d, true))], ports: outPorts, netHosts };
 }
 const str = (v, n = 120) => String(v == null ? '' : v).trim().slice(0, n);
 // MAC address in one spelling: 68:9e:0b:8a:e3:78, 689E.0B8A.E378, 68-9E-… → 68:9E:0B:8A:E3:78 (anything else kept as typed).
@@ -69,8 +75,8 @@ router.get('/', wrap(async (req, res) => {
     const otSites = [];
     for (const s2 of sites) { const n = s2.site === site ? sl.devices.filter(d => !d.ot_context).length
       : (await all('SELECT * FROM net_devices WHERE site = ?', [s2.site])).filter(d => d.state !== 'retired' && otOn(d)).length; if (n) otSites.push({ site: s2.site, devices: n }); }
-    return res.json({ site, sites: otSites, devices: sl.devices, ports: sl.ports, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
-      can: { edit: false, admin: false }, team });
+    return res.json({ site, sites: otSites, devices: sl.devices, ports: sl.ports, net_hosts: sl.netHosts, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
+      can: { edit: false, admin: false, port: otPortEdit(req) }, team });
   }
   devices = devices.map(d => ({ ...d, ot_on: otOn(d) ? 1 : 0, ot_auto: otAuto(d) ? 1 : 0 }));
   res.json({ site, sites, devices, ports, vlans, patches, view: 'it', can: { edit: canEdit(req), admin: isAdmin(req) }, team });
@@ -226,9 +232,18 @@ async function mirror(dev, port, before, v, user) {
   }
 }
 router.put('/port', wrap(async (req, res) => {
-  if (!canEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
+  if (!canEdit(req) && !otPortEdit(req)) return res.status(403).json({ error: 'Admins and editors only' });
   const dev = await deviceOf(req.body.device_id), port = str(req.body.port, 40);
   if (!dev || !port) return res.status(400).json({ error: 'Device and port are required' });
+  if (!canEdit(req)) {
+    // OT editor: only an OT switch, only end-device / free ports, port-channel unchanged.
+    if (dev.state === 'retired' || !otOn(dev)) return res.status(403).json({ error: 'This device is not in the OT view' });
+    const hosts = new Set((await all('SELECT hostname FROM net_devices WHERE site = ?', [dev.site])).map(r => r.hostname));
+    const cur = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
+    if (cur && cur.peer_host && hosts.has(cur.peer_host)) return res.status(403).json({ error: `${port} is cabled to the network device ${cur.peer_host} — only IT can change it.` });
+    if (hosts.has(str(req.body.peer_host, 80))) return res.status(403).json({ error: 'Connecting a network device is for IT — use a camera / access-control / end-device name.' });
+    req.body.grp = cur ? cur.grp : '';
+  }
   if (req.body.peer_host === dev.hostname && req.body.peer_port === port) return res.status(400).json({ error: 'A port cannot connect to itself' });
   const { before, v } = await setPort(dev, port, req.body, req.user.username);
   await mirror(dev, port, before, v, req.user.username);
@@ -268,8 +283,8 @@ router.get('/log', wrap(async (req, res) => {
   }
   res.json(await all(`SELECT * FROM net_port_log WHERE site = ?${dev ? ' AND device = ?' : ''} ORDER BY id DESC LIMIT 300`, dev ? [site, dev] : [site]));
 }));
-// Everything below (Server Inventory sync, racks, drawings) is not part of the OT view.
-router.use((req, res, next) => (isOT(req) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
+// Everything below (Server Inventory sync, racks, drawing uploads) is not part of the OT view — except looking at the drawings.
+router.use((req, res, next) => (isOT(req) && !(req.method === 'GET' && /^\/drawings?(\/|$)/.test(req.path)) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
 
 // ── Server Inventory ← Network map (the implementation document) ───────────────
 // Matches each network device to a Server Inventory record by serial / service tag (ignoring a leading "S"

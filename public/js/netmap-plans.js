@@ -35,6 +35,7 @@ const NMPlans = self.NMPlans = (() => {
     if (drawings) all = drawings;
     if (dirty && cur && cur.id !== id && !confirm('Pins changed but not saved. Open the other drawing anyway?')) return true;
     ui(); cur = d; zoom = 1; dirty = false; editing = false; focusI = null; info(null);
+    if (!racks && (D().team || {}).isOT) racks = { racks: [], items: [] };
     if (!racks) apiGet('/api/netmap/racks?site=' + encodeURIComponent(D().site)).then(r => { racks = r; }).catch(() => { racks = { racks: [], items: [] }; });
     try { pins = JSON.parse(d.pins || '[]'); } catch { pins = []; }
     try { fib = JSON.parse(d.links || '[]'); } catch { fib = []; }

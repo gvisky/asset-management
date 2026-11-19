@@ -28,6 +28,10 @@ const NM = (() => {
   const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
   const isFiber = (c) => /sfp|sr|lr|lx|sx|fib|dac/i.test(c || '');
   const known = (h) => byHost.has(h);
+  // A network device — on the map, or (OT view) one OT does not see such as an AP or another switch.
+  const isNet = (h) => byHost.has(h) || !!(h && D && D.net_hosts && D.net_hosts.includes(h));
+  // OT editor: may change a port that is free or goes to an end device.
+  const otPortOk = (p) => !!(D.can.port && !isNet(p.peer_host));
 
   // ── Data ──────────────────────────────────────────────────────────────────
   // OT view (Operation Technology): only the Kabin switches and what is cabled to them, read-only. The OT team always
@@ -52,8 +56,8 @@ const NM = (() => {
 
   function applyView() {
     const ot = D.view === 'ot', team = D.team || {};
-    document.querySelectorAll('.nm-tools .nm-tabs button[data-v="rack"], .nm-tools .nm-tabs button[data-v="draw"]').forEach(b => { b.style.display = ot ? 'none' : ''; });
-    if (ot && (!$('nm-view-rack').hidden || !$('nm-view-draw').hidden)) tab('topo');
+    document.querySelectorAll('.nm-tools .nm-tabs button[data-v="rack"]').forEach(b => { b.style.display = ot ? 'none' : ''; });
+    if (ot && !$('nm-view-rack').hidden) tab('topo');
     [...$('nm-mode').options].forEach(o => { o.hidden = ot && (o.value === 'physical' || o.value === 'system'); });
     if (ot && (mode === 'physical' || mode === 'system')) { mode = 'map'; $('nm-mode').value = 'map'; }
     $('nm-ot').innerHTML = team.isIT ? `<span class="nm-tabs small" title="OT view = what the OT team sees: Kabin switches and what is connected to them"><button class="${ot ? '' : 'on'}" data-o="it">IT view</button><button class="${ot ? 'on' : ''}" data-o="ot">OT view</button></span>`
@@ -77,7 +81,7 @@ const NM = (() => {
   // ── Device list (left) ────────────────────────────────────────────────────
   function stats(d) {
     const ps = portsOf.get(d.id) || [];
-    return { total: ps.length, dev: ps.filter(p => known(p.peer_host)).length, end: ps.filter(p => !known(p.peer_host) && (p.peer_host || p.patch || p.vlan || p.mode)).length };
+    return { total: ps.length, dev: ps.filter(p => isNet(p.peer_host)).length, end: ps.filter(p => !isNet(p.peer_host) && (p.peer_host || p.patch || p.vlan || p.mode)).length };
   }
   function renderList() {
     const qq = q.toLowerCase();
@@ -320,7 +324,7 @@ const NM = (() => {
     if (typeof NMRacks !== 'undefined' && !$('nm-view-rack').hidden) NMRacks.mark(true);
     // The page does not scroll: the topology stays where it is (the device panel is below it).
   }
-  const portClass = (p) => (known(p.peer_host) ? 'pt-dev' : (p.peer_host || p.patch || p.vlan || p.mode) ? 'pt-end' : 'pt-free');
+  const portClass = (p) => (isNet(p.peer_host) ? 'pt-dev' : (p.peer_host || p.patch || p.vlan || p.mode) ? 'pt-end' : 'pt-free');
   const portTip = (p) => `${p.port}${known(p.peer_host) ? ` → ${p.peer_host} ${p.peer_port}` : p.peer_host ? ` → ${p.peer_host} ${p.peer_port}` : ''}${p.patch ? ` · patch ${p.patch}` : ''}${p.cable ? ' · ' + p.cable : ''}${p.mode ? ' · ' + p.mode : ''}${p.vlan ? ' · VLAN ' + p.vlan : ''}${p.grp ? ' · Po' + p.grp : ''}${p.note ? ' · ' + p.note : ''}` || 'free';
   function faceplate(d, hlPorts) {
     const ps = portsOf.get(d.id) || [];
@@ -340,7 +344,7 @@ const NM = (() => {
     const d = byId.get(sel), ps = portsOf.get(d.id) || [], s = stats(d);
     const hl = new Set();
     if (linkKey) for (const l of links()) if ([l.a, l.b].sort().join('~') === linkKey) hl.add(l.a === d.hostname ? l.ap : l.bp);
-    const shown = ps.filter(p => (portFilter === 'all' || (portFilter === 'dev' && known(p.peer_host)) || (portFilter === 'end' && portClass(p) === 'pt-end') || (portFilter === 'free' && portClass(p) === 'pt-free')));
+    const shown = ps.filter(p => (portFilter === 'all' || (portFilter === 'dev' && isNet(p.peer_host)) || (portFilter === 'end' && portClass(p) === 'pt-end') || (portFilter === 'free' && portClass(p) === 'pt-free')));
     box.innerHTML = `<div class="nm-dh">${icon(d.role, 0, 0, 40, true)}
         <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}${live(d) ? '' : ' <span class="nm-retired">Retired — not in use</span>'}</div>
           <div class="text-muted text-sm">${esc([d.alias, d.role, d.model].filter(Boolean).join(' · '))}</div>
@@ -366,9 +370,10 @@ const NM = (() => {
   function openPort(devId, port) {
     const d = byId.get(devId), p = (portsOf.get(devId) || []).find(x => x.port === port) || { port, peer_host: '', peer_port: '', cable: '', mode: '', vlan: '', grp: '', patch: '', note: '' };
     cur = { d, p };
-    const ro = !D.can.edit ? 'disabled' : '';
+    const ot = !D.can.edit && otPortOk(p) && !d.ot_context, canSave = D.can.edit || ot;
+    const ro = !canSave ? 'disabled' : '';
     $('nm-port-t').textContent = `${d.hostname} · ${port}`;
-    const hosts = D.devices.filter(x => x.id !== d.id).map(x => x.hostname).sort(natural);
+    const hosts = ot ? [] : D.devices.filter(x => x.id !== d.id).map(x => x.hostname).sort(natural);
     $('nm-port-b').innerHTML = `<div class="nm-pnow"><span class="dot ${portClass(p)}"></span> ${esc(portTip(p))}</div>
       <div class="qe-grid">
         <div class="form-group"><label class="form-label">Connected to (device)</label><input class="form-control" id="pp-host" list="pp-hosts" value="${esc(p.peer_host)}" ${ro} placeholder="network device, or PC / printer / AP name"><datalist id="pp-hosts">${hosts.map(h => `<option value="${esc(h)}">`).join('')}</datalist></div>
@@ -376,17 +381,19 @@ const NM = (() => {
         <div class="form-group"><label class="form-label">Cable</label><select class="form-control" id="pp-cable" ${ro}>${CABLES.concat(CABLES.includes(p.cable) ? [] : [p.cable]).map(c => `<option${c === p.cable ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
         <div class="form-group"><label class="form-label">Switchport mode</label><select class="form-control" id="pp-mode" ${ro}>${['', 'ACCESS', 'TRUNK'].concat(['', 'ACCESS', 'TRUNK'].includes(p.mode) ? [] : [p.mode]).map(c => `<option${c === p.mode ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
         <div class="form-group"><label class="form-label">VLAN</label><input class="form-control" id="pp-vlan" list="pp-vlans" value="${esc(p.vlan)}" ${ro}><datalist id="pp-vlans">${D.vlans.map(v => `<option value="${esc(v.vlan)}">${esc(v.name)}</option>`).join('')}</datalist></div>
-        <div class="form-group"><label class="form-label">Port-channel / group</label><input class="form-control" id="pp-grp" value="${esc(p.grp)}" ${ro}></div>
+        <div class="form-group"><label class="form-label">Port-channel / group</label><input class="form-control" id="pp-grp" value="${esc(p.grp)}" ${ot ? 'disabled' : ro}></div>
         <div class="form-group"><label class="form-label">Patch panel port</label><input class="form-control" id="pp-patch" value="${esc(p.patch)}" ${ro} placeholder="e.g. D01"></div>
         <div class="form-group"><label class="form-label">Note</label><input class="form-control" id="pp-note" value="${esc(p.note)}" ${ro}></div>
       </div>
       <div id="pp-warn" class="text-sm"></div>
+      ${D.can.port && !canSave ? `<p class="text-sm" style="color:#9a3412;margin:6px 0 0">🔒 ${isNet(p.peer_host) ? `Cabled to the network device <b>${esc(p.peer_host)}</b> — only IT can change this port.` : 'Only IT can change this port.'}</p>` : ''}
+      ${ot ? '<p class="text-muted text-sm" style="margin:6px 0 0">You can set the end device on this port (camera, access control, PC …), its VLAN, patch point and note. Ports to network devices are for IT.</p>' : ''}
       ${self.NMFaces ? `<details class="nm-trace-box" open><summary>🔎 Cable path</summary>${NMFaces.trace(d, p)}</details>` : ''}
       ${D.can.edit ? `<div class="nm-move"><label class="form-label">⇄ Move this cable to another port of ${esc(d.hostname)} (the two ports swap)</label>
         <div style="display:flex;gap:8px"><select class="form-control" id="pp-to">${(portsOf.get(d.id) || []).filter(x => x.port !== port).map(x => `<option value="${esc(x.port)}">${esc(x.port)} — ${portClass(x) === 'pt-free' ? 'free' : esc(x.peer_host || x.patch || 'in use')}</option>`).join('')}</select>
         <button class="btn btn-ghost" onclick="NM.movePort()">Move</button></div></div>` : ''}
       ${p.updated_by ? `<p class="text-muted text-sm" style="margin:8px 0 0">Last change ${esc(String(p.updated_at || '').slice(0, 16))} UTC by ${esc(p.updated_by)}</p>` : ''}`;
-    $('nm-port-f').innerHTML = D.can.edit ? `<button class="btn btn-ghost" style="margin-right:auto" onclick="NM.disconnect()">Disconnect</button><button class="btn btn-ghost" onclick="NM.closePort()">Cancel</button><button class="btn btn-primary" onclick="NM.savePort()">Save</button>`
+    $('nm-port-f').innerHTML = canSave ? `<button class="btn btn-ghost" style="margin-right:auto" onclick="NM.disconnect()">Disconnect</button><button class="btn btn-ghost" onclick="NM.closePort()">Cancel</button><button class="btn btn-primary" onclick="NM.savePort()">Save</button>`
       : '<button class="btn btn-ghost" onclick="NM.closePort()">Close</button>';
     const fill = () => {
       const h = $('pp-host').value.trim(), pd = byHost.get(h);
@@ -574,7 +581,7 @@ const NM = (() => {
   }
   document.addEventListener('DOMContentLoaded', init);
   return { data: () => D, known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
-    filter: (f) => { portFilter = f; renderDevice(); },
+    filter: (f) => { portFilter = f; renderDevice(); }, isNet,
     outlet: (o) => { const pp = (D.patches || []).find(x => String(x.outlet).toUpperCase() === String(o).toUpperCase()); if (pp && self.NMFaces) NMFaces.panel(pp.panel); else showToast('Outlet ' + o + ' is not in the patch-panel list', 'error'); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, group: setGroup, groupShown: () => grp, groupOf, gcol, tab: (v) => tab(v),
     showInRack: () => { tab('rack'); }, showAll: () => { focus = false; renderTopo(); fit(); }, focusMode: () => { focus = true; renderTopo(); fit(); }, search: (s) => { $('nm-q').value = s; q = s; renderList(); } };

@@ -14,7 +14,7 @@ const NMRacks = (() => {
   const dev = (id) => D().devices.find(d => d.id === id);
   async function load() {
     const site = D().site;
-    [R, drawings] = await Promise.all([apiGet('/api/netmap/racks?site=' + encodeURIComponent(site)), apiGet('/api/netmap/drawings?site=' + encodeURIComponent(site)).catch(() => [])]);
+    [R, drawings] = await Promise.all([((D().team || {}).isOT ? Promise.resolve({ racks: [], items: [] }) : apiGet('/api/netmap/racks?site=' + encodeURIComponent(site)).catch(() => ({ racks: [], items: [] }))), apiGet('/api/netmap/drawings?site=' + encodeURIComponent(site)).catch(() => [])]);
   }
 
   // Face of one rack item (x, y = top-left, w, h in px).
