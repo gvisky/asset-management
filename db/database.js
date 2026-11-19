@@ -1305,6 +1305,9 @@ async function migrate() {
   }
   const svcols = (await backend.all('PRAGMA table_info(servers)')).map(c => c.name);
   if (!svcols.includes('net_info')) await backend.run("ALTER TABLE servers ADD COLUMN net_info TEXT DEFAULT ''");
+  // IT / OT split of the Server Inventory (OT = Operation Technology: access control, PLCs, gateways, kiosks …) and the OT
+  // device list's network details: MAC, VLAN, OT system (ACS / PMS / OEE / MMS) and the switch port it hangs off.
+  for (const col of ['it_ot', 'mac', 'vlan', 'ot_system', 'switch_port']) if (!svcols.includes(col)) await backend.run(`ALTER TABLE servers ADD COLUMN ${col} TEXT DEFAULT ''`);
 
   // Racks (front view) and their contents; drawings (rack / topology / floor-plan pictures from the document).
   await backend.script(`CREATE TABLE IF NOT EXISTS net_racks (

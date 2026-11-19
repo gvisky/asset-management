@@ -52,6 +52,7 @@
     <span id="total-label" class="text-muted text-sm"></span>
     <button class="btn btn-ghost btn-sm" id="btn-missing" onclick="openMissing()" title="Devices with missing serial, hostname, IP or location — fill them in here">⚠️ Needs Attention — Servers &amp; Network: Missing Info <span class="na-cnt" id="na-cnt"></span></button>
     <button class="btn btn-ghost btn-sm" onclick="ServerUsage.open()" title="How many devices of each model are in use (network mapping) and how many are stock">📦 Used / stock</button>
+    <button class="btn btn-ghost btn-sm" id="btn-otimport" style="display:none" onclick="OTDeviceImport.open()" title="Upload the OT device list (CMDB .xlsx): adds the OT devices here and fills their empty switch ports on the network map — preview first">⬆ OT device list</button>
     <button class="btn btn-ghost btn-sm" id="btn-netsync" style="display:none" onclick="openNetSync()" title="Fill hostname, IP, rack location and IP list from the network map (implementation document); add devices that are missing">🔄 Update from network map</button>
     <button class="btn btn-primary btn-sm" id="btn-add">+ Add Server</button>
   </header>
@@ -67,6 +68,7 @@
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="search-input" placeholder="Search by hostname, IP, serial, model, OS…">
         </div>
+        <select class="filter-select si-itot" id="filter-itot" title="IT devices or OT devices (Operation Technology: access control, PLCs, gateways, kiosks …)"><option value="">IT &amp; OT</option><option value="IT">IT only</option><option value="OT">OT only</option></select>
         <select class="filter-select" id="filter-country"><option value="">All Countries</option></select>
         <select class="filter-select" id="filter-status">
           <option value="">All Statuses</option><option>Active</option><option>Broken</option><option>Stock</option>
@@ -144,6 +146,11 @@
           <div class="form-group"><label class="form-label">Vendor</label><input class="form-control" id="f-vendor" type="text"></div>
           <div class="form-group"><label class="form-label">Cost</label><input class="form-control" id="f-cost" type="text"></div>
           <div class="form-group"><label class="form-label">PO Number</label><input class="form-control" id="f-po_number" type="text"></div>
+          <div class="form-group"><label class="form-label">IT / OT</label><select class="form-control" id="f-it_ot"><option value="">IT</option><option value="OT">OT — Operation Technology</option></select></div>
+          <div class="form-group"><label class="form-label">MAC address</label><input class="form-control" id="f-mac" type="text" placeholder="e.g. 00:1B:09:08:F5:BD"></div>
+          <div class="form-group"><label class="form-label">VLAN</label><input class="form-control" id="f-vlan" type="text"></div>
+          <div class="form-group"><label class="form-label">OT system</label><input class="form-control" id="f-ot_system" type="text" placeholder="ACS / PMS / OEE / MMS"></div>
+          <div class="form-group span-2"><label class="form-label">Connected to (switch port)</label><input class="form-control" id="f-switch_port" type="text" placeholder="e.g. SR-19/DATA-ASW-17 GE 1/0/5"></div>
           <div class="form-group span-2"><label class="form-label">History Usage</label><textarea class="form-control" id="f-history_usage" rows="3"></textarea></div>
           <div class="form-group span-2"><label class="form-label">Remark</label><textarea class="form-control" id="f-remark" rows="2"></textarea></div>
         </div>
@@ -173,12 +180,13 @@
 
 <div class="toast-container" id="toast-container"></div>
 
-<script src="/js/auth.js?v=20261119c"></script>
+<script src="/js/auth.js?v=20261119d"></script>
 <script src="/js/app.js"></script>
 <script src="/js/device-specs.js?v=20261117a"></script>
 <script src="/js/server-attention.js?v=20261117a"></script>
-<script src="/js/server-inventory.js?v=20261118a"></script>
+<script src="/js/ot-import.js?v=20261119a"></script>
+<script src="/js/server-inventory.js?v=20261119b"></script>
 <script src="/js/server-usage.js?v=20261119a"></script>
-<script src="/js/virtual-servers.js?v=20261119a"></script>
+<script src="/js/virtual-servers.js?v=20261119b"></script>
 </body>
 </html>

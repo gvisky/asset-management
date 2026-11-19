@@ -12,7 +12,7 @@ const sAttr = (s) => String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;'
 
 const SFIELDS = ['country', 'location', 'status', 'hostname', 'asset_code', 'brand_model',
   'producer', 'category', 'serial_no', 'ip_address', 'role', 'os', 'cpu', 'ram', 'storage',
-  'purchase_date', 'warranty_expiry', 'vendor', 'cost', 'po_number', 'history_usage', 'remark'];
+  'purchase_date', 'warranty_expiry', 'vendor', 'cost', 'po_number', 'history_usage', 'remark', 'it_ot', 'mac', 'vlan', 'ot_system', 'switch_port'];
 
 function sReadForm() {
   const o = {};
@@ -59,6 +59,8 @@ async function loadServers(page = 1) {
   const st = document.getElementById('filter-status').value;
   const cat = document.getElementById('filter-category').value;
   const prod = document.getElementById('filter-producer').value;
+  const itot = document.getElementById('filter-itot').value;
+  if (itot) qs.set('it_ot', itot);
   if (s) qs.set('search', s);
   if (c) qs.set('country', c);
   if (st) qs.set('status', st);
@@ -82,7 +84,7 @@ function rowHtml(s, inGroup) {
     <tr class="${s.fields_locked ? 'row-locked' : ''}${inGroup ? ' sg-in' : ''}">
       <td class="text-muted text-sm">${s.id}</td>
       <td>${s.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}<code style="font-size:12px;color:var(--brand)">${sEsc(s.asset_code) || '—'}</code></td>
-      <td><strong>${sEsc(s.hostname) || '—'}</strong>${s.hostname && /\//.test(s.hostname) ? ` <a href="/network-map.html?host=${encodeURIComponent(s.hostname)}" title="Open on the network map" onclick="event.stopPropagation()">🗺</a>` : ''}</td>
+      <td>${s.it_ot === 'OT' ? '<span class="si-ot" title="OT device (Operation Technology)">OT</span> ' : ''}<strong>${sEsc(s.hostname) || '—'}</strong>${s.hostname && /\//.test(s.hostname) ? ` <a href="/network-map.html?host=${encodeURIComponent(s.hostname)}" title="Open on the network map" onclick="event.stopPropagation()">🗺</a>` : ''}</td>
       <td>${sEsc(s.brand_model) || '—'} ${DeviceSpecs.btn(s.brand_model, s.category)}</td>
       <td class="text-muted text-sm">${sEsc(s.producer) || '—'}</td>
       <td>${s.category ? `<span class="badge badge-office">${sEsc(s.category)}</span>` : '—'}</td>
@@ -94,8 +96,8 @@ function rowHtml(s, inGroup) {
       <td>
         <div style="display:flex;gap:6px">
           <button class="btn btn-ghost btn-sm" onclick="onView(${s.id})" title="View"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          <button class="btn btn-ghost btn-sm" onclick="onEdit(${s.id})" title="Edit"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-          <button class="btn btn-danger btn-sm" onclick="onDelete(${s.id}, '${sAttr(s.hostname || s.asset_code)}')" title="Delete"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+          <button class="btn btn-ghost btn-sm si-ed" onclick="onEdit(${s.id})" title="Edit"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="btn btn-danger btn-sm si-ed" onclick="onDelete(${s.id}, '${sAttr(s.hostname || s.asset_code)}')" title="Delete"><svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
         </div>
       </td>
     </tr>`;
@@ -161,13 +163,14 @@ async function onView(id) {
       ['Vendor', s.vendor], ['Cost', s.cost], ['PO Number', s.po_number],
       ['History Usage', s.history_usage], ['Remark', s.remark],
       ['Network IPs / services', sEsc(s.net_info || '')],
+      ...(s.it_ot === 'OT' || s.mac || s.switch_port ? [['IT / OT', s.it_ot === 'OT' ? 'OT — Operation Technology' : 'IT'], ['MAC address', s.mac], ['VLAN', s.vlan], ['OT system', s.ot_system], ['Connected to', s.switch_port]] : []),
       ['Network map', s.hostname ? `<a href="/network-map.html?host=${encodeURIComponent(s.hostname)}">🗺 Open ${sEsc(s.hostname)} on the network map</a>` : ''],
     ];
     document.getElementById('view-body').innerHTML = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         ${fields.map(([l, v]) => `<div><div class="form-label" style="margin-bottom:3px">${l}</div><div style="font-size:13.5px;white-space:pre-line">${v || '<span class="text-muted">—</span>'}</div></div>`).join('')}
       </div>
-      <div style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
+      <div class="si-maint" style="margin-top:22px;border-top:1px solid var(--border);padding-top:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <strong style="font-size:13.5px">🔧 Maintenance &amp; Repairs</strong>
           <span class="text-muted text-sm" id="maint-count"></span>
@@ -184,7 +187,7 @@ async function onView(id) {
         <div id="maint-list" class="text-muted text-sm">Loading…</div>
       </div>`;
     document.getElementById('view-overlay').classList.add('open');
-    loadMaintenance(id);
+    if ((window.CURRENT_USER || {}).team !== 'OT') loadMaintenance(id);
   } catch (e) { showToast('Failed to load server', 'error'); }
 }
 
@@ -313,14 +316,14 @@ async function loadSummary() {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadFilters().then(loadServers);
-  loadSummary();
+  notOT().then(ok => { if (ok) loadSummary(); });
 
   let debounce;
   document.getElementById('search-input').addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(() => loadServers(1), 320); });
-  ['filter-country', 'filter-status', 'filter-category', 'filter-producer'].forEach(id => document.getElementById(id).addEventListener('change', () => loadServers(1)));
+  ['filter-country', 'filter-status', 'filter-category', 'filter-producer', 'filter-itot'].forEach(id => document.getElementById(id).addEventListener('change', () => loadServers(1)));
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
-    ['filter-country', 'filter-status', 'filter-category', 'filter-producer'].forEach(id => document.getElementById(id).value = '');
+    ['filter-country', 'filter-status', 'filter-category', 'filter-producer', 'filter-itot'].forEach(id => document.getElementById(id).value = '');
     loadServers(1);
   });
 
@@ -357,6 +360,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Update from the network map (implementation document) — admins ──
 // The button shows for admins once the page knows who you are.
 document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin') document.getElementById('btn-netsync').style.display = '';
+  if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') document.getElementById('btn-otimport').style.display = '';
+  // OT team: read-only list of the OT devices.
+  if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-t=phys]'); if (s) s.textContent = '🏭 OT devices'; }
   const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v); }, 150); });
 let nsChoose = {};
 async function openNetSync(keepSite) {
@@ -396,7 +402,9 @@ async function openNetSync(keepSite) {
 }
 
 // ── ⚠️ Needs Attention — Servers & Network: Missing Info (js/server-attention.js) ──
-async function naCount() { const n = await ServerAttention.count(); const c = document.getElementById('na-cnt'); if (c) c.textContent = n || ''; }
+// The OT team only reads the OT list: no counters, summary or virtual servers for them.
+const notOT = () => new Promise(res => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); res(window.CURRENT_USER.team !== 'OT'); }, 60); });
+async function naCount() { if (!(await notOT())) return; const n = await ServerAttention.count(); const c = document.getElementById('na-cnt'); if (c) c.textContent = n || ''; }
 function openMissing() {
   let ov = document.getElementById('na-ov');
   if (!ov) { document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="na-ov"><div class="modal" style="max-width:1150px;background:transparent;box-shadow:none">

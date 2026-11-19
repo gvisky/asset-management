@@ -166,6 +166,8 @@
     document.querySelectorAll('.si-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.t); });
     const up = new URLSearchParams(location.search);
     if (up.get('tab') === 'vm') { if (up.get('search')) q = up.get('search'); tab('vm'); }
-    apiGet('/api/virtual-servers').then(r => { const c = $('vm-cnt'); if (c && r.rows.length) c.textContent = r.rows.length; }).catch(() => {});
+    // Count of virtual servers on the tab — once the user is known (the OT team has no virtual servers).
+    const vt = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(vt); if (window.CURRENT_USER.team === 'OT') return;
+      apiGet('/api/virtual-servers').then(r => { const c = $('vm-cnt'); if (c && r.rows.length) c.textContent = r.rows.length; }).catch(() => {}); }, 60);
   });
 })();
