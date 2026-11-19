@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-19",
+    "title": "AD user list: Department and Employee ID",
+    "items": [
+      "Upload AD list now also reads the two new columns of the AD export: Department and Employee ID (an empty cell or \"-\" keeps what is already there, e.g. from the Entra user export). The preview says how many accounts have each.",
+      "User Inventory shows the Employee ID next to the name (ID 250032) and the AD department under the Department column (AD: Sales). The HR Department / Cost Center pair is not changed — the AD department names are a different list.",
+      "Search finds people by Employee ID, AD department and second email too; the User Inventory Excel export has Employee ID and AD Department columns."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "Viewers no longer see Needs Attention",
     "items": [
       "Users with the Viewer role do not see anything of ⚠️ Needs Attention (things to fix / to add): no menu link and no Needs Attention page, no missing-info / alert cards on the Dashboard, no 'Needs Info' counter and Needs Attention buttons in Asset Inventory, no Needs Attention button in Server Inventory, no 'status to check' part in 📦 Used / stock, no ⚠ check in the floor-plan popups, and no alert bell.",

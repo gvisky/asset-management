@@ -278,11 +278,11 @@ function renderTable(rows) {
         onclick="openEditUser(${p.id}, ${jsArg(p.display_name)}, ${jsArg(p.country)}, ${jsArg(dept)}, ${jsArg(cc)})">✏️</button> ` : '';
     return `
       <tr>
-        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${resBadge}${notInAzure}${notInAd}
+        <td class="name-cell"><strong>${esc(p.display_name) || '—'}</strong>${p.employee_id ? ` <span class="emp-id" title="Employee ID">ID ${esc(p.employee_id)}</span>` : ''}${resBadge}${notInAzure}${notInAd}
           <div class="text-muted text-sm">${emailHtml(p)}</div>${managerLine(p)}</td>
         <td class="when-cell">${logonCell(p)}</td>
         <td class="assets-cell">${assetsCell}</td>
-        <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}</td>
+        <td class="text-sm wrap-cell">${editBtn}${dept ? esc(dept) : '<span class="text-muted">—</span>'}${p.ad_department ? `<div class="text-muted" style="font-size:11.5px" title="Department in the AD / Entra user list">AD: ${esc(p.ad_department)}</div>` : ''}</td>
         <td class="text-muted text-sm">${cc ? esc(cc) : '—'}</td>
         <td><span class="badge badge-factory">${esc(p.country)}</span></td>
         <td>
@@ -564,7 +564,8 @@ function setupAdUpload() {
 
   // The button opens the window first, with a visible file picker in it (no hidden input to rely on).
   const pickerHtml = `<p style="margin-top:0">Choose the user list exported from Active Directory (<b>.xlsx</b> or <b>.csv</b>) with the columns
-      <i>SAM Account Name, Display Name, Manager, OU Name, Last Logon Time, Email Address</i> (the market email, kept as a second email).</p>
+      <i>SAM Account Name, Display Name, Manager, OU Name, Last Logon Time, Email Address</i> (the market email, kept as a second email),
+      <i>Department</i> and <i>Employee ID</i> (shown next to the person; an empty cell or "-" keeps what is there).</p>
     <input type="file" id="dirsync-file-pick" accept=".xlsx,.xls,.csv" class="form-control">
     <p class="text-muted text-sm">You'll see a preview first — nothing is saved until you click <b>Apply to User Inventory</b>.</p>`;
   const showError = (m) => { body.innerHTML = pickerHtml + `<p style="color:#dc2626;font-weight:600">${adH(m)}</p>`; wirePicker(); };
@@ -614,7 +615,7 @@ function setupAdUpload() {
           .map(([l, v, c]) => `<div class="kpi" style="--kpi-color:${c}"><div class="kpi-main"><div class="kpi-label"><span class="kpi-dot"></span>${l}</div><div class="kpi-value">${v}</div></div></div>`).join('')}
       </div>
       <p class="text-sm text-muted" style="margin:4px 0 8px">Countries in this file: <b>${adH(r.countries.join(', '))}</b> ·
-        ${r.users} user accounts · ${r.withEmail != null ? `${r.withEmail} with a second email (Email Address) · ` : ''}${r.resources} resource accounts (shared mailboxes / groups, marked <b>Resource</b>) ·
+        ${r.users} user accounts · ${r.withEmail != null ? `${r.withEmail} with a second email (Email Address) · ` : ''}${r.withDept != null ? `${r.withDept} with a Department · ${r.withEmpId} with an Employee ID · ` : ''}${r.resources} resource accounts (shared mailboxes / groups, marked <b>Resource</b>) ·
         ${r.staleUsers} with no logon for 90+ days · ${r.neverUsers} never logged on.
         Matched people get their AD account, manager and last logon; nothing else of theirs is changed.</p>
       ${section(`➕ New people to add (${people.length}) — untick anyone you don't want`, true, people.length

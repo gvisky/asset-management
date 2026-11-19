@@ -66,9 +66,9 @@ router.get('/', wrap(async (req, res) => {
   if (cs.clause) { conditions.push(cs.clause); params.push(...cs.params); }
 
   if (search) {
-    conditions.push('(display_name LIKE ? OR email LIKE ? OR company_name LIKE ? OR position LIKE ?)');
+    conditions.push("(display_name LIKE ? OR email LIKE ? OR company_name LIKE ? OR position LIKE ? OR COALESCE(employee_id, '') LIKE ? OR COALESCE(ad_department, '') LIKE ? OR COALESCE(ad_email, '') LIKE ?)");
     const like = `%${search}%`;
-    params.push(like, like, like, like);
+    params.push(like, like, like, like, like, like, like);
   }
   if (status)    { conditions.push('status = ?');    params.push(status); }
   if (user_type) { conditions.push('user_type = ?'); params.push(user_type); }
@@ -315,6 +315,7 @@ router.post('/ad-import', wrap(async (req, res) => {
   const summary = {
     accounts: adRows.length, users: plan.users.filter(r => !r.resource).length, resources: plan.resources.length,
     withEmail: adRows.filter(r => r.email).length,
+    withDept: adRows.filter(r => r.department).length, withEmpId: adRows.filter(r => r.employeeId).length,
     matched: plan.matched.length,
     matchedByName: plan.byNameMatch.map(m => ({ ad: adBrief(m.r), person: brief(m.p) })),
     fresh: plan.fresh.map(f => ({ ...adBrief(f), shared: f.shared, resource: !!f.resource })),
@@ -335,9 +336,12 @@ router.post('/ad-import', wrap(async (req, res) => {
   const adSet = (r) => [r.sam, r.manager, r.ou, r.lastLogon, r.never ? 1 : 0, now, r.resource ? 1 : 0, r.email || ''];
   const stmts = [];
   for (const m of plan.matched) {
+    // Department / Employee ID of the AD list (an empty cell keeps what is there, e.g. from the Entra export).
     stmts.push({ sql: `UPDATE personnel SET ad_sam = ?, ad_manager = ?, ad_ou = ?, ad_last_logon = ?, ad_never_logon = ?, ad_seen_at = ?, ad_resource = ?, ad_email = ?,
+                         ad_department = CASE WHEN ? <> '' THEN ? ELSE COALESCE(ad_department, '') END,
+                         employee_id   = CASE WHEN ? <> '' THEN ? ELSE COALESCE(employee_id, '') END,
                          display_name = CASE WHEN COALESCE(display_name, '') = '' THEN ? ELSE display_name END WHERE id = ?`,
-                 args: [...adSet(m.r), m.r.name, m.p.id] });
+                 args: [...adSet(m.r), m.r.department || '', m.r.department || '', m.r.employeeId || '', m.r.employeeId || '', m.r.name, m.p.id] });
   }
   for (const m of toMerge) {
     // Keep the row that matches AD; take over what HR / IT filled on the double, then remove the double.
@@ -363,10 +367,10 @@ router.post('/ad-import', wrap(async (req, res) => {
   for (const f of toAdd) {
     const email = `${f.sam}@${domain}`;
     stmts.push({ sql: `INSERT INTO personnel (country, display_name, email, user_type, status, company_name, position, leaving_date,
-                         ad_sam, ad_manager, ad_ou, ad_last_logon, ad_never_logon, ad_seen_at, ad_resource, ad_email)
-                       SELECT ?, ?, ?, '', 'Active', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?
+                         ad_sam, ad_manager, ad_ou, ad_last_logon, ad_never_logon, ad_seen_at, ad_resource, ad_email, ad_department, employee_id)
+                       SELECT ?, ?, ?, '', 'Active', '', '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                         WHERE NOT EXISTS (SELECT 1 FROM personnel WHERE LOWER(email) = LOWER(?))`,
-                 args: [f.country || 'Unknown', f.name, email, ...adSet(f), email] });
+                 args: [f.country || 'Unknown', f.name, email, ...adSet(f), f.department || '', f.employeeId || '', email] });
   }
   try { await batch(stmts, 100); }
   catch (e) { console.error('[ad-import]', e); return res.status(500).json({ error: `AD upload failed: ${errorText(e)} — run it again, it is safe to repeat.` }); }
