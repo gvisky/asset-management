@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-19",
+    "title": "User Inventory: AD department and cost-center department side by side, never mixed",
+    "items": [
+      "The Department column shows two separate lines: AD — the department in the AD user list (e.g. Sales), and Cost center — the department that goes with the cost-center number (e.g. HV - Distributor - North Vietnam), with its ✏️ edit button. The cost-center number stays in its own column.",
+      "The AD upload never changes the cost-center department; search now also finds people by cost-center department or number."
+    ]
+  },
+  {
+    "date": "2026-11-19",
     "title": "AD user list: Department and Employee ID",
     "items": [
       "Upload AD list now also reads the two new columns of the AD export: Department and Employee ID (an empty cell or \"-\" keeps what is already there, e.g. from the Entra user export). The preview says how many accounts have each.",

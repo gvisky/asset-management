@@ -1412,3 +1412,12 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .is-viewer #alert-box, .is-viewer #alert-btn-slot, .is-viewer .na-only, .is-viewer .pl-i-warn { display: none !important; }
 
 .emp-id { font-size: 11px; font-weight: 600; color: #475569; background: #f1f5f9; border-radius: 8px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+
+/* User Inventory: Department column = AD department + cost-center department (two separate lists) */
+.fit-table .dep-cell { min-width: 230px; max-width: 270px; }
+.dep-row { display: block; line-height: 1.4; padding: 2px 0; white-space: normal; overflow-wrap: break-word; }
+.dep-row + .dep-row { border-top: 1px dashed #eef2f7; margin-top: 2px; padding-top: 4px; }
+.dep-tag { display: inline-block; font-size: 10.5px; font-weight: 700; border-radius: 6px; padding: 0 6px; margin-right: 5px; text-transform: uppercase; letter-spacing: .02em; vertical-align: 1px; }
+.dep-tag.ad { background: #e0f2fe; color: #075985; } .dep-tag.cc { background: #fef3c7; color: #92400e; }
+.dep-row .btn { padding: 0 5px; margin-left: 4px; vertical-align: 1px; }
+.th-sub { font-size: 10px; font-weight: 500; color: #94a3b8; text-transform: none; letter-spacing: 0; }
