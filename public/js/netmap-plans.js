@@ -5,10 +5,11 @@
 
 const NMPlans = self.NMPlans = (() => {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const KIND = { cabinet: ['🗄', '#0e7490', 'Cabinet / rack'], ap: ['📶', '#dc2626', 'Access point'], device: ['🔷', '#1d4ed8', 'Network device'], note: ['📝', '#7c3aed', 'Note'] };
+  const KIND = { cabinet: ['🗄', '#0e7490', 'Cabinet / rack'], ap: ['📶', '#dc2626', 'Access point'], device: ['🔷', '#1d4ed8', 'Network device'], camera: ['📷', '#ea580c', 'Camera'], note: ['📝', '#7c3aed', 'Note'] };
   let cur = null, pins = [], fib = [], dirty = false, zoom = 1, editing = false, cables = localStorage.getItem('pl-cables') !== '0', focusI = null, racks = null;
   const PAL = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5', '#0d9488', '#be123c', '#7c3aed'];
   const D = () => NM.data();
+  const errText = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
 
   function ui() {
     if (document.getElementById('pl-ov')) return;
@@ -62,7 +63,7 @@ const NMPlans = self.NMPlans = (() => {
       : `<button class="btn btn-ghost btn-sm pl-b" onclick="NMPlans.edit(true)">📍 Edit pins</button>`) : '';
   }
   function fitWidth() { const sc = document.getElementById('pl-scroll'), img = document.getElementById('pl-img'); if (!img.naturalWidth) return; zoom = Math.min(1, (sc.clientWidth - 20) / img.naturalWidth) || 1; applyZoom(); }
-  function applyZoom() { const img = document.getElementById('pl-img'); img.style.width = Math.round(img.naturalWidth * zoom) + 'px'; }
+  function applyZoom() { const img = document.getElementById('pl-img'); img.style.width = Math.round(img.naturalWidth * zoom) + 'px'; if (pins.some(p => p.kind === 'camera')) requestAnimationFrame(render); }
   // ── Cables: AP "K7-A5" = AP 5 of cabinet 7 → IT KABIN 7 (HK12-A1 → HARICI KABIN 12); otherwise the switch port the
   //    AP is cabled to in the map, and the cabinet that switch is in.
   const U = (s) => String(s || '').toUpperCase();
@@ -114,16 +115,23 @@ const NMPlans = self.NMPlans = (() => {
     const off = pins.map(() => ({ dx: 0, dy: 0 })), placed = [];
     const hit = (r) => placed.some(q => r[0] < q[2] && q[0] < r[2] && r[1] < q[3] && q[1] < r[3]);
     pins.forEach(p => { const px = p.x / 100 * W, py = p.y / 100 * H; placed.push([px - 10, py - 40, px + 10, py - 17]); });   // the pins' icons
-    pins.map((p, i) => i).sort((a, c) => pins[a].y - pins[c].y || pins[a].x - pins[c].x).forEach(i => {
+    // Many cameras: their names show only when zoomed in (or hovered / red / chosen), so the plan stays readable.
+    const camQuiet = pins.filter(p => p.kind === 'camera').length > 60 && zoom < 0.55;
+    const quiet = (i) => camQuiet && pins[i].kind === 'camera' && focusI !== i;
+    pins.map((p, i) => i).filter(i => !quiet(i)).sort((a, c) => pins[a].y - pins[c].y || pins[a].x - pins[c].x).forEach(i => {
       const p = pins[i], px = p.x / 100 * W, py = p.y / 100 * H, w = String(p.label).length * 6.6 + 14;
       let dy = 0;
       for (let k = 0; k < 10; k++) { const r = [px - w / 2, py - 16 + dy, px + w / 2, py + dy]; if (!hit(r)) { placed.push(r); break; } dy += 17; if (k === 9) placed.push(r); }
       off[i].dy = dy;
     });
+    const camBad = camCheck().bad;
     box.innerHTML = pins.map((p, i) => { const k = KIND[p.kind] || KIND.note;
-      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
+      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}${camBad.has(i) ? ' bad' : ''}${quiet(i) ? ' quiet' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
     const cnt = Object.keys(KIND).map(k => [k, pins.filter(p => p.kind === k).length]).filter(([, n]) => n);
     document.getElementById('pl-sum').textContent = cnt.length ? ' · ' + cnt.map(([k, n]) => `${n} ${KIND[k][2].toLowerCase()}${n > 1 ? 's' : ''}`).join(' · ') : ' · no pins yet';
+    // Cameras: pins whose name is not in the camera list (or twice on the drawing) are red; cameras of the list not on it.
+    const cc = camCheck();
+    if (cc.n) document.getElementById('pl-sum').insertAdjacentHTML('beforeend', `${cc.bad.size ? ` <button class="pl-cbad" onclick="NMPlans.nextBad()" title="Camera pins whose name is not in the camera list (Excel / NVR) or is on the drawing twice — click to go through them">⚠ ${cc.bad.size} camera pin${cc.bad.size > 1 ? 's' : ''} to check</button>` : ''}${cc.missing.length ? ` <button class="pl-cmiss" onclick="NMPlans.missing()" title="Cameras of the camera list that have no pin on this drawing">📷 ${cc.missing.length} not on the drawing</button>` : ''}`);
     // Length labels on the cables of the chosen cabinet (in the pin layer, so the text is not stretched).
     if (cables) box.insertAdjacentHTML('beforeend', fHot.filter(l => l.path.length > 1).map(l => { const m = mid(l.path); return `<div class="pl-flab" style="left:${m[0]}%;top:${m[1]}%;--c:${fibCol(l)}">${esc(fibText(l) || 'fibre')}</div>`; }).join(''));
     box.querySelectorAll('.pl-pin').forEach(el => bindPin(el));
@@ -194,6 +202,11 @@ const NMPlans = self.NMPlans = (() => {
         ${plugged(p)}
         ${aps.length ? `<div class="pl-i-h">Access points cabled here (${aps.length})</div><div class="pl-i-chips">${aps.map(a => `<a href="#" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>`).join('')}</div>` : ''}
         <div class="pl-i-b"><button class="btn btn-ghost btn-sm" onclick="NMPlans.rack(${i})">🗄 Open in Racks</button></div>`;
+    } else if (p.kind === 'camera') {
+      // A camera of the CCTV drawing → its Server Inventory record (picture, IP, switch port), filled in below.
+      const rec = camRec(p), why = camCheck().bad.get(i);
+      body = (why ? camFix(i, why) : '') + (rec ? `<div id="pl-cam" data-id="${rec.id}"><p class="text-muted text-sm">Loading…</p></div>` : '');
+      if (rec) setTimeout(() => camFill(rec), 0);
     } else {
       const d = deviceOf(p), sw = switchPort(p), cj = L.find(l => l.a === i);
       // Check: the cabinet in the AP name vs the cabinet its switch is in.
@@ -210,6 +223,61 @@ const NMPlans = self.NMPlans = (() => {
     if (also.length) body += `<div class="pl-i-h">Also on</div><div class="pl-i-b" style="margin-top:2px;flex-wrap:wrap">${also.map(x => `<button class="btn btn-ghost btn-sm" onclick="NMPlans.goto(${x.id}, ${jsArg(p.ref || p.label)})">📄 ${esc(short(x.name))}</button>`).join('')}</div>`;
     box.innerHTML = `<div class="pl-i-t"><span>${k[0]}</span><b>${esc(p.label)}</b><span class="text-muted text-sm">${esc(k[2])}</span><span style="flex:1"></span><button class="modal-close" aria-label="Close" onclick="NMPlans.unfocus()">✕</button></div>${body}`;
     box.hidden = false;
+  }
+  // Camera pins: K1-01 on the drawing = K1-1 in the camera list.
+  const camKey = (n) => U(n).replace(/\s+/g, '').replace(/-0+(\d)/, '-$1');
+  const camRec = (p) => (D().records || []).find(r => camKey(r.hostname) === camKey(p.ref || p.label));
+  // Camera pins to check: no camera of that name in the list, or the same camera twice on the drawing.
+  function camCheck() {
+    const cams = pins.map((p, i) => [p, i]).filter(([p]) => p.kind === 'camera');
+    const bad = new Map(), seen = new Map();
+    const noName = (p) => !p.ref && /^NO NAME$/i.test(p.label || '');
+    for (const [p, i] of cams) { if (noName(p)) { bad.set(i, 'noname'); continue; } const k = camKey(p.ref || p.label); if (seen.has(k)) { bad.set(i, 'twice'); bad.set(seen.get(k), 'twice'); } else seen.set(k, i); }
+    for (const [p, i] of cams) if (!bad.has(i) && !camRec(p)) bad.set(i, 'unknown');
+    const camList = (D().records || []).filter(r => /camera/i.test(r.category || ''));
+    const missing = cams.length ? camList.filter(r => !seen.has(camKey(r.hostname))).sort((a, b) => String(a.hostname).localeCompare(b.hostname, undefined, { numeric: true })) : [];
+    return { n: cams.length, bad, missing };
+  }
+  const canFixCam = () => !!(D().can.edit || D().can.port);
+  // The fix form in a red pin's popup: choose the camera it really is (cameras without a pin first).
+  function camFix(i, why) {
+    const p = pins[i], cc = camCheck(), name = p.ref || p.label;
+    const msg = why === 'noname' ? 'This camera has no name on the drawing.' : why === 'twice' ? `<b>${esc(name)}</b> is on this drawing twice — one of them is another camera.` : `<b>${esc(name)}</b> is not in the camera list (Excel / NVR).`;
+    return `<div class="pl-i-warn">⚠ ${msg} The drawing (CAD) and the camera list are not always updated together — ${canFixCam() ? 'choose the camera it really is:' : 'ask an editor to correct it.'}</div>
+      ${canFixCam() ? `<div style="display:flex;gap:6px;margin:6px 0"><input class="form-control" id="pl-cfix" list="pl-cfix-l" placeholder="camera name, e.g. ${esc(cc.missing[0] ? cc.missing[0].hostname : 'K2-23')}">
+        <datalist id="pl-cfix-l">${[...cc.missing, ...(D().records || []).filter(r => /camera/i.test(r.category || '') && !cc.missing.includes(r))].map(r => `<option value="${esc(r.hostname)}">${cc.missing.includes(r) ? 'not on the drawing' : ''}</option>`).join('')}</datalist>
+        <button class="btn btn-primary btn-sm" onclick="NMPlans.fixCam(${i})">Save</button></div>
+        ${cc.missing.length ? `<div class="text-muted text-sm">Not on the drawing yet: ${cc.missing.slice(0, 12).map(r => `<a href="#" onclick="document.getElementById('pl-cfix').value=${esc(jsArg(r.hostname))};return false">${esc(r.hostname)}</a>`).join(', ')}${cc.missing.length > 12 ? ' …' : ''}</div>` : ''}
+        <p class="text-muted text-sm" style="margin:6px 0 0">If the drawing is right, correct the name in the camera list / on the NVR instead (the pin turns normal by itself).</p>` : ''}`;
+  }
+  async function fixCam(i) {
+    const v = (document.getElementById('pl-cfix').value || '').trim(); if (!v) return showToast('Choose the camera', 'error');
+    const rec = (D().records || []).find(r => camKey(r.hostname) === camKey(v));
+    if (!rec && !confirm(`${v} is not in the camera list either. Save the pin as ${v} anyway?`)) return;
+    try { const r = await apiPut(`/api/netmap/drawing/${cur.id}/camera-pin`, { i, old: pins[i].ref || pins[i].label, label: rec ? rec.hostname : v.toUpperCase(), ref: rec ? rec.hostname : v.toUpperCase() });
+      pins[i] = r.pin; cur.pins = JSON.stringify(pins); showToast(`Pin saved as ${r.pin.label}`); render(); show(i); }
+    catch (e) { showToast(errText(e, 'Could not save'), 'error'); }
+  }
+  let badAt = -1;
+  function nextBad() { const l = [...camCheck().bad.keys()].sort((a, b) => a - b); if (!l.length) return; badAt = l.find(x => x > badAt) ?? l[0];
+    show(badAt); setTimeout(() => { const el = document.querySelector(`.pl-pin[data-i="${badAt}"]`); if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }, 30); }
+  function missing() {
+    const l = camCheck().missing, box = document.getElementById('pl-info'); focusI = null; render();
+    box.innerHTML = `<div class="pl-i-t"><span>📷</span><b>${l.length} camera${l.length > 1 ? 's' : ''} not on this drawing</b><span style="flex:1"></span><button class="modal-close" aria-label="Close" onclick="NMPlans.unfocus()">✕</button></div>
+      <p class="text-muted text-sm" style="margin:4px 0 8px">In the camera list but no pin here: new cameras not drawn yet, or a red pin with the wrong name — open a red pin to correct it.</p>
+      <div class="pl-i-chips">${l.map(r => `<a href="#" onclick="NM.openRec(${r.id});return false">${esc(r.hostname)}</a>`).join('')}</div>`;
+    box.hidden = false;
+  }
+  async function camFill(rec) {
+    const el = document.getElementById('pl-cam'); if (!el || Number(el.dataset.id) !== rec.id) return;
+    let s; try { s = await apiGet('/api/servers/' + rec.id); } catch { el.innerHTML = '<p class="text-muted text-sm">Not available.</p>'; return; }
+    const sp = String(s.switch_port || '').trim(), m = sp.match(/^(\S+)\s+(.+)$/), sw = D().devices.find(d => d.hostname === (m ? m[1] : sp));
+    const can = D().can.edit || D().can.port;
+    el.innerHTML = `<img class="nm-rec-img" src="/api/servers/${s.id}/photo" alt="" onerror="this.remove()" style="max-height:170px">
+      ${row('Name', s.hostname)}${row('Area', s.role)}${row('Model', s.brand_model)}${row('IP', s.ip_address)}${row('MAC', s.mac)}${row('Status', s.status)}${row('Firmware', s.os)}
+      <div class="pl-i-h">Connected to</div>${sw ? row('Switch', `${sw.hostname}${sw.alias ? ' · ' + sw.alias : ''}`) : ''}${row('Port', m ? m[2] : sp ? 'not known yet' : '')}${!sp ? '<p class="text-muted text-sm">No switch yet.</p>' : ''}
+      <div class="pl-i-b" style="margin-top:6px;flex-wrap:wrap">${sw && m ? `<button class="btn btn-ghost btn-sm" onclick="NM.openPort(${sw.id}, ${jsArg(m[2])})">🔌 ${can ? 'Edit' : 'Open'} port</button>` : ''}
+        ${sw ? `<button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${sw.id})">🔷 Switch</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="NM.openRec(${s.id})">📦 Record</button></div>`;
   }
   // Leave the plan for the map / racks only when asked (buttons in the popup).
   function go(p) {
@@ -234,7 +302,7 @@ const NMPlans = self.NMPlans = (() => {
     const ov = document.getElementById('nm-dev-ov'); ov.classList.add('open'); ov.style.zIndex = 3000;
     // Guess the kind from what is typed.
     document.getElementById('pn-label').addEventListener('input', (e) => { const v = e.target.value.toUpperCase();
-      document.getElementById('pn-kind').value = D().devices.some(d => d.hostname === v) ? 'device' : /KABIN|RACK|^MR-0\d$/.test(v) ? 'cabinet' : /AP\d|-AP/.test(v) ? 'ap' : document.getElementById('pn-kind').value; });
+      document.getElementById('pn-kind').value = D().devices.some(d => d.hostname === v) ? 'device' : /KABIN|RACK|^MR-0\d$/.test(v) ? 'cabinet' : /AP\d|-AP/.test(v) ? 'ap' : /^(HK|K)\d+-\d+R?$/.test(v) ? 'camera' : document.getElementById('pn-kind').value; });
   }
   function addPin(x, y) { pinForm({ x, y, kind: 'ap', label: '' }, (p) => { if (!p.label) return; pins.push(p); dirty = true; render(); }); }
   function editPin(i) { pinForm(pins[i], (p) => { pins[i] = p; dirty = true; render(); }, () => { pins.splice(i, 1); dirty = true; render(); }); }
@@ -246,7 +314,7 @@ const NMPlans = self.NMPlans = (() => {
     if (dirty && !confirm('Pins changed but not saved. Close anyway?')) return;
     document.getElementById('pl-ov').hidden = true; dirty = false;
   }
-  return { open, close, save, pin: show, unfocus: () => { focusI = null; info(null); render(); },
+  return { open, close, save, pin: show, fixCam, nextBad, missing, unfocus: () => { focusI = null; info(null); render(); },
     dev: (id) => { close(); NM.select(id, true); }, rack: (i) => go(pins[i]), edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); render(); },
     goto: (id, ref) => open(id, null, ref), refresh: () => { if (focusI != null && !document.getElementById('pl-ov').hidden) info(focusI); } };
 })();

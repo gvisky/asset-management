@@ -1571,3 +1571,10 @@ html.is-ot.is-ot-admin .si-ed { display: inline-flex !important; }
 .oac-k.port, .oac-k.port_owner { background: #dbeafe; color: #1e40af; } .oac-k.device_edit { background: #fef3c7; color: #92400e; }
 .oac-tm { font-size: 11px; padding: 0 5px; border-radius: 4px; background: #f1f5f9; color: #475569; } .oac-tm.OT { background: #ffedd5; color: #9a3412; }
 tr.oac-done td { opacity: .55; }
+/* Drawings: camera pins to check (name not in the camera list / twice) */
+.pl-pin.bad .pl-dot { background: #dc2626 !important; box-shadow: 0 0 0 3px #fecaca; } .pl-pin.bad .pl-lbl { background: #dc2626; color: #fff; }
+.pl-pin.bad .pl-lbl::before { content: '⚠ '; }
+.pl-cbad, .pl-cmiss { border: 0; border-radius: 10px; padding: 1px 8px; font-size: 12px; cursor: pointer; margin-left: 4px; }
+.pl-cbad { background: #dc2626; color: #fff; } .pl-cmiss { background: #fff7ed; color: #9a3412; }
+.pl-pin.quiet .pl-lbl { display: none; } .pl-pin.quiet:hover .pl-lbl, .pl-pin.quiet.bad .pl-lbl { display: block; position: absolute; top: 100%; white-space: nowrap; z-index: 3; }
+.pl-pin.quiet .pl-dot { transform: scale(.8); }
