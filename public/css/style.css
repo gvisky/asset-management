@@ -1578,3 +1578,7 @@ tr.oac-done td { opacity: .55; }
 .pl-cbad { background: #dc2626; color: #fff; } .pl-cmiss { background: #fff7ed; color: #9a3412; }
 .pl-pin.quiet .pl-lbl { display: none; } .pl-pin.quiet:hover .pl-lbl, .pl-pin.quiet.bad .pl-lbl { display: block; position: absolute; top: 100%; white-space: nowrap; z-index: 3; }
 .pl-pin.quiet .pl-dot { transform: scale(.8); }
+/* CCTV camera pin icon (SVG) */
+.pl-cam-ico { display: block; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
+.pl-pin.bad .pl-dot:has(.pl-cam-ico) { border-radius: 6px; padding: 1px; }
+.pl-i-t .pl-cam-ico { width: 30px; height: 24px; }
