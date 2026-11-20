@@ -132,9 +132,18 @@ function renderUserChrome() {
   const ico = (d) => `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${d}</svg>`;
   navAdd('nav-stocktake', '/stocktake.html', ico('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>') + ' Stocktake', '#nav-maintenance', u.asset_access !== 0);
   navAdd('nav-netmap', '/network-map.html', ico('<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>') + ' Network map', '#nav-servers', u.asset_access !== 0 || u.team === 'OT');
-  navAdd('nav-otna', '/ot-attention.html', ico('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>') + ' OT Needs Attention', '#nav-netmap', u.team === 'OT' || u.team === 'IT');
-  navAdd('nav-otrep', '/ot-reports.html', ico('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>') + ' OT Reports', '#nav-otna', u.team === 'OT' || u.team === 'IT');
-  navAdd('nav-otact', '/ot-activity.html', ico('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>') + ' OT Activity', '#nav-otrep', !!u.ot_admin || (u.team === 'IT' && ['admin', 'editor'].includes(u.role)));
+  navAdd('nav-otna', '/ot-attention.html', ico('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>') + ' OT Needs Attention', '#nav-netmap', u.team === 'OT');
+  navAdd('nav-otrep', '/ot-reports.html', ico('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>') + ' OT Reports', '#nav-otna', u.team === 'OT');
+  navAdd('nav-otact', '/ot-activity.html', ico('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>') + ' OT Activity', '#nav-otrep', !!u.ot_admin);
+  // IT team: the OT pages are reached from Needs Attention / Reports / Users & Audit (not in the menu) — mark that page
+  // in the menu and add a way back in the top bar.
+  const otParent = { '/ot-attention.html': ['nav-alerts', '/alerts.html', 'Needs Attention'], '/ot-reports.html': ['nav-reports', '/reports.html', 'Reports'],
+    '/ot-activity.html': ['nav-users', '/users.html', 'Users & Audit'] }[window.location.pathname];
+  if (otParent && u.team === 'IT') setTimeout(() => {
+    const l = document.getElementById(otParent[0]) || document.querySelector(`.sidebar nav a[href="${otParent[1]}"]`); if (l) l.classList.add('active');
+    const tb = document.querySelector('.topbar-title');
+    if (tb && !document.getElementById('ot-back') && (otParent[0] !== 'nav-users' || isGlobalAdmin())) tb.insertAdjacentHTML('beforebegin', `<a id="ot-back" class="btn btn-ghost btn-sm" href="${otParent[1]}" style="margin-right:8px">← ${otParent[2]}</a>`);
+  }, 0);
   navAdd('nav-kpi', '/kpi.html', ico('<polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/>') + ' KPIs', '#nav-reports', u.asset_access !== 0);
 
   // System Health link — IT team only, right after Devices.
