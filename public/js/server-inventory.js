@@ -167,6 +167,7 @@ async function onView(id) {
       ['Network map', s.hostname ? `<a href="/network-map.html?host=${encodeURIComponent(s.hostname)}">🗺 Open ${sEsc(s.hostname)} on the network map</a>` : ''],
     ];
     document.getElementById('view-body').innerHTML = `
+      <img class="si-photo" src="/api/servers/${s.id}/photo" alt="" onerror="this.remove()">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
         ${fields.map(([l, v]) => `<div><div class="form-label" style="margin-bottom:3px">${l}</div><div style="font-size:13.5px;white-space:pre-line">${v || '<span class="text-muted">—</span>'}</div></div>`).join('')}
       </div>
@@ -361,7 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Update from the network map (implementation document) — admins ──
 // The button shows for admins once the page knows who you are.
 document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin') document.getElementById('btn-netsync').style.display = '';
-  if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; }
+  if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-cctvimport').style.display = ''; }
   // OT team: read-only list of the OT devices.
   if (window.CURRENT_USER.team === 'OT' && window.CURRENT_USER.role === 'editor') document.getElementById('btn-portlinks').style.display = '';
   if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-t=phys]'); if (s) s.textContent = '🏭 OT devices'; }

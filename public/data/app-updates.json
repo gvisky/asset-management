@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "📷 CCTV cameras: camera list import with pictures, on their CCTV switch",
+    "items": [
+      "New 📷 CCTV camera list button (IT admins) on Server Inventory: upload the NVR camera export (.xlsx with a snapshot in each row). Camera names give the cabinet — K5-12 = CCTV KABIN 5, HK8-1R = HARICI KABIN 8, K11 = IT KABIN 11, K1 = office building (MR-01) — and each group is put on that cabinet's CCTV switch (you can change it). The preview shows every camera with its picture, plus checks of the list (duplicate names, old firmware, HTTP without HTTPS, different subnet / gateway settings). Apply adds the cameras (model, IP, MAC, serial, firmware, CCTV switch, location; OT by default) and saves their snapshots; existing cameras only get empty fields filled. Uploading again changes nothing but the pictures.",
+      "The snapshot shows in the Server Inventory record and in a camera card on the Network map: click a camera under a CCTV switch on the Topology, or in a CCTV / HARICI KABIN popup of the site plan (OT users too). Cameras without a known switch port are listed with • until their port is set."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "CCTV switches: same models and ports as the Server Inventory switches",
     "items": [
       "📹 on the Racks tab now adds the CCTV switches as Cisco C9200L-48P-4X-E (48 ports GE 1/0/1–48 + 4 uplinks T 1/1/1–4, like the IT switches) and WS-C3560CX-12PD-S (12 ports + 2 uplinks GE 1/0/13–14, like the card-reader switches); the MR-01 CCTV switches without a model in their label as C9200L-48P.",
