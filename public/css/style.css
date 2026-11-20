@@ -1519,3 +1519,5 @@ html.is-ot .si-tabs [data-t="vm"], html.is-ot-viewer #view-edit-btn, html.is-ot-
 .pl-i-end.ot { border-left-color: #ea580c; background: #fff7ed; }
 .pl-i-end:hover { background: #e0f2fe; } .pl-i-end b { display: inline-block; min-width: 22px; color: #0e7490; }
 #nm-port-ov, #nm-dev-ov { z-index: 2600; }
+.nm-rec-img, .si-photo { display: block; max-width: 100%; width: 320px; border-radius: 8px; margin: 0 0 12px; border: 1px solid var(--border); }
+.ci-th { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; display: block; }

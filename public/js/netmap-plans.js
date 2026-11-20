@@ -156,7 +156,7 @@ const NMPlans = self.NMPlans = (() => {
     const can = D().can.edit || D().can.port;
     return sws.map(sw => { const its = NM.endItems(sw);
       return `<div class="pl-i-h">Plugged into ${esc(sw.hostname)} (${its.length})</div>
-        ${its.length ? `<div class="pl-i-ends">${its.map(e => `<a href="#" class="pl-i-end${e.ot ? ' ot' : ''}" title="${can ? 'Open / edit port ' : 'Port '}${esc(e.port)}${e.rec ? ' · Server Inventory #' + e.rec : ''}" onclick="NM.openPort(${sw.id}, ${jsArg(e.port)});return false"><b>${esc(e.pn)}</b> ${e.icon} ${esc(e.name)}</a>`).join('')}</div>`
+        ${its.length ? `<div class="pl-i-ends">${its.map(e => `<a href="#" class="pl-i-end${e.ot ? ' ot' : ''}" title="${can ? 'Open / edit port ' : 'Port '}${esc(e.port)}${e.rec ? ' · Server Inventory #' + e.rec : ''}" onclick="${e.port ? `NM.openPort(${sw.id}, ${jsArg(e.port)})` : `NM.openRec(${e.rec})`};return false"><b>${esc(e.pn)}</b> ${e.icon} ${esc(e.name)}</a>`).join('')}</div>`
           : '<p class="text-muted text-sm" style="margin:2px 0">Nothing plugged in yet.</p>'}
         <div class="pl-i-b" style="margin-top:4px"><button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${sw.id})">🔷 All ports of ${esc(sw.hostname)}</button></div>`; }).join('')
       + (can ? '<p class="text-muted text-sm" style="margin:6px 0 0">Click a device to change its port (name, VLAN, note …) right here.</p>' : '');

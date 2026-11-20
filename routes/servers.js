@@ -233,6 +233,69 @@ router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
   res.json({ ok: true, ...done });
 }));
 
+// ── POST /api/servers/cctv-import — CCTV camera list (lib/cctv-import.js; the browser reads the .xlsx and its pictures) ──────
+// body { aoa, overrides: { "<group K5 / HK8 …>": CCTV switch id | 0 }, it_ot: 'OT' | 'IT', dry } → plan; without dry: adds the
+// cameras / fills empty fields of existing ones, returns { ids: { "<mac or name>": server id } } for the pictures. IT admins.
+const CctvImport = require('../lib/cctv-import');
+router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
+  const b = req.body || {};
+  const aoa = Array.isArray(b.aoa) ? b.aoa.slice(0, 3000).map(r => (Array.isArray(r) ? r.slice(0, 60).map(c => String(c == null ? '' : c).slice(0, 300)) : [])) : [];
+  const { rows, error } = CctvImport.readRows(aoa);
+  if (error) return res.status(400).json({ error });
+  const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
+  const site = String(b.site || (sites[0] && sites[0].site) || '').slice(0, 80);
+  const devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  const servers = await all('SELECT * FROM servers WHERE deleted_at IS NULL');
+  const p = CctvImport.plan(rows, { devices, servers }, b.overrides && typeof b.overrides === 'object' ? b.overrides : {});
+  const itot = b.it_ot === 'IT' ? '' : 'OT';
+  if (b.dry) return res.json({ site, switches: devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired').map(d => ({ id: d.id, hostname: d.hostname, location: d.location }))
+    .sort((x, y) => (/CCTV/.test(y.hostname) - /CCTV/.test(x.hostname)) || x.hostname.localeCompare(y.hostname)), ...p });
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const country = /thai/i.test(site) ? 'Thailand' : /malay/i.test(site) ? 'Malaysia' : 'Vietnam';
+  const ids = {}; let added = 0, updated = 0;
+  for (const c of p.cameras) {   // one by one: the new ids are needed for the pictures
+    if (c.action === 'add') {
+      const f = { ...c.fields, it_ot: itot, country };
+      const cols = Object.keys(f);
+      const r = await run(`INSERT INTO servers (${cols.join(', ')}, history_usage) VALUES (${cols.map(() => '?').join(', ')}, ?)`, [...cols.map(k => f[k]), `${ts}: added from the CCTV camera list by ${req.user.username}`]);
+      ids[c.key] = Number(r.lastInsertRowid); added++;
+    } else {
+      ids[c.key] = c.server_id;
+      if (c.action === 'update') {
+        const cols = Object.keys(c.fill), line = `${ts}: filled ${cols.join(', ')} from the CCTV camera list by ${req.user.username}`;
+        await run(`UPDATE servers SET ${cols.map(k => k + ' = ?').join(', ')}, history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END WHERE id = ?`,
+          [...cols.map(k => c.fill[k]), line, line, c.server_id]); updated++;
+      }
+    }
+  }
+  await audit(req.user, 'CREATE', null, `CCTV camera list: ${added} camera(s) added, ${updated} filled in Server Inventory`);
+  res.json({ ok: true, added, updated, ids });
+}));
+
+// ── Pictures of devices: POST /api/servers/photos { items: [{ server_id, mime, b64 }], source } (IT admins; ≤ 300 KB each,
+//    replaces the device's picture) · GET /api/servers/:id/photo (anyone who may see the record).
+router.post('/photos', requireITAdmin, wrap(async (req, res) => {
+  const items = (Array.isArray(req.body && req.body.items) ? req.body.items : []).slice(0, 100);
+  const stmts = [];
+  for (const it of items) {
+    const id = Number(it.server_id), mime = String(it.mime || ''), b64 = String(it.b64 || '');
+    if (!id || !/^image\/(jpeg|png|webp)$/.test(mime) || !b64 || b64.length > 400 * 1024) continue;
+    stmts.push({ sql: `INSERT INTO server_photos (server_id, mime, data_b64, size, source, uploaded_by) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(server_id) DO UPDATE SET mime = excluded.mime, data_b64 = excluded.data_b64, size = excluded.size, source = excluded.source, uploaded_by = excluded.uploaded_by, uploaded_at = datetime('now')`,
+      args: [id, mime, b64, Math.round(b64.length * 0.75), String(req.body.source || '').slice(0, 40), req.user.username] });
+  }
+  if (stmts.length) await batch(stmts);
+  res.json({ ok: true, saved: stmts.length });
+}));
+router.get('/:id/photo', wrap(async (req, res) => {
+  const s = await get('SELECT country, it_ot FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
+  if (!s || (isOT(req) && s.it_ot !== 'OT') || !inScope(req, s.country)) return res.status(404).end();
+  const p = await get('SELECT mime, data_b64 FROM server_photos WHERE server_id = ?', [req.params.id]);
+  if (!p || !p.data_b64) return res.status(404).end();
+  res.set('Content-Type', p.mime).set('Cache-Control', 'private, max-age=300');
+  res.send(Buffer.from(p.data_b64, 'base64'));
+}));
+
 // ── POST /api/servers/port-links — which access-switch port each device is on (lib/port-links.js) ──────────────────
 // body { site, dry } → plan; { site, link: [server ids], add: [{ port_id, name, it_ot, category }] } → apply (IT admins):
 // writes "Connected to" (switch_port, + location when empty) and adds the devices cabled to an access switch that have no record.

@@ -201,6 +201,20 @@ const NM = (() => {
   const END_ICON = [[/camera|cam\b/i, '📷'], [/print|zt4|ricoh/i, '🖨'], [/access control|vega|dcce|cosec|matrix|maxtrix/i, '🚪'], [/kiosk|kios|retmes|panel pc/i, '🖥'],
     [/tv\b|television|display/i, '📺'], [/plc|logix|s7-|simatic/i, '⚙'], [/moxa|edr-|eds-|hub|industrial switch/i, '🔀'], [/gateway|mgate|egx|emg|hd67044/i, '🔌'],
     [/sensor|ams01|measurement/i, '🌡'], [/phone|78\d\d/i, '☎']];
+  // A Server Inventory device (with its picture) in a small window above the map / plan.
+  async function openRec(id) {
+    if (!$('nm-rec-ov')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="nm-rec-ov" style="z-index:2600"><div class="modal" style="max-width:520px">
+      <div class="modal-header"><span class="modal-title" id="nm-rec-t">Device</span><button class="modal-close" aria-label="Close" onclick="document.getElementById('nm-rec-ov').classList.remove('open')">✕</button></div>
+      <div class="modal-body" id="nm-rec-b"></div></div></div>`);
+    $('nm-rec-ov').classList.add('open'); $('nm-rec-b').innerHTML = '<p class="text-muted">Loading…</p>';
+    let s; try { s = await apiGet('/api/servers/' + id); } catch { $('nm-rec-b').innerHTML = '<p class="text-muted">Not available.</p>'; return; }
+    const row = (k, v) => (v ? `<div class="pl-i-r"><span>${k}</span><b>${esc(v)}</b></div>` : '');
+    $('nm-rec-t').innerHTML = `${s.it_ot === 'OT' ? '<span class="si-ot">OT</span> ' : ''}${esc(s.hostname || '#' + s.id)}`;
+    $('nm-rec-b').innerHTML = `<img class="nm-rec-img" src="/api/servers/${s.id}/photo" alt="" onerror="this.remove()">
+      ${row('Category', s.category)}${row('Model', s.brand_model)}${row('IP', s.ip_address)}${row('MAC', s.mac)}${row('Serial', s.serial_no)}${row('Firmware', s.os)}
+      ${row('Connected to', s.switch_port)}${row('Location', s.location)}${row('Status', s.status)}${row('Note', s.remark)}
+      <div class="pl-i-b" style="margin-top:8px"><a class="btn btn-ghost btn-sm" href="/server-inventory.html?view=${s.id}" target="_blank" rel="noopener">📦 Open in Server Inventory</a></div>`;
+  }
   const endIcon = (t) => (END_ICON.find(([re]) => re.test(t)) || [0, '💻'])[1];
   function endItems(dev) {
     const out = [];
@@ -213,6 +227,9 @@ const NM = (() => {
         out.push({ port: p.port, pn, name, rec: 0, ot: false, icon: endIcon(`${name} ${p.note}`) });
       }
     }
+    // Devices known to be on this switch but not on which port yet (CCTV cameras from the camera list).
+    for (const r of (D.records || []).filter(r => r.switch_port === dev.hostname).sort((a, b) => natural(a.hostname, b.hostname)))
+      out.push({ port: '', pn: '•', name: r.hostname || '#' + r.id, rec: r.id, ot: r.it_ot === 'OT', icon: endIcon(`${r.category} ${r.hostname}`) });
     return out;
   }
   function renderTopoKeep(keep) { keepPos = keep; renderTopo(); keepPos = null; }
@@ -266,7 +283,7 @@ const NM = (() => {
         : `<path d="M${S.x},${S.y + 30} V${rail} M${Math.min(lo, S.x)},${rail} H${Math.max(hi, S.x)}" class="nm-endl bus"/>`;
       for (const e of fend) g += h ? `<line x1="${rail}" y1="${e.y}" x2="${e.x - 17}" y2="${e.y}" class="nm-endl${e.ot ? ' ot' : ''}"/>`
         : `<line x1="${e.x}" y1="${rail}" x2="${e.x}" y2="${e.y - 17}" class="nm-endl${e.ot ? ' ot' : ''}"/>`;
-      for (const e of fend) g += `<g class="nm-end${e.ot ? ' ot' : ''}" data-port="${esc(e.port)}" transform="translate(${e.x},${e.y})"><title>${esc(e.name)} · port ${esc(e.port)}${e.rec ? ' · Server Inventory #' + e.rec : ''}${e.ot ? ' · OT' : ''}</title>
+      for (const e of fend) g += `<g class="nm-end${e.ot ? ' ot' : ''}" data-port="${esc(e.port)}" data-rec="${e.rec || ''}" transform="translate(${e.x},${e.y})"><title>${esc(e.name)} · port ${esc(e.port)}${e.rec ? ' · Server Inventory #' + e.rec : ''}${e.ot ? ' · OT' : ''}</title>
         <circle r="17"/><text y="6" class="nm-end-i">${e.icon}</text><text y="-20" class="nm-end-p">${esc(e.pn)}</text>
         <text y="31" class="nm-end-n">${esc(e.name.length > 18 ? e.name.slice(0, 17) + '…' : e.name)}</text>${e.ot ? '<text x="13" y="-9" class="nm-end-ot">OT</text>' : ''}</g>`;
     }
@@ -341,7 +358,7 @@ const NM = (() => {
         else select(d.d.id);
       } else if (!d.moved) {
         const en = under && under.closest('.nm-end');
-        if (en && sel) { openPort(sel, en.dataset.port); return; }
+        if (en && sel) { if (en.dataset.port) openPort(sel, en.dataset.port); else if (en.dataset.rec) openRec(Number(en.dataset.rec)); return; }
         const l = (under && under.closest('.nm-link')) || e.target.closest('.nm-link');
         if (l) { const [a] = l.dataset.k.split('~'); select(byHost.get(a).id, false, l.dataset.k); }
       }
@@ -626,7 +643,7 @@ const NM = (() => {
     load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { data: () => D, reload: () => load(D.site), endItems, isAccess: (d) => /access switch/i.test((d && d.role) || ''), known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
+  return { data: () => D, reload: () => load(D.site), endItems, openRec, isAccess: (d) => /access switch/i.test((d && d.role) || ''), known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); }, isNet,
     outlet: (o) => { const pp = (D.patches || []).find(x => String(x.outlet).toUpperCase() === String(o).toUpperCase()); if (pp && self.NMFaces) NMFaces.panel(pp.panel); else showToast('Outlet ' + o + ' is not in the patch-panel list', 'error'); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, group: setGroup, groupShown: () => grp, groupOf, gcol, tab: (v) => tab(v),

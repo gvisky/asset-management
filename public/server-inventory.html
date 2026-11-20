@@ -53,6 +53,7 @@
     <button class="btn btn-ghost btn-sm" id="btn-missing" onclick="openMissing()" title="Devices with missing serial, hostname, IP or location — fill them in here">⚠️ Needs Attention — Servers &amp; Network: Missing Info <span class="na-cnt" id="na-cnt"></span></button>
     <button class="btn btn-ghost btn-sm" onclick="ServerUsage.open()" title="How many devices of each model are in use (network mapping) and how many are stock">📦 Used / stock</button>
     <button class="btn btn-ghost btn-sm" id="btn-portlinks" style="display:none" onclick="PortLinksUI.open()" title="Link every device (IT and OT) to the access-switch port it is cabled to on the network map; add the devices on the switch ports that have no record yet — preview first">🔌 Switch ports</button>
+    <button class="btn btn-ghost btn-sm" id="btn-cctvimport" style="display:none" onclick="CctvImport.open()" title="Upload the CCTV camera list (NVR export with pictures): cameras into Server Inventory on their CCTV switch, with their snapshot — preview first">📷 CCTV camera list</button>
     <button class="btn btn-ghost btn-sm" id="btn-otimport" style="display:none" onclick="OTDeviceImport.open()" title="Upload the OT device list (CMDB .xlsx): adds the OT devices here and fills their empty switch ports on the network map — preview first">⬆ OT device list</button>
     <button class="btn btn-ghost btn-sm" id="btn-netsync" style="display:none" onclick="openNetSync()" title="Fill hostname, IP, rack location and IP list from the network map (implementation document); add devices that are missing">🔄 Update from network map</button>
     <button class="btn btn-primary btn-sm" id="btn-add">+ Add Server</button>
@@ -186,8 +187,9 @@
 <script src="/js/device-specs.js?v=20261117a"></script>
 <script src="/js/server-attention.js?v=20261117a"></script>
 <script src="/js/ot-import.js?v=20261119a"></script>
+<script src="/js/cctv-import.js?v=20261120b"></script>
 <script src="/js/port-links.js?v=20261120b"></script>
-<script src="/js/server-inventory.js?v=20261120b"></script>
+<script src="/js/server-inventory.js?v=20261120c"></script>
 <script src="/js/server-usage.js?v=20261119a"></script>
 <script src="/js/virtual-servers.js?v=20261119b"></script>
 </body>
