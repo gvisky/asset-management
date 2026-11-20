@@ -66,3 +66,45 @@ const MacPorts = (() => {
   }
   return { open(done) { onDone = done || null; shell(); $('mp-ov').classList.add('open'); start(); } };
 })();
+
+/* 📷 Camera switches (POST /api/servers/camera-switches): cameras with no switch get the CCTV switch of their cabinet from
+   their name (K5-12 → CCTV KABIN 5, HK8-1R → HARICI KABIN 8, K1 → MR-01, K11 → IT KABIN 11). Preview, tick, apply. */
+const CamSwitches = (() => {
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const $ = (id) => document.getElementById(id);
+  const errText = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return (e && e.message) || f; } };
+  let P = null, onDone = null;
+  function shell() {
+    if ($('cs-ov')) return;
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="cs-ov"><div class="modal" style="max-width:900px;width:95vw">
+      <div class="modal-header"><span class="modal-title">📷 Camera switches from the camera names</span><button class="modal-close" aria-label="Close" onclick="document.getElementById('cs-ov').classList.remove('open')">✕</button></div>
+      <div class="modal-body" id="cs-b" style="max-height:74vh;overflow:auto"></div><div class="modal-footer" id="cs-f"></div></div></div>`);
+  }
+  async function load() {
+    $('cs-b').innerHTML = '<p class="text-muted">Reading…</p>'; $('cs-f').innerHTML = '';
+    try { P = await apiPost('/api/servers/camera-switches', { dry: true }); render(); }
+    catch (e) { $('cs-b').innerHTML = `<p style="color:#b91c1c">${esc(errText(e, 'Could not read'))}</p>`; }
+  }
+  function render() {
+    const set = P.rows.filter(r => r.action === 'set'), n = (a) => P.rows.filter(r => r.action === a).length;
+    const groups = new Map(); for (const r of set) { const k = `${r.to}|${r.how}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+    $('cs-b').innerHTML = `<div class="us-sum"><div class="s"><b>${set.length}</b><span>cameras to set</span></div><div><b>${n('same')}</b><span>already on their switch</span></div>
+        <div><b>${n('keep')}</b><span>on a port of another switch — kept</span></div><div class="f"><b>${n('none')}</b><span>no cabinet in the name</span></div></div>
+      <p class="text-muted text-sm" style="margin:8px 0">Same rule as the camera list import: K5-12 → CCTV KABIN 5, HK8-1R → HARICI KABIN 8, K1 → office MR-01, K11 → IT KABIN 11. "Connected to" becomes the cabinet's (first) CCTV switch; the port comes later from 🔎 Ports from MAC tables. Cameras already on a port are not touched.</p>
+      ${set.length ? `<table class="nm-vt oi-t"><thead><tr><th><input type="checkbox" id="cs-all" checked></th><th>Switch</th><th>Cabinet</th><th>Cameras</th></tr></thead><tbody>
+        ${[...groups.values()].map(l => `<tr><td><input type="checkbox" class="cs-g" data-ids="${l.map(r => r.server_id).join(',')}" checked></td><td><b>${esc(l[0].to)}</b>${l[0].to_name ? ' · ' + esc(l[0].to_name) : ''}</td>
+          <td class="text-sm">${esc(l[0].how)}</td><td class="text-sm">${l.length}: ${l.map(r => esc(r.hostname)).join(', ')}</td></tr>`).join('')}</tbody></table>` : '<p class="text-muted">Nothing to set — every camera is on its switch.</p>'}
+      ${n('none') ? `<p class="text-sm" style="margin:10px 0 0">No cabinet in the name: ${P.rows.filter(r => r.action === 'none').map(r => esc(r.hostname)).join(', ')} — set "Connected to" by hand.</p>` : ''}`;
+    $('cs-f').innerHTML = `<button class="btn btn-ghost" onclick="document.getElementById('cs-ov').classList.remove('open')">Cancel</button><button class="btn btn-primary" id="cs-go"${set.length ? '' : ' disabled'}>Set ${set.length} camera${set.length === 1 ? '' : 's'}</button>`;
+    if ($('cs-all')) $('cs-all').onchange = (e) => $('cs-b').querySelectorAll('.cs-g').forEach(c => { c.checked = e.target.checked; });
+    $('cs-go').onclick = apply;
+  }
+  async function apply() {
+    const ids = [...$('cs-b').querySelectorAll('.cs-g:checked')].flatMap(c => c.dataset.ids.split(',').map(Number));
+    if (!ids.length) return showToast('Tick at least one switch', 'error');
+    $('cs-go').disabled = true;
+    try { const a = await apiPost('/api/servers/camera-switches', { apply: ids }); showToast(`${a.set} camera${a.set === 1 ? '' : 's'} set to their CCTV switch`); $('cs-ov').classList.remove('open'); if (onDone) onDone(); }
+    catch (e) { $('cs-go').disabled = false; showToast(errText(e, 'Could not apply'), 'error'); }
+  }
+  return { open(done) { onDone = done || null; shell(); $('cs-ov').classList.add('open'); load(); } };
+})();
