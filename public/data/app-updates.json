@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "CCTV switches: same models and ports as the Server Inventory switches",
+    "items": [
+      "📹 on the Racks tab now adds the CCTV switches as Cisco C9200L-48P-4X-E (48 ports GE 1/0/1–48 + 4 uplinks T 1/1/1–4, like the IT switches) and WS-C3560CX-12PD-S (12 ports + 2 uplinks GE 1/0/13–14, like the card-reader switches); the MR-01 CCTV switches without a model in their label as C9200L-48P.",
+      "CCTV switches already added with the first layout are corrected by the same button (\"Correct n CCTV switches\"): model set, missing ports added, empty extra ports removed, and a used uplink with the old name renamed (TE 1/1/1 → T 1/1/1) together with its far end — nothing written on a port is lost."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Network map: CCTV switches added from the racks",
     "items": [
       "Racks tab (admins): 📹 Add CCTV switches to the map turns the CCTV switches that were only labels in the racks (SR-02/CCTV-ASW-03(9200) … SR-31/CCTV-ASW-24(3560), MR-01/CCTV-ASW-01/02, the CCTV distribution switches MR-02/CCTV-DSW-01 and MR-03/CCTV-DSW-02) into real devices of the map, linked to their rack slot, with ports: Catalyst 9200 = 24 + 4 uplinks, 3560CX = 14, distribution switches none (add their ports by hand). Preview first; the button disappears once done.",
