@@ -393,15 +393,24 @@ router.get('/racks', wrap(async (req, res) => {
   res.json({ racks, items });
 }));
 // ── CCTV switches: in the racks only as labels ("SR-02/CCTV-ASW-03(9200)", "MR-02/CCTV-DSW-01") → real devices of the map
-// with ports, linked to their rack slot. POST { site, dry } (admins). Default ports: Catalyst 9200 = 24 × GE + 4 × TE uplinks,
-// 3560CX = 12 × GE + 2 uplinks (GE 1/0/13–14, like the card-reader switches); distribution switches none (add them by hand).
+// with ports, linked to their rack slot. POST { site, dry } (admins). Same models and port layout as the Server Inventory / IT switches:
+// Cisco C9200L-48P-4X-E = GE 1/0/1–48 + T 1/1/1–4 uplinks; WS-C3560CX-12PD-S = GE 1/0/1–12 + GE 1/0/13–14 uplinks (like the
+// card-reader switches); distribution switches no ports (add them by hand). CCTV switches added before with other ports are corrected:
+// missing ports added, model set, extra ports removed only when nothing is written on them.
 const CCTV_LABEL = /^\s*([A-Z]{2}-\d+\/CCTV-(ASW|DSW)-\d+)\s*(?:\((\w+)\))?\s*$/i;
+const CCTV_MODEL = { '9200': 'CISCO C9200L-48P-4X-E', '3560': 'WS-C3560CX-12PD-S' };
+function cctvPorts(model) {
+  if (/9200/.test(model)) return [...Array.from({ length: 48 }, (_, i) => `GE 1/0/${i + 1}`), ...Array.from({ length: 4 }, (_, i) => `T 1/1/${i + 1}`)];
+  if (/3560/.test(model)) return Array.from({ length: 14 }, (_, i) => `GE 1/0/${i + 1}`);
+  return [];
+}
 router.post('/cctv-switches', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const site = str(req.body.site, 80);
   const items = await all(`SELECT i.*, r.name AS rack, r.kind AS rack_kind FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id
     WHERE r.site = ? AND i.device_id IS NULL ORDER BY r.sort, r.name, i.u DESC`, [site]);
-  const have = new Set((await all('SELECT hostname FROM net_devices WHERE site = ?', [site])).map(d => d.hostname.toUpperCase()));
+  const devs = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  const have = new Set(devs.map(d => d.hostname.toUpperCase()));
   const servers = await all("SELECT id, hostname, serial_no FROM servers WHERE deleted_at IS NULL AND COALESCE(hostname, '') <> ''");
   const plan = [];
   for (const it of items) {
@@ -410,24 +419,50 @@ router.post('/cctv-switches', wrap(async (req, res) => {
     if (have.has(hostname) || plan.some(x => x.hostname === hostname)) continue;
     const mr = String(it.rack).match(/^MR-0?(\d+)$/i);
     const location = `${mr ? `MAIN RACK - 0${mr[1]}` : String(it.rack).replace(/^HARICI-/i, 'HARICI ')} (U${it.u}${it.height > 1 ? '-' + (it.u + it.height - 1) : ''})`;
-    const model = fam === '9200' ? 'CISCO C9200' : fam === '3560' ? 'CISCO 3560CX' : fam ? 'CISCO ' + fam : 'CISCO';
-    const ports = dsw ? [] : fam === '3560' ? Array.from({ length: 14 }, (_, i) => `GE 1/0/${i + 1}`)
-      : [...Array.from({ length: 24 }, (_, i) => `GE 1/0/${i + 1}`), ...Array.from({ length: 4 }, (_, i) => `TE 1/1/${i + 1}`)];
+    // No model in the label (MR-01/CCTV-ASW-01): a 48-port Catalyst 9200 like the other main-rack switches.
+    const model = dsw ? 'CISCO' : CCTV_MODEL[fam] || CCTV_MODEL['9200'];
     const sv = servers.find(x => x.hostname.toUpperCase() === hostname);
-    plan.push({ item_id: it.id, rack: it.rack, u: it.u, hostname, role: dsw ? 'Distribution switch' : 'Access switch', model, location, ports, server_id: sv ? sv.id : null, alias: `CCTV ${dsw ? 'distribution' : 'access'} switch` });
+    plan.push({ action: 'add', item_id: it.id, hostname, role: dsw ? 'Distribution switch' : 'Access switch', model, location, ports: dsw ? [] : cctvPorts(model), server_id: sv ? sv.id : null, alias: `CCTV ${dsw ? 'distribution' : 'access'} switch` });
   }
-  if (req.body.dry) return res.json({ site, rows: plan.map(p => ({ ...p, ports: p.ports.length })) });
+  // CCTV access switches added from the racks before (other port layout / model).
+  const ports = await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]);
+  for (const d of devs.filter(x => x.source === 'racks' && /CCTV-ASW/i.test(x.hostname))) {
+    const fam = /3560/.test(d.model) ? '3560' : '9200', model = CCTV_MODEL[fam], want = cctvPorts(model);
+    const mine = ports.filter(p => p.device_id === d.id), names = new Set(mine.map(p => p.port));
+    let add = want.filter(p => !names.has(p));
+    const extra = mine.filter(p => !want.includes(p.port));
+    const used = (p) => !!(p.peer_host || p.peer_port || p.note || p.vlan || p.patch || p.mode || p.cable);
+    // A used port with the old name ("TE 1/1/1") is renamed to its right name ("T 1/1/1") when that one is still missing.
+    const rename = [];
+    for (const p of extra.filter(used)) { const to = p.port.replace(/^(TE|TEN|TWE)\s*/i, 'T '); if (add.includes(to)) { rename.push({ id: p.id, from: p.port, to }); add = add.filter(x => x !== to); } }
+    const removable = extra.filter(p => !used(p));
+    const keep = extra.filter(used).length - rename.length;
+    if (!add.length && !removable.length && !rename.length && d.model === model) continue;
+    plan.push({ action: 'fix', device_id: d.id, hostname: d.hostname, model, add, rename, remove: removable.map(p => p.id), keep, ports: want });
+  }
+  if (req.body.dry) return res.json({ site, rows: plan.map(p => ({ action: p.action, hostname: p.hostname, model: p.model, location: p.location || '', ports: p.ports.length,
+    add: p.add ? p.add.length : p.ports.length, remove: p.remove ? p.remove.length : 0, rename: p.rename ? p.rename.length : 0, keep: p.keep || 0 })) });
   const stmts = [];
   for (const p of plan) {
+    if (p.action === 'fix') {
+      stmts.push({ sql: "UPDATE net_devices SET model = ?, updated_at = datetime('now') WHERE id = ?", args: [p.model, p.device_id] });
+      p.add.forEach(pt => stmts.push({ sql: 'INSERT OR IGNORE INTO net_ports (device_id, port, sort) VALUES (?, ?, ?)', args: [p.device_id, pt, portSort(pt)] }));
+      p.remove.forEach(id => stmts.push({ sql: "DELETE FROM net_ports WHERE id = ? AND COALESCE(peer_host, '') = '' AND COALESCE(note, '') = ''", args: [id] }));
+      p.rename.forEach(r => { stmts.push({ sql: 'UPDATE net_ports SET port = ?, sort = ? WHERE id = ?', args: [r.to, portSort(r.to), r.id] });
+        stmts.push({ sql: `UPDATE net_ports SET peer_port = ? WHERE peer_host = ? AND peer_port = ? AND device_id IN (SELECT id FROM net_devices WHERE site = ?)`, args: [r.to, p.hostname, r.from, site] }); });
+      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', `ports set to ${p.model} (${p.ports.length})`, req.user.username] });
+      continue;
+    }
     stmts.push({ sql: `INSERT OR IGNORE INTO net_devices (site, hostname, alias, role, model, location, notes, source, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'racks', ?)`,
-      args: [site, p.hostname, p.alias, p.role, p.model, p.location, 'Added from the rack layout (CCTV) — check the model and port count', p.server_id] });
-    p.ports.forEach((pt, i) => stmts.push({ sql: `INSERT OR IGNORE INTO net_ports (device_id, port, sort) SELECT id, ?, ? FROM net_devices WHERE site = ? AND hostname = ?`, args: [pt, portSort(pt) || i + 1, site, p.hostname] }));
+      args: [site, p.hostname, p.alias, p.role, p.model, p.location, 'Added from the rack layout (CCTV)', p.server_id] });
+    p.ports.forEach(pt => stmts.push({ sql: `INSERT OR IGNORE INTO net_ports (device_id, port, sort) SELECT id, ?, ? FROM net_devices WHERE site = ? AND hostname = ?`, args: [pt, portSort(pt), site, p.hostname] }));
     stmts.push({ sql: `UPDATE net_rack_items SET device_id = (SELECT id FROM net_devices WHERE site = ? AND hostname = ?) WHERE id = ? AND device_id IS NULL`, args: [site, p.hostname, p.item_id] });
     stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', 'device added (CCTV switch from the rack layout)', req.user.username] });
   }
   if (stmts.length) await batch(stmts);
-  await audit(req.user, 'NETMAP', null, `Network map "${site}": ${plan.length} CCTV switch(es) added from the rack layout`);
-  res.json({ ok: true, added: plan.length });
+  const added = plan.filter(p => p.action === 'add').length, fixed = plan.filter(p => p.action === 'fix').length;
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": ${added} CCTV switch(es) added from the rack layout, ${fixed} corrected`);
+  res.json({ ok: true, added, fixed });
 }));
 router.post('/racks/build', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
