@@ -8,7 +8,9 @@
   const ICON = { dup_name: '🔁', dup_ip: '🔁', dup_mac: '🔁', old_fw: '⬆️', http: '🔓', net: '🌐', dns: '🧭', broken: '🔴', missing: '✏️', port: '🔌' };
   let D = null, open = new Set(['dup_name', 'dup_ip', 'dup_mac', 'broken']), q = '';
   async function load() {
-    try { D = await apiGet('/api/servers/ot-attention'); render(); }
+    try { D = await apiGet('/api/servers/ot-attention');
+      const h = (location.hash.match(/^#g-(\w+)/) || [])[1]; if (h) open.add(h);   // from a card on Needs Attention
+      render(); if (h && $('g-' + h)) setTimeout(() => $('g-' + h).scrollIntoView({ behavior: 'smooth' }), 50); }
     catch (e) { $('ota-root').innerHTML = `<p class="text-muted">${esc(e.message || 'Could not load')}</p>`; }
   }
   function render() {

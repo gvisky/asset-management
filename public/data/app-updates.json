@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Shorter menu for IT: the OT pages moved into their pages",
+    "items": [
+      "IT team: OT Needs Attention, OT Reports and OT Activity are no longer in the menu. ⚠️ Needs Attention has an 🏭 OT Needs Attention box (counts per check, click one to open it), Reports has the 🏭 OT Reports (open, Excel, PDF), Users & Audit has 🕓 OT Activity (latest changes, open to restore).",
+      "On an OT page the menu marks the page it belongs to and ← Back returns there. The OT team keeps its OT menu."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "🕓 OT Activity log + OT admin: check and restore",
     "items": [
       "New role OT admin (Users & Audit: team OT + role Admin): everything an OT editor can do, plus deleting OT devices and the 🕓 OT Activity page. No IT admin rights (no users, asset inventory or network-map admin tools).",
