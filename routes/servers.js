@@ -19,7 +19,7 @@ const isOT = (req) => !!req.user && req.user.team === 'OT';
 router.use((req, res, next) => {
   if (isOT(req)) {
     if (req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path)) return next();
-    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && (req.path === '/' || req.path === '/port-links')))) return next();
+    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && (req.path === '/' || req.path === '/port-links' || req.path === '/mac-ports')))) return next();
     return res.status(403).json({ error: 'OT: the OT devices only (editors can add and edit them)' });
   }
   if (req.user && req.user.asset_access === 0) {
@@ -203,7 +203,7 @@ async function otAttention(req) {
     rows.filter(r => !r.ip_address || !r.mac || !r.serial_no).map(r => ({ id: r.id, hostname: name(r), detail: ['IP', 'MAC', 'serial'].filter((_, i) => ![r.ip_address, r.mac, r.serial_no][i]).join(', ') + ' missing' })));
   add('port', 'Switch port not known', 'Set the port it is plugged into: in "Connected to" (✏️) or on the switch port in the Network map.', 'record',
     rows.filter(r => !/\S+\s+\S*\d+\/\d+/.test(r.switch_port || '')).map(r => ({ id: r.id, hostname: name(r), detail: r.switch_port ? `on ${r.switch_port}, port unknown` : 'not connected to a switch' })));
-  return { total: rows.length, groups, canEdit: (isOT(req) && req.user.role === 'editor') || (req.user.team === 'IT' && ['admin', 'editor'].includes(req.user.role)) };
+  return { total: rows.length, groups, canMac: (isOT(req) && req.user.role === 'editor') || isITAdmin(req.user), canEdit: (isOT(req) && req.user.role === 'editor') || (req.user.team === 'IT' && ['admin', 'editor'].includes(req.user.role)) };
 }
 
 router.get('/:id', wrap(async (req, res) => {
@@ -449,6 +449,57 @@ router.post('/port-links', wrap(async (req, res) => {
   if (stmts.length) await batch(stmts);
   await audit(req.user, 'UPDATE', null, `Switch ports: ${linked} device(s) linked to their access-switch port, ${added} device(s) added from the network map "${site}"`);
   res.json({ ok: true, linked, added });
+}));
+
+
+// ── POST /api/servers/mac-ports — switch MAC address tables (`show mac address-table`, pasted / .txt) → the port of each
+// camera / device by its MAC (lib/mac-table.js). body { site, text, choose: { blockIndex: switch id }, dry, apply: [server ids] }.
+// Sets the record's "Connected to" and, on a free port (or one already naming it), the port's device + MAC on the map.
+// IT admins and OT editors (OT: OT records and OT switches only).
+const MacTable = require('../lib/mac-table');
+router.post('/mac-ports', wrap(async (req, res) => {
+  if (!canPortLinks(req)) return res.status(403).json({ error: 'IT admins and OT editors only' });
+  const b = req.body || {};
+  const text = String(b.text || '').slice(0, 3e6);
+  const blocks = MacTable.parse(text);
+  if (!blocks.length) return res.status(400).json({ error: 'No MAC address lines found — paste the output of "show mac address-table" (with the switch prompt line, e.g. K2_CCTV_01#show mac address-table).' });
+  const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
+  const site = String(b.site || (sites[0] && sites[0].site) || '').slice(0, 80);
+  const ot = isOT(req), NM = require('./netmap');
+  let devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  if (ot) devices = devices.filter(d => d.state !== 'retired' && NM.otOn(d));
+  const ids = new Set(devices.map(d => d.id));
+  const ports = (await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site])).filter(p => ids.has(p.device_id));
+  const cf = countryFilter(req);
+  const servers = await all(`SELECT id, hostname, category, mac, switch_port, it_ot FROM servers WHERE deleted_at IS NULL${ot ? " AND it_ot = 'OT'" : ''}${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
+  const p = MacTable.plan(blocks, { devices, ports, servers }, b.choose && typeof b.choose === 'object' ? b.choose : {});
+  const switches = devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired').map(d => ({ id: d.id, hostname: d.hostname, alias: d.alias || '' }))
+    .sort((x, y) => x.hostname.localeCompare(y.hostname, undefined, { numeric: true }));
+  if (b.dry) return res.json({ site, switches_all: switches, ...p });
+  const want = new Set((Array.isArray(b.apply) ? b.apply : []).map(Number));
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const HIST = `history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END`;
+  const stmts = []; let records = 0, mapped = 0;
+  for (const r of p.rows) {
+    if (!want.has(r.server_id) || r.action === 'same') continue;
+    const to = `${r.switch} ${r.port}`;
+    if (r.before !== to) {
+      const line = `${ts}: Connected to "${r.before || '∅'}"→"${to}" (MAC ${r.mac} in the switch MAC table) by ${req.user.username}`;
+      stmts.push({ sql: `UPDATE servers SET switch_port = ?, vlan = CASE WHEN COALESCE(vlan, '') = '' THEN ? ELSE vlan END, ${HIST} WHERE id = ?`, args: [to, r.vlan, line, line, r.server_id] });
+      records++;
+    }
+    // The port on the map: only a free one, or one already naming this device (never another device's port).
+    if (r.action === 'set') {
+      stmts.push({ sql: `UPDATE net_ports SET peer_host = ?, peer_port = ?, vlan = CASE WHEN COALESCE(vlan, '') = '' THEN ? ELSE vlan END, mode = CASE WHEN COALESCE(mode, '') = '' THEN 'ACCESS' ELSE mode END,
+          updated_at = datetime('now'), updated_by = ? WHERE id = ? AND (COALESCE(peer_host, '') = '' OR UPPER(peer_host) = UPPER(?))`,
+        args: [r.hostname, r.mac, r.vlan, req.user.username, r.port_id, r.hostname] });
+      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, r.switch, r.port, '(free)', `${r.hostname} ${r.mac} (MAC table)`, req.user.username] });
+      mapped++;
+    }
+  }
+  if (stmts.length) await batch(stmts);
+  await audit(req.user, 'UPDATE', null, `MAC tables: ${records} device(s) set to their switch port, ${mapped} port(s) filled on the network map "${site}"`);
+  res.json({ ok: true, records, mapped });
 }));
 
 

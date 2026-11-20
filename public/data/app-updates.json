@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "🔎 Camera ports from the switch MAC tables",
+    "items": [
+      "Server Inventory → 🔎 Ports from MAC tables (IT admins, OT editors) and OT Needs Attention → Switch port not known → 🔎 Find the ports from the switch MAC tables: paste the output of show mac address-table dynamic of one or more switches (or choose the .txt files). Each camera / device whose MAC is on an access port gets its switch port; the free port on the map gets its name and MAC and turns blue (OT).",
+      "The switch is taken from the prompt line (K2_CCTV_01#…) by its name or OT name, else you pick it. Ports with many MACs are uplinks and are left out; a port that names another device is never overwritten. Preview first; MACs not in the Server Inventory are listed."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "📊 OT Reports · switch ports blue for OT, green for IT · IT sets a port's owner",
     "items": [
       "New page 📊 OT Reports (OT team and IT): OT devices, CCTV cameras, OT switch ports, OT needs attention and port changes of the last 90 days — key numbers, tables and the data on the page, ⬇ Excel (dashboard with charts + data sheets) or PDF.",
