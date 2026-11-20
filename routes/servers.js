@@ -21,7 +21,7 @@ router.use((req, res, next) => {
   if (isOT(req)) {
     if (req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path)) return next();
     if (req.user.ot_admin && req.method === 'DELETE' && /^\/\d+$/.test(req.path)) return next();   // OT admin: delete an OT device (restorable)
-    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && (req.path === '/' || req.path === '/port-links' || req.path === '/mac-ports')))) return next();
+    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && (req.path === '/' || req.path === '/port-links' || req.path === '/mac-ports' || req.path === '/camera-switches')))) return next();
     return res.status(403).json({ error: 'OT: the OT devices only (editors can add and edit them)' });
   }
   if (req.user && req.user.asset_access === 0) {
@@ -461,6 +461,36 @@ router.post('/port-links', wrap(async (req, res) => {
   res.json({ ok: true, linked, added });
 }));
 
+
+// ── POST /api/servers/camera-switches — cameras with no switch (or one not on the map) → the CCTV switch their name says
+// (K5-12 → CCTV KABIN 5, HK8-1R → HARICI KABIN 8, K1 → MR-01, K11 → IT KABIN 11), like the camera list import does.
+// body { dry, apply: [server ids] }. Cameras already on a port of a switch are kept. IT admins and OT editors.
+router.post('/camera-switches', wrap(async (req, res) => {
+  if (!canPortLinks(req)) return res.status(403).json({ error: 'IT admins and OT editors only' });
+  const b = req.body || {}, ot = isOT(req);
+  const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
+  const site = String(b.site || (sites[0] && sites[0].site) || '').slice(0, 80);
+  let devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  if (ot) { const NM = require('./netmap'); devices = devices.filter(d => d.state !== 'retired' && NM.otOn(d)); }
+  const cf = countryFilter(req);
+  const servers = await all(`SELECT id, hostname, category, switch_port, location, it_ot FROM servers WHERE deleted_at IS NULL AND category LIKE '%camera%'${ot ? " AND it_ot = 'OT'" : ''}${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
+  const rows = CctvImport.switchPlan(servers, devices);
+  if (b.dry) return res.json({ site, rows });
+  const want = new Set((Array.isArray(b.apply) ? b.apply : []).map(Number));
+  const otSnap = await OTA.snapOT();   // OT activity log
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const HIST = `history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END`;
+  const stmts = [];
+  for (const r of rows.filter(x => x.action === 'set' && want.has(x.server_id))) {
+    const line = `${ts}: Connected to "${r.from || '∅'}"→"${r.to}" (switch of ${r.how}, from the camera name) by ${req.user.username}`;
+    stmts.push({ sql: `UPDATE servers SET switch_port = ?, location = CASE WHEN COALESCE(location, '') = '' THEN ? ELSE location END, ${HIST} WHERE id = ? AND COALESCE(switch_port, '') = ?`,
+      args: [r.to, r.location, line, line, r.server_id, r.from] });
+  }
+  if (stmts.length) await batch(stmts);
+  await OTA.logOTBulk(req.user, otSnap, 'Camera switches');
+  await audit(req.user, 'UPDATE', null, `Camera switches: ${stmts.length} camera(s) set to the CCTV switch of their cabinet`);
+  res.json({ ok: true, set: stmts.length });
+}));
 
 // ── POST /api/servers/mac-ports — switch MAC address tables (`show mac address-table`, pasted / .txt) → the port of each
 // camera / device by its MAC (lib/mac-table.js). body { site, text, choose: { blockIndex: switch id }, dry, apply: [server ids] }.

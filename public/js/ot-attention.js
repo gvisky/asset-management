@@ -24,10 +24,11 @@
       ${D.groups.map(g => { const rows = g.rows.filter(match); const isOpen = open.has(g.key) || !!q;
         return `<div class="card ota-g" id="g-${g.key}"><div class="card-header ota-h" data-t="${g.key}"><span class="lg-caret">${isOpen ? '▾' : '▸'}</span> ${ICON[g.key] || '⚠'} <b>${esc(g.title)}</b>
           <span class="sg-cnt">${rows.length}</span><span class="ota-w ${g.where}">${g.where === 'device' ? '🛠 on the device' : '✏️ in the record'}</span></div>
-          ${isOpen ? `<div class="card-body"><p class="text-sm" style="margin:0 0 8px">${esc(g.fix)}${g.key === 'port' && D.canMac ? ' <button class="btn btn-ghost btn-sm" id="ota-mac">🔎 Find the ports from the switch MAC tables</button>' : ''}</p>
+          ${isOpen ? `<div class="card-body"><p class="text-sm" style="margin:0 0 8px">${esc(g.fix)}${g.key === 'port' && D.canMac ? ' <button class="btn btn-ghost btn-sm" id="ota-camsw">📷 Set the switch from the camera name</button> <button class="btn btn-ghost btn-sm" id="ota-mac">🔎 Find the ports from the switch MAC tables</button>' : ''}</p>
             <table class="nm-vt"><thead><tr><th>Device</th><th>Detail</th><th></th></tr></thead><tbody>
             ${rows.slice(0, 500).map(r => `<tr><td><a href="#" class="ota-open" data-id="${r.id}" data-k="${g.key}"><b>${esc(r.hostname)}</b></a></td><td class="text-sm">${esc(r.detail)}</td>
               <td style="white-space:nowrap">${D.canEdit ? `<button class="btn btn-ghost btn-sm ota-open" data-id="${r.id}" data-k="${g.key}">✏️ Fix</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="3" class="empty-state">No match.</td></tr>'}</tbody></table></div>` : ''}</div>`; }).join('')}`;
+    if ($('ota-camsw')) $('ota-camsw').onclick = () => CamSwitches.open(async () => { D = await apiGet('/api/servers/ot-attention'); render(); });
     if ($('ota-mac')) $('ota-mac').onclick = () => MacPorts.open(async () => { D = await apiGet('/api/servers/ot-attention'); render(); });
     $('ota-root').querySelectorAll('.ota-open').forEach(a => { a.onclick = (e) => { e.preventDefault(); edit(Number(a.dataset.id), a.dataset.k); }; });
     $('ota-root').querySelectorAll('.ota-h').forEach(h => { h.onclick = () => { const k = h.dataset.t; open.has(k) ? open.delete(k) : open.add(k); render(); }; });

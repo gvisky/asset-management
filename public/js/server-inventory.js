@@ -375,9 +375,9 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Update from the network map (implementation document) — admins ──
 // The button shows for admins once the page knows who you are.
 document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin') document.getElementById('btn-netsync').style.display = '';
-  if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-macports').style.display = ''; document.getElementById('btn-cctvimport').style.display = ''; }
+  if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-macports').style.display = ''; document.getElementById('btn-camsw').style.display = ''; document.getElementById('btn-cctvimport').style.display = ''; }
   // OT team: read-only list of the OT devices.
-  if (window.CURRENT_USER.team === 'OT' && window.CURRENT_USER.role === 'editor') { document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-macports').style.display = ''; }
+  if (window.CURRENT_USER.team === 'OT' && window.CURRENT_USER.role === 'editor') { document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-macports').style.display = ''; document.getElementById('btn-camsw').style.display = ''; }
   if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-io=OT]'); if (s) s.textContent = '🏭 OT devices'; setIoTab('OT'); }
   const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v);
   const ed = Number(new URLSearchParams(location.search).get('edit')); if (ed) onEdit(ed); /* from ⚠️ OT Needs Attention */ }, 150); });
