@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Racks: CCTV switches from the OT report placed in their cabinets",
+    "items": [
+      "Racks tab (admins): 🗄 Place n CCTV switches in the racks puts the CCTV switches that are on the map but in no rack (K2_CCTV_02, HK4…HK12_CCTV_02, HK10_CCTV_03, CB36-BP05, K3-03-CCTV-BP05-CB36, the CCTV core CCTV_CS) into their cabinet, in the free U next to the cabinet's CCTV switch (below first, then above; the PDU at U1 and the top ODF stay). Their location gets the rack and U. Preview first; move one later in its item form.",
+      "Fix: after the OT CCTV report the old \"Correct CCTV switches\" button no longer offers to change the real models (C9200L-24P, C1000 / C1300-16 …) back to the rack-label guess."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "📷 CCTV import reads the OT CCTV report: real CCTV switches, recording servers, camera areas",
     "items": [
       "The 📷 CCTV camera list button also takes the OT team's CCTV report (camera export + CAMERA LIST + SWITCH LIST + SERVER DETAIL). Cameras: the area of each camera (e.g. \"HALL 1 - WETWIPE - SAMPLE\") goes to Role / Purpose; new cameras are added; cameras in the inventory but no longer in the list are shown and can be set to Stock.",
