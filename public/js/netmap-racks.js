@@ -146,9 +146,9 @@ const NMRacks = (() => {
     const box = $('nm-view-draw'), can = D().can;
     box.innerHTML = `<div class="rk-bar">${can.admin ? `<select class="form-control" id="dw-cat" style="width:auto">${CATS.map(c => `<option>${c}</option>`).join('')}</select>
         <button class="btn btn-primary btn-sm" onclick="document.getElementById('dw-file').click()" title="PNG / JPG / SVG pictures, or a drawing package (.json) with its pins">⬆ Upload pictures</button><input type="file" id="dw-file" accept="image/png,image/jpeg,image/svg+xml,image/webp,.json" multiple hidden>` : ''}
-        <span class="text-muted text-sm">Rack, topology and floor-plan pictures of the implementation document. Click a picture to open it large; editors add 📍 pins for cabinets, APs and devices.</span></div>
+        <span class="text-muted text-sm">Rack, topology and floor-plan pictures of the implementation document. Click a picture to open it in a new tab (the map stays here); editors add 📍 pins for cabinets, APs and devices.</span></div>
       ${CATS.map(c => { const l = drawings.filter(d => (d.category || 'Other') === c); return l.length ? `<h4 class="dw-h">${c}</h4><div class="dw-grid">${l.map(d => `<div class="dw-card">
-          <a href="#" onclick="NMRacks.openDrawing(${d.id});return false"><img loading="lazy" src="/api/netmap/drawing/${d.id}" alt=""></a>
+          <a href="/network-map.html?drawing=${d.id}" target="_blank" rel="noopener" title="Open in a new tab"><img loading="lazy" src="/api/netmap/drawing/${d.id}" alt=""></a>
           <div class="dw-name">${esc(d.name)}${(() => { try { const n = JSON.parse(d.pins || '[]').length; return n ? ` <span class="dw-pins">📍 ${n}</span>` : ''; } catch { return ''; } })()}</div><div class="text-muted text-sm">${Math.round(d.size / 1024)} KB · ${esc(String(d.uploaded_at).slice(0, 10))}${can.admin ? ` · <a href="#" onclick="NMRacks.delDrawing(${d.id});return false">delete</a>` : ''}</div></div>`).join('')}</div>` : ''; }).join('') || '<p class="text-muted" style="padding:14px">No drawings yet.</p>'}`;
     const f = $('dw-file');
     if (f) f.onchange = async (e) => {

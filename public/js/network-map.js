@@ -48,6 +48,7 @@ const NM = (() => {
     $('nm-site').innerHTML = (D.sites.length ? D.sites : [{ site: D.site || '', devices: 0 }]).map(s => `<option value="${esc(s.site)}"${s.site === D.site ? ' selected' : ''}>${esc(s.site || '(no site yet)')} · ${s.devices} devices</option>`).join('');
     $('nm-import').style.display = D.can.admin ? '' : 'none';
     $('nm-import-x').style.display = D.can.admin ? '' : 'none';
+    $('nm-linkcheck').style.display = D.can.admin && D.view !== 'ot' ? '' : 'none';
     $('nm-add').style.display = D.can.edit && D.site ? '' : 'none';
     cctvCheck();
     $('nm-sub').textContent = D.devices.length ? `${D.view === 'ot' ? '· OT view ' : ''}· ${D.devices.length} devices · ${D.ports.length} ports · ${links().length} links` : '· ports & links';
@@ -87,6 +88,27 @@ const NM = (() => {
     if (!D.can.admin || D.view === 'ot' || !D.devices.some(d => /switch/i.test(d.role || '') && /CCTV/i.test(`${d.hostname} ${d.alias || ''}`))) return;
     try { const r = await apiPost('/api/netmap/cctv-links', { site: D.site, dry: true }); const n = r.rows.filter(x => x.port).length, mv = r.rows.filter(x => x.port && x.from).length;
       if (n) { b.style.display = ''; b.textContent = mv === n ? `🔗 Chain ${n} HK CCTV switch${n > 1 ? 'es' : ''}` : `🔗 Connect ${n} CCTV switch${n > 1 ? 'es' : ''}`; } } catch { /* button stays hidden */ }
+  }
+  // 🔗 Check links: map ↔ racks ↔ Server Inventory (POST /api/netmap/link-check). Preview per step, tick, apply.
+  async function linkCheck() {
+    if (!$('lc-ov')) document.body.insertAdjacentHTML('beforeend', `<div class="modal-overlay" id="lc-ov"><div class="modal" style="max-width:860px;width:95vw">
+      <div class="modal-header"><span class="modal-title">🔗 Check links — map, racks and Server Inventory</span><button class="modal-close" aria-label="Close" onclick="document.getElementById('lc-ov').classList.remove('open')">✕</button></div>
+      <div class="modal-body" id="lc-b" style="max-height:74vh;overflow:auto"></div><div class="modal-footer" id="lc-f"></div></div></div>`);
+    $('lc-ov').classList.add('open'); $('lc-b').innerHTML = '<p class="text-muted">Checking…</p>'; $('lc-f').innerHTML = '';
+    let r; try { r = await apiPost('/api/netmap/link-check', { site: D.site, dry: true }); } catch (e) { $('lc-b').innerHTML = `<p style="color:#b91c1c">${esc(errText(e, 'Could not check'))}</p>`; return; }
+    const todo = r.steps.filter(x => x.count), when = (s) => new Date(s).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    $('lc-b').innerHTML = `${r.last ? `<p class="text-sm text-muted" style="margin:0 0 8px">Automatic check after the update: ${esc(when(r.last.at))} — ${r.last.steps.map(x => `${esc(x.title.replace(/^\S+\s/, ''))}: ${x.done}`).join(' · ')}</p>` : ''}
+      ${r.steps.map(x => `<div class="lc-step"><label><input type="checkbox" class="lc-s" value="${x.key}"${x.count ? ' checked' : ' disabled'}> <b>${esc(x.title)}</b> <span class="sg-cnt${x.count ? '' : ' ok'}">${x.count ? x.count + ' to do' : '✓ linked'}</span></label>
+        ${x.count ? `<details><summary class="text-sm">show</summary><div class="text-sm lc-items">${x.items.map(esc).join('<br>')}</div></details>` : ''}${x.note ? `<div class="text-sm" style="color:#9a3412;white-space:pre-line">${esc(x.note)}</div>` : ''}</div>`).join('')}
+      <p class="text-muted text-sm" style="margin:10px 0 0">Each step only adds or links what is missing; nothing is deleted. A step can find more after the one before it (e.g. cameras after the CCTV switches are on the map) — run the check again.</p>`;
+    $('lc-f').innerHTML = `<button class="btn btn-ghost" onclick="document.getElementById('lc-ov').classList.remove('open')">Close</button><button class="btn btn-primary" id="lc-go"${todo.length ? '' : ' disabled'}>Apply</button>`;
+    $('lc-go').onclick = async () => {
+      const steps = [...document.querySelectorAll('.lc-s:checked')].map(c => c.value); if (!steps.length) return;
+      $('lc-go').disabled = true;
+      try { const a = await apiPost('/api/netmap/link-check', { site: D.site, steps });
+        showToast(a.steps.map(x => `${x.title.replace(/^\S+\s/, '')}: ${x.done}`).join(' · ')); await load(D.site); linkCheck(); }
+      catch (e) { $('lc-go').disabled = false; showToast(errText(e, 'Could not apply'), 'error'); }
+    };
   }
   async function linkCctv() {
     try {
@@ -673,9 +695,16 @@ const NM = (() => {
     $('nm-export').onclick = exportCsv;
     $('nm-add').onclick = () => editDevice(0);
     $('nm-cctvlink').onclick = linkCctv;
+    $('nm-linkcheck').onclick = linkCheck;
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.v); });
-    const want = new URLSearchParams(location.search).get('host');
-    load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
+    const qp = new URLSearchParams(location.search), want = qp.get('host'), dw = Number(qp.get('drawing')), rk = qp.get('rack');
+    load().then(async () => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit();
+      // A drawing in its own tab (from the Drawings tab): open it full screen.
+      if (dw && self.NMPlans) { try { const list = await apiGet('/api/netmap/drawings?site=' + encodeURIComponent(D.site) + (D.view === 'ot' ? '&view=ot' : ''));
+        if (NMPlans.open(dw, list, qp.get('pin') || undefined)) NMPlans.solo(true); } catch { /* stays on the map */ } }
+      // A cabinet / rack from a drawing tab: show it in the Racks tab.
+      if (rk) { tab('rack'); setTimeout(() => { const n = rk.toUpperCase(), t = [...document.querySelectorAll('.rk-name')].find(x => x.textContent.toUpperCase() === n || n.includes(x.textContent.toUpperCase()));
+        if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); const r = t.closest('.rk'); if (r) { r.classList.add('rk-hl'); setTimeout(() => r.classList.remove('rk-hl'), 3000); } } }, 900); } }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
   return { data: () => D, reload: () => load(D.site), endItems, openRec, isAccess: (d) => /access switch/i.test((d && d.role) || ''), known, portTip, portClass, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,

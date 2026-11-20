@@ -56,9 +56,12 @@
     <button class="btn btn-ghost btn-sm" id="nm-add" style="display:none">+ Device</button>
     <button class="btn btn-ghost btn-sm" id="nm-cctvlink" style="display:none" title="CCTV switches with no line on the topology: link each one to the switch above it (cabinet's first CCTV switch → CCTV distribution → CCTV core)">🔗 Connect CCTV switches</button>
     <button class="btn btn-ghost btn-sm" id="nm-export">⬇ Export</button>
-    <button class="btn btn-ghost btn-sm" id="nm-import" style="display:none" title="Read the switch-port assignments, devices and VLANs from the implementation document (.docx)">⬆ Import implementation doc</button>
+    <div class="tb-dd" style="display:none"><button class="btn btn-ghost btn-sm tb-dd-b" title="Imports (implementation document, Factory Info) and the link check">⬆ Import &amp; check ▾</button><div class="tb-dd-m">
+      <button class="btn btn-ghost btn-sm" id="nm-import" style="display:none" title="Read the switch-port assignments, devices and VLANs from the implementation document (.docx)">⬆ Import implementation doc</button>
+      <button class="btn btn-ghost btn-sm" id="nm-import-x" style="display:none" title="Compare the Factory Info workbook (.xlsx: port sheets, equipment list, APs, VLANs, rack layout, VM servers, printers) with the map and Server Inventory — you tick what to apply">⬆ Import Factory Info (.xlsx)</button>
+      <button class="btn btn-ghost btn-sm" id="nm-linkcheck" style="display:none" title="Check that the map, the racks and the Server Inventory are linked together (switches, cameras, CCTV uplinks) and fix what is missing — preview first">🔗 Check links</button>
+    </div></div>
     <input type="file" id="nm-file" accept=".docx" hidden>
-    <button class="btn btn-primary btn-sm" id="nm-import-x" style="display:none" title="Compare the Factory Info workbook (.xlsx: port sheets, equipment list, APs, VLANs, rack layout, VM servers, printers) with the map and Server Inventory — you tick what to apply">⬆ Import Factory Info (.xlsx)</button>
     <input type="file" id="nm-xfile" accept=".xlsx" hidden>
   </header>
   <main class="content nm-main">
@@ -110,11 +113,11 @@
 <script src="/js/device-specs.js?v=20261117a"></script>
 <script src="/js/netmap-doc.js?v=20261117e"></script>
 <script src="/js/netmap-xlsx.js?v=20261117b"></script>
-<script src="/js/network-map.js?v=20261120i"></script>
-<script src="/js/netmap-racks.js?v=20261120d"></script>
+<script src="/js/network-map.js?v=20261120j"></script>
+<script src="/js/netmap-racks.js?v=20261120x"></script>
 <script src="/js/netmap-faces.js?v=20261120x"></script>
 <script src="/js/netmap-views.js?v=20261117d"></script>
 <script src="/js/device-edit.js?v=20261120a"></script>
-<script src="/js/netmap-plans.js?v=20261120j"></script>
+<script src="/js/netmap-plans.js?v=20261120k"></script>
 </body>
 </html>
