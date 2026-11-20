@@ -1582,3 +1582,12 @@ tr.oac-done td { opacity: .55; }
 .pl-cam-ico { display: block; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
 .pl-pin.bad .pl-dot:has(.pl-cam-ico) { border-radius: 6px; padding: 1px; }
 .pl-i-t .pl-cam-ico { width: 30px; height: 24px; }
+/* Camera pins: switch port under the name; ring = port known (green) / switch only (amber) / no switch (grey) */
+.pl-sub { display: block; font: 600 9.5px system-ui; opacity: .92; text-align: center; margin-top: 1px; }
+.pl-pin.cam-port .pl-cam-ico { filter: drop-shadow(0 0 1.5px #16a34a) drop-shadow(0 0 1.5px #16a34a); }
+.pl-pin.cam-sw .pl-cam-ico { filter: drop-shadow(0 0 1.5px #f59e0b) drop-shadow(0 0 1.5px #f59e0b); }
+.pl-pin.cam-none .pl-cam-ico { filter: drop-shadow(0 0 1.5px #64748b) drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
+.pl-pin.cam-port .pl-lbl { background: #15803d; } .pl-pin.cam-sw .pl-lbl { background: #b45309; } .pl-pin.cam-none .pl-lbl { background: #64748b; }
+.pl-cst { font-size: 12px; margin-left: 6px; white-space: nowrap; } .pl-cst i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 3px 0 7px; vertical-align: -1px; }
+.pl-cst i.port { background: #16a34a; } .pl-cst i.sw { background: #f59e0b; } .pl-cst i.none { background: #94a3b8; }
+.pl-pin.bad .pl-lbl { background: #dc2626 !important; }
