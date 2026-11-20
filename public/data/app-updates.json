@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-20",
+    "title": "CCTV switches connected on the Topology and shown on the Drawings",
+    "items": [
+      "Topology (admins, IT view): 🔗 Connect n CCTV switches links every CCTV switch that has no line yet to the switch above it — the cabinet's first CCTV switch (K3_CCTV_01, HK4_CCTV_01 …) → CCTV_DIST_01, more switches of a cabinet (K2_CCTV_02, HK10_CCTV_03, CB36-BP05 …) → that first switch, CCTV_DIST_01 / _02 and CCTV_01 / _02 → the CCTV core CCTV_CS. Preview first; links already on the map stay.",
+      "The OT report has no port-to-port list: each link goes on the switch's first free SFP uplink (T 1/1/1, GE 13 of a 3560CX-12, GE 17 of a C1000 / C1300-16, GE 25 of a CBS220-24) with a note to check the port on the other side. A cabinet cabled to CCTV_DIST_02 instead: change that port.",
+      "Drawings: a cabinet's popup lists its switches with their OT name (SR-30/CCTV-ASW-23 · HK10_CCTV_01), the cabinet's first switch first, and each switch's uplink (⬆ GE 1/0/17 → HK10_CCTV_01). Hover a cabinet pin to see its switches."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Racks: CCTV switches from the OT report placed in their cabinets",
     "items": [
       "Racks tab (admins): 🗄 Place n CCTV switches in the racks puts the CCTV switches that are on the map but in no rack (K2_CCTV_02, HK4…HK12_CCTV_02, HK10_CCTV_03, CB36-BP05, K3-03-CCTV-BP05-CB36, the CCTV core CCTV_CS) into their cabinet, in the free U next to the cabinet's CCTV switch (below first, then above; the PDU at U1 and the top ODF stay). Their location gets the rack and U. Preview first; move one later in its item form.",

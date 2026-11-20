@@ -97,6 +97,7 @@ const NMPlans = self.NMPlans = (() => {
   const fibText = (l) => [l.name, l.cores, l.len ? l.len + ' m' : ''].filter(Boolean).join(' · ');
   const mid = (path) => { let tot = 0; const seg = []; for (let k = 1; k < path.length; k++) { const d = Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]); seg.push(d); tot += d; }
     let h = tot / 2; for (let k = 1; k < path.length; k++) { if (h <= seg[k - 1]) { const t = h / (seg[k - 1] || 1); return [path[k - 1][0] + (path[k][0] - path[k - 1][0]) * t, path[k - 1][1] + (path[k][1] - path[k - 1][1]) * t]; } h -= seg[k - 1]; } return path[0]; };
+  const swTip = (p) => { const l = cabSwitches(p); return l.length ? `\nSwitches: ${l.map(swName).join(', ')}` : ''; };
   function render() {
     const box = document.getElementById('pl-pins'); if (!box) return;
     const L = links(), on = new Set();
@@ -120,7 +121,7 @@ const NMPlans = self.NMPlans = (() => {
       off[i].dy = dy;
     });
     box.innerHTML = pins.map((p, i) => { const k = KIND[p.kind] || KIND.note;
-      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
+      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
     const cnt = Object.keys(KIND).map(k => [k, pins.filter(p => p.kind === k).length]).filter(([, n]) => n);
     document.getElementById('pl-sum').textContent = cnt.length ? ' · ' + cnt.map(([k, n]) => `${n} ${KIND[k][2].toLowerCase()}${n > 1 ? 's' : ''}`).join(' · ') : ' · no pins yet';
     // Length labels on the cables of the chosen cabinet (in the pin layer, so the text is not stretched).
@@ -148,14 +149,25 @@ const NMPlans = self.NMPlans = (() => {
     const re = kind === 'HARICI' ? new RegExp(`HARICI\\s*-?\\s*KABIN\\s*-?0?${c.n}\\b`) : kind === 'CCTV' ? new RegExp(`CCTV\\s*-?\\s*KABIN\\s*-?0?${c.n}\\b`) : new RegExp(`(^|[^A-Z])IT\\s*-?\\s*KABIN\\s*-?0?${c.n}\\b`);
     const name = U(p.ref || p.label).replace(/\s+/g, '-'), rk = racks && racks.racks.find(r => U(r.name) === name);
     const inRack = new Set(rk ? racks.items.filter(x => x.rack_id === rk.id && x.device_id).map(x => x.device_id) : []);
-    return D().devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired' && !d.ot_context && (inRack.has(d.id) || re.test(U(d.location))));
+    // First switch of the cabinet first (K2_CCTV_01 before K2_CCTV_02), then by name.
+    const nm = (d) => (/_CCTV_|^CCTV_/i.test(d.alias || '') ? d.alias : d.hostname);
+    return D().devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired' && !d.ot_context && (inRack.has(d.id) || re.test(U(d.location))))
+      .sort((a, b) => (/_01$/.test(nm(b)) - /_01$/.test(nm(a))) || String(nm(a)).localeCompare(nm(b), undefined, { numeric: true }));
+  }
+  const swName = (d) => (/_CCTV_|^CCTV_/i.test(d.alias || '') && d.alias !== d.hostname ? `${d.hostname} · ${d.alias}` : d.hostname);
+  // Its uplinks: ports cabled to another switch of the map (e.g. HK10_CCTV_02 GE 1/0/17 → HK10_CCTV_01).
+  function uplinksOf(sw) {
+    const byH = new Map(D().devices.map(d => [d.hostname, d]));
+    return (D().ports || []).filter(p => p.device_id === sw.id && p.peer_host && byH.has(p.peer_host) && /switch/i.test(byH.get(p.peer_host).role || ''))
+      .map(p => { const t = byH.get(p.peer_host); return `${p.port} → ${/_CCTV_|^CCTV_/i.test(t.alias || '') ? t.alias : t.hostname}${p.peer_port ? ' ' + p.peer_port : ''}`; });
   }
   function plugged(p) {
     const sws = cabSwitches(p);
     if (!sws.length) return '';
     const can = D().can.edit || D().can.port;
     return sws.map(sw => { const its = NM.endItems(sw);
-      return `<div class="pl-i-h">Plugged into ${esc(sw.hostname)} (${its.length})</div>
+      const up = uplinksOf(sw);
+      return `<div class="pl-i-h">Plugged into ${esc(swName(sw))} (${its.length})</div>${up.length ? `<div class="text-muted text-sm" style="margin:0 0 3px">⬆ Uplink ${up.map(esc).join(' · ')}</div>` : ''}
         ${its.length ? `<div class="pl-i-ends">${its.map(e => `<a href="#" class="pl-i-end${e.ot ? ' ot' : ''}" title="${can ? 'Open / edit port ' : 'Port '}${esc(e.port)}${e.rec ? ' · Server Inventory #' + e.rec : ''}" onclick="${e.port ? `NM.openPort(${sw.id}, ${jsArg(e.port)})` : `NM.openRec(${e.rec})`};return false"><b>${esc(e.pn)}</b> ${e.icon} ${esc(e.name)}</a>`).join('')}</div>`
           : '<p class="text-muted text-sm" style="margin:2px 0">Nothing plugged in yet.</p>'}
         <div class="pl-i-b" style="margin-top:4px"><button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${sw.id})">🔷 All ports of ${esc(sw.hostname)}</button></div>`; }).join('')
