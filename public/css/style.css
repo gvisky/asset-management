@@ -1506,3 +1506,10 @@ html.is-ot .si-tabs [data-t="vm"], html.is-ot-viewer #view-edit-btn, html.is-ot-
 .oi-k.add { background: #dcfce7; color: #166534; } .oi-k.diff { background: #fef3c7; color: #92400e; } .oi-k.map { background: #dbeafe; color: #1e40af; }
 .nm-rec { font-size: 11.5px; color: #1e40af; background: #dbeafe; border-radius: 4px; padding: 0 5px; text-decoration: none; white-space: nowrap; }
 .nm-rec.ot { color: #9a3412; background: #ffedd5; }
+/* Topology: devices plugged into the selected access switch */
+.nm-endl { stroke: #67e8f9; stroke-width: 1.2; } .nm-endl.ot { stroke: #fdba74; }
+.nm-end { cursor: pointer; } .nm-end circle { fill: #ecfeff; stroke: #0891b2; stroke-width: 1.5; } .nm-end.ot circle { fill: #fff7ed; stroke: #ea580c; }
+.nm-end:hover circle { stroke-width: 3; }
+.nm-end-i { font-size: 16px; text-anchor: middle; } .nm-end-p { font-size: 10px; font-weight: 700; fill: #0e7490; text-anchor: middle; } .nm-end.ot .nm-end-p { fill: #c2410c; }
+.nm-end-n { font-size: 10px; fill: #334155; text-anchor: middle; } .nm-end-ot { font-size: 8px; font-weight: 700; fill: #c2410c; }
+.nm-endl.bus { fill: none; stroke: #0891b2; stroke-width: 2; }

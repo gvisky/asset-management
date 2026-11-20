@@ -184,17 +184,43 @@ const NM = (() => {
       else { const per = 9, GAP = 165; list.forEach((d, i) => { const r = Math.floor(i / per), c = i % per, n = Math.min(per, list.length - r * per);
         fpos.set(d.id, { x: (c - (n - 1) / 2) * GAP, y: side * (175 * k + r * 105), side }); }); }
     }
+    // Access switch: everything plugged into it (Server Inventory devices of its ports, else the name on the port) in rows behind.
+    fend = [];
+    if (/access switch/i.test(me.role || '')) {
+      const items = endItems(me), maxY = Math.max(0, ...[...fpos.values()].map(p => p.y)), per = 10, GX = 128, GY = 100;
+      items.forEach((it, i) => { const r = Math.floor(i / per), c = i % per, n = Math.min(per, items.length - r * per);
+        fend.push({ ...it, x: (c - (n - 1) / 2) * GX, y: maxY + 175 + r * GY, side: 1 }); });
+    }
     // Horizontal: in front on the left, behind on the right.
-    if (orient === 'h') for (const [id, p] of fpos) fpos.set(id, { x: p.y * 1.45, y: p.x * 0.52, side: p.side });
+    if (orient === 'h') { for (const [id, p] of fpos) fpos.set(id, { x: p.y * 1.45, y: p.x * 0.52, side: p.side });
+      fend = fend.map(e => ({ ...e, x: e.y * 1.45, y: e.x * 0.52 })); }
     return dist;
   }
-  let keepPos = null, hdrag = false;
+  let keepPos = null, hdrag = false, fend = [];
+  // End devices of an access switch: per port, its Server Inventory devices (📦), else what the port says (printer, kiosk …).
+  const END_ICON = [[/camera|cam\b/i, '📷'], [/print|zt4|ricoh/i, '🖨'], [/access control|vega|dcce|cosec|matrix|maxtrix/i, '🚪'], [/kiosk|kios|retmes|panel pc/i, '🖥'],
+    [/tv\b|television|display/i, '📺'], [/plc|logix|s7-|simatic/i, '⚙'], [/moxa|edr-|eds-|hub|industrial switch/i, '🔀'], [/gateway|mgate|egx|emg|hd67044/i, '🔌'],
+    [/sensor|ams01|measurement/i, '🌡'], [/phone|78\d\d/i, '☎']];
+  const endIcon = (t) => (END_ICON.find(([re]) => re.test(t)) || [0, '💻'])[1];
+  function endItems(dev) {
+    const out = [];
+    for (const p of (portsOf.get(dev.id) || []).filter(x => !isNet(x.peer_host)).sort((a, b) => natural(a.port, b.port))) {
+      const k = `${dev.hostname} ${p.port}`, recs = (D.records || []).filter(r => r.switch_port === k || String(r.switch_port).startsWith(k + ' '));
+      const pn = (String(p.port).match(/(\d+)\s*$/) || [])[1] || p.port;
+      if (recs.length) recs.forEach(r => out.push({ port: p.port, pn, name: r.hostname || '#' + r.id, rec: r.id, ot: r.it_ot === 'OT', icon: endIcon(`${r.category} ${r.hostname}`) }));
+      else if (p.peer_host || /([0-9a-f]{2}[:.-]?){5}[0-9a-f]{2}/i.test(p.note || '')) {
+        const name = p.peer_host || String(p.note).split(/\s*·\s*/).find(x => x && !/^([0-9a-f]{2}[:.-]?){5}[0-9a-f]{2}$/i.test(x)) || 'device';
+        out.push({ port: p.port, pn, name, rec: 0, ot: false, icon: endIcon(`${name} ${p.note}`) });
+      }
+    }
+    return out;
+  }
   function renderTopoKeep(keep) { keepPos = keep; renderTopo(); keepPos = null; }
   const pos = (d) => (focusOn() ? fpos.get(d.id) : orient === 'h' ? hpos.get(d.id) || d : d);
   function fit() {
     if (mode !== 'map' && lastBounds) { view = { ...lastBounds }; return apply(); }
     if (focusOn()) {
-      const ps = [...fpos.values()], xs = ps.map(p => p.x), ys = ps.map(p => p.y);
+      const ps = [...fpos.values(), ...fend], xs = ps.map(p => p.x), ys = ps.map(p => p.y);
       const x0 = Math.min(...xs) - 130, x1 = Math.max(...xs) + 130, y0 = Math.min(...ys) - 80, y1 = Math.max(...ys) + 90;
       const w = Math.max(x1 - x0, orient === 'h' ? 1100 : 900), h = Math.max(y1 - y0, 480);
       view = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - h / 2, w, h }; return apply();
@@ -230,6 +256,20 @@ const NM = (() => {
         <line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${fib ? '#f59e0b' : '#3b82f6'}" stroke-width="${pc || ls.length > 1 ? 4 : 2}" ${pc ? 'stroke-dasharray="10 4"' : ''}/>
         ${ls.length > 1 ? `<text x="${(A.x + B.x) / 2}" y="${(A.y + B.y) / 2 - 4}" class="nm-lcnt">×${ls.length}</text>` : ''}</g>`;
     }
+    // End devices of the selected access switch (only in its focus view).
+    if (F && fend.length) {
+      const S = pos(byId.get(sel));
+      // A bus: trunk from the switch to a rail just before the first row, one drop per device (horizontal layout: turned).
+      const h = orient === 'h', first = h ? Math.min(...fend.map(e => e.x)) : Math.min(...fend.map(e => e.y)), rail = first - 46;
+      const lo = Math.min(...fend.map(e => (h ? e.y : e.x))), hi = Math.max(...fend.map(e => (h ? e.y : e.x)));
+      g += h ? `<path d="M${S.x + 30},${S.y} H${rail} M${rail},${Math.min(lo, S.y)} V${Math.max(hi, S.y)}" class="nm-endl bus"/>`
+        : `<path d="M${S.x},${S.y + 30} V${rail} M${Math.min(lo, S.x)},${rail} H${Math.max(hi, S.x)}" class="nm-endl bus"/>`;
+      for (const e of fend) g += h ? `<line x1="${rail}" y1="${e.y}" x2="${e.x - 17}" y2="${e.y}" class="nm-endl${e.ot ? ' ot' : ''}"/>`
+        : `<line x1="${e.x}" y1="${rail}" x2="${e.x}" y2="${e.y - 17}" class="nm-endl${e.ot ? ' ot' : ''}"/>`;
+      for (const e of fend) g += `<g class="nm-end${e.ot ? ' ot' : ''}" data-port="${esc(e.port)}" transform="translate(${e.x},${e.y})"><title>${esc(e.name)} · port ${esc(e.port)}${e.rec ? ' · Server Inventory #' + e.rec : ''}${e.ot ? ' · OT' : ''}</title>
+        <circle r="17"/><text y="6" class="nm-end-i">${e.icon}</text><text y="-20" class="nm-end-p">${esc(e.pn)}</text>
+        <text y="31" class="nm-end-n">${esc(e.name.length > 18 ? e.name.slice(0, 17) + '…' : e.name)}</text>${e.ot ? '<text x="13" y="-9" class="nm-end-ot">OT</text>' : ''}</g>`;
+    }
     for (const d of D.devices.filter(d => showing(d.hostname) && (live(d) || d.id === sel))) {
       const s = stats(d), P = pos(d);
       g += `<g class="nm-node${sel === d.id ? ' on' : ''}${F && dist.get(d.hostname) === 2 ? ' far' : ''}${grp ? (inG(d.hostname) ? ' ing' : ' dim') : ''}" data-id="${d.id}" transform="translate(${P.x},${P.y})" style="--gc:${gcol(groupOf(d))}">
@@ -251,7 +291,7 @@ const NM = (() => {
     }
     $('nm-svg').innerHTML = g;
     const fb = $('nm-focus');
-    if (fb) fb.innerHTML = F ? `<b>${esc(byId.get(sel).hostname)}</b> + ${dist.size - 1} cabled device${dist.size === 2 ? '' : 's'}
+    if (fb) fb.innerHTML = F ? `<b>${esc(byId.get(sel).hostname)}</b> + ${dist.size - 1} cabled device${dist.size === 2 ? '' : 's'}${fend.length ? ` + <b>${fend.length}</b> plugged-in device${fend.length === 1 ? '' : 's'}` : ''}
         <span class="nm-tabs small"><button class="${depth === 1 ? 'on' : ''}" onclick="NM.depth(1)">1 step</button><button class="${depth === 2 ? 'on' : ''}" onclick="NM.depth(2)">2 steps</button></span>
         <button class="btn btn-ghost btn-sm" onclick="NM.showAll()">Show all</button>`
       : sel ? `<button class="btn btn-ghost btn-sm" onclick="NM.focusMode()">◎ Only ${esc(byId.get(sel).hostname)} and its links</button>` : '';
@@ -300,6 +340,8 @@ const NM = (() => {
         if (d.moved) { if (orient === 'h') { const P = hpos.get(d.d.id); if (P) hfix.set(d.d.id, { x: P.x, y: P.y }); } else if (D.can.edit && !focusOn()) { try { await apiPut('/api/netmap/device/' + d.d.id, { x: d.d.x, y: d.d.y }); } catch {} } }
         else select(d.d.id);
       } else if (!d.moved) {
+        const en = under && under.closest('.nm-end');
+        if (en && sel) { openPort(sel, en.dataset.port); return; }
         const l = (under && under.closest('.nm-link')) || e.target.closest('.nm-link');
         if (l) { const [a] = l.dataset.k.split('~'); select(byHost.get(a).id, false, l.dataset.k); }
       }
@@ -377,7 +419,7 @@ const NM = (() => {
     const ro = !canSave ? 'disabled' : '';
     $('nm-port-t').textContent = `${d.hostname} · ${port}`;
     const hosts = ot ? [] : D.devices.filter(x => x.id !== d.id).map(x => x.hostname).sort(natural);
-    $('nm-port-b').innerHTML = `<div class="nm-pnow"><span class="dot ${portClass(p)}"></span> ${esc(portTip(p))}</div>
+    $('nm-port-b').innerHTML = `<div class="nm-pnow"><span class="dot ${portClass(p)}"></span> ${esc(portTip(p))}${recLinks(d, p)}</div>
       <div class="qe-grid">
         <div class="form-group"><label class="form-label">Connected to (device)</label><input class="form-control" id="pp-host" list="pp-hosts" value="${esc(p.peer_host)}" ${ro} placeholder="network device, or PC / printer / AP name"><datalist id="pp-hosts">${hosts.map(h => `<option value="${esc(h)}">`).join('')}</datalist></div>
         <div class="form-group"><label class="form-label">Its port</label><input class="form-control" id="pp-port" list="pp-ports" value="${esc(p.peer_port)}" ${ro}><datalist id="pp-ports"></datalist></div>

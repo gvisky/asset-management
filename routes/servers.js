@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { get, all, run, batch, audit, notify } = require('../db/database');
 const OTImport = require('../lib/ot-import');
-const { requireAuth, requireRole, requireITAdmin } = require('../middleware/auth');
+const { requireAuth, requireRole, requireITAdmin, isITAdmin } = require('../middleware/auth');
 
 const { normCountry } = require('../lib/countries');
 const { knownCountries } = require('../lib/country-list');
@@ -19,7 +19,7 @@ const isOT = (req) => !!req.user && req.user.team === 'OT';
 router.use((req, res, next) => {
   if (isOT(req)) {
     if (req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path)) return next();
-    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && req.path === '/'))) return next();
+    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && (req.path === '/' || req.path === '/port-links')))) return next();
     return res.status(403).json({ error: 'OT: the OT devices only (editors can add and edit them)' });
   }
   if (req.user && req.user.asset_access === 0) {
@@ -237,15 +237,23 @@ router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
 // body { site, dry } → plan; { site, link: [server ids], add: [{ port_id, name, it_ot, category }] } → apply (IT admins):
 // writes "Connected to" (switch_port, + location when empty) and adds the devices cabled to an access switch that have no record.
 const PortLinks = require('../lib/port-links');
-router.post('/port-links', requireITAdmin, wrap(async (req, res) => {
+// IT admins: everything. OT editors: only the OT devices, on the switches the OT team sees; what they add is OT.
+const canPortLinks = (req) => isITAdmin(req.user) || (isOT(req) && req.user.role === 'editor');
+router.post('/port-links', wrap(async (req, res) => {
+  if (!canPortLinks(req)) return res.status(403).json({ error: 'IT admins and OT editors only' });
   const b = req.body || {};
   const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
   const site = String(b.site || (sites[0] && sites[0].site) || '').slice(0, 80);
-  const devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
-  const ports = await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]);
+  const ot = isOT(req);
+  const allDevices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  let ports = await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]);
+  if (ot) { const otIds = new Set(allDevices.filter(d => d.state !== 'retired' && require('./netmap').otOn(d)).map(d => d.id)); ports = ports.filter(p => otIds.has(p.device_id)); }
+  const devices = allDevices;
   const cf = countryFilter(req);
-  const servers = await all(`SELECT * FROM servers WHERE deleted_at IS NULL${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
+  const servers = await all(`SELECT * FROM servers WHERE deleted_at IS NULL${ot ? " AND it_ot = 'OT'" : ''}${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
   const p = PortLinks.plan({ devices, ports, servers });
+  // OT editors: only what looks like OT (VLANs 124 / 125 / 131 / 133, Matrix, Moxa, kiosks, gateways …) — printers / PCs stay IT's.
+  if (ot) { p.missing = p.missing.filter(m => m.it_ot === 'OT'); p.counts.missing = p.missing.length; }
   if (b.dry) return res.json({ site, sites: sites.map(x => x.site), ...p });
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
   const HIST = `history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END`;
@@ -262,7 +270,7 @@ router.post('/port-links', requireITAdmin, wrap(async (req, res) => {
   for (const a of (Array.isArray(b.add) ? b.add : []).slice(0, 500)) {
     const m = byPort.get(Number(a.port_id)); if (!m) continue;
     const name = String(a.name || m.name).trim().slice(0, 80) || m.name;
-    const itot = a.it_ot === 'OT' ? 'OT' : '';
+    const itot = a.it_ot === 'OT' || ot ? 'OT' : '';
     stmts.push({ sql: `INSERT INTO servers (country, location, hostname, category, ip_address, mac, vlan, switch_port, it_ot, status, remark, history_usage)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?)`,
       args: [country, m.location, name, String(a.category || m.category).slice(0, 60), m.ip, m.mac, m.vlan, `${m.switch} ${m.port}`, itot,
