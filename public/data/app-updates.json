@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-20",
+    "title": "HK cabinets chained on the topology · fix OT devices on the Needs Attention page · OT / IT tabs in Server Inventory",
+    "items": [
+      "Network map: the outdoor (HARICI) cabinets are chained switch to switch along their fibre route — HK1 → HK2 → HK3, HK4 → HK5 → HK6, HK7 → HK8 → HK9, HK11 → HK10; HK1, HK4, HK7, HK11 and HK12 go to the CCTV distribution. Links already made straight to the distribution are moved with 🔗 Chain n HK CCTV switches (preview first).",
+      "⚠️ OT Needs Attention: ✏️ Fix (or the device name) opens the device in a form on the same page — picture, the check it is listed for, the fields to fix highlighted (name, IP, MAC, serial, firmware, status, switch port with the free ports to pick from, location, mask, gateway, DNS, HTTP / HTTPS, note). Save and the list updates; no more going to Server Inventory.",
+      "Server Inventory (IT team): tabs 🏭 Servers & network devices OT · 🖥 Servers & network devices IT · All, with their counts; the last tab you chose is remembered. The OT team still sees only its OT devices."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "CCTV switches connected on the Topology and shown on the Drawings",
     "items": [
       "Topology (admins, IT view): 🔗 Connect n CCTV switches links every CCTV switch that has no line yet to the switch above it — the cabinet's first CCTV switch (K3_CCTV_01, HK4_CCTV_01 …) → CCTV_DIST_01, more switches of a cabinet (K2_CCTV_02, HK10_CCTV_03, CB36-BP05 …) → that first switch, CCTV_DIST_01 / _02 and CCTV_01 / _02 → the CCTV core CCTV_CS. Preview first; links already on the map stay.",

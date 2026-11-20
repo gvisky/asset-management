@@ -1526,3 +1526,16 @@ html.is-ot .si-tabs [data-t="vm"], html.is-ot-viewer #view-edit-btn, html.is-ot-
 .ota-card { display: flex; flex-direction: column; min-width: 150px; max-width: 220px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: inherit; text-decoration: none; }
 .ota-card b { font-size: 22px; } .ota-card small { color: #64748b; font-size: 12px; } .ota-card.device { border-left: 4px solid #ea580c; } .ota-card.record { border-left: 4px solid #1a56db; }
 .ota-g { margin-top: 12px; } .ota-h { cursor: pointer; gap: 8px; } .ota-w { margin-left: auto; font-size: 12px; color: #64748b; }
+/* OT Needs Attention: edit a device on the page */
+.ota-ed .ota-img { display: block; max-width: 100%; max-height: 220px; margin: 0 auto 10px; border-radius: 8px; border: 1px solid var(--border); }
+.ota-why { padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; background: #eff6ff; border-left: 4px solid #1a56db; }
+.ota-why.device { background: #fff7ed; border-left-color: #ea580c; }
+.ota-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.ota-grid .form-group { margin-bottom: 8px; } .ota-grid .ota-wide { grid-column: 1 / -1; }
+.ota-grid .ota-hot .form-control { border-color: #f59e0b; box-shadow: 0 0 0 2px #fde68a; }
+.ota-grid .ota-hot .form-label { color: #b45309; font-weight: 600; }
+@media (max-width: 600px) { .ota-grid { grid-template-columns: 1fr; } }
+/* Server Inventory: the OT team only has its OT tab; the IT / OT filter is the tabs for the IT team */
+html.is-ot .si-tabs [data-io="IT"], html.is-ot .si-tabs [data-io=""] { display: none !important; }
+.si-tabs [data-io] + [data-t="vm"] { margin-left: 14px; }
+#filter-itot { display: none; }

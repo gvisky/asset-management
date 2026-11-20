@@ -316,7 +316,20 @@ async function loadSummary() {
   } catch (e) { /* ignore */ }
 }
 
+// OT / IT / All tabs (IT team; the OT team only has its OT devices): they set the IT / OT filter. Last choice remembered.
+const SI_IO_KEY = 'si-io';
+function setIoTab(io) {
+  document.getElementById('filter-itot').value = io;
+  document.querySelectorAll('.si-tabs button[data-io]').forEach(b => b.classList.toggle('on', b.dataset.io === io));
+}
 document.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem(SI_IO_KEY);
+  setIoTab(saved === 'OT' || saved === 'IT' || saved === '' ? saved : 'IT');
+  document.querySelectorAll('.si-tabs button[data-io]').forEach(b => b.addEventListener('click', () => {
+    setIoTab(b.dataset.io); localStorage.setItem(SI_IO_KEY, b.dataset.io); loadServers(1); }));
+  document.getElementById('filter-itot').addEventListener('change', (e) => { setIoTab(e.target.value); localStorage.setItem(SI_IO_KEY, e.target.value); });
+  notOT().then(ok => { if (!ok) return;
+    ['OT', 'IT'].forEach(io => apiGet(`${SAPI}?it_ot=${io}&limit=1`).then(r => { const c = document.getElementById('io-cnt-' + io); if (c && r.total) c.textContent = r.total; }).catch(() => {})); });
   loadFilters().then(loadServers);
   notOT().then(ok => { if (ok) loadSummary(); });
 
@@ -325,7 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
   ['filter-country', 'filter-status', 'filter-category', 'filter-producer', 'filter-itot'].forEach(id => document.getElementById(id).addEventListener('change', () => loadServers(1)));
   document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('search-input').value = '';
-    ['filter-country', 'filter-status', 'filter-category', 'filter-producer', 'filter-itot'].forEach(id => document.getElementById(id).value = '');
+    ['filter-country', 'filter-status', 'filter-category', 'filter-producer'].forEach(id => document.getElementById(id).value = '');   // the OT / IT / All tab stays
     loadServers(1);
   });
 
@@ -365,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() =
   if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-cctvimport').style.display = ''; }
   // OT team: read-only list of the OT devices.
   if (window.CURRENT_USER.team === 'OT' && window.CURRENT_USER.role === 'editor') document.getElementById('btn-portlinks').style.display = '';
-  if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-t=phys]'); if (s) s.textContent = '🏭 OT devices'; }
+  if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-io=OT]'); if (s) s.textContent = '🏭 OT devices'; setIoTab('OT'); }
   const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v);
   const ed = Number(new URLSearchParams(location.search).get('edit')); if (ed) onEdit(ed); /* from ⚠️ OT Needs Attention */ }, 150); });
 let nsChoose = {};
