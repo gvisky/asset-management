@@ -26,11 +26,27 @@ const NMPlans = self.NMPlans = (() => {
         <span id="pl-edit-tools"></span>
         <button class="btn btn-ghost btn-sm pl-b" onclick="NMPlans.zoomBy(1.25)">＋</button><button class="btn btn-ghost btn-sm pl-b" onclick="NMPlans.zoomBy(0.8)">－</button>
         <button class="btn btn-ghost btn-sm pl-b" onclick="NMPlans.close()">✕ Close</button></div>
-      <div class="pl-scroll" id="pl-scroll"><div class="pl-stage" id="pl-stage"><img id="pl-img" alt=""><svg id="pl-lines" class="pl-lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div id="pl-pins"></div></div></div>
+      <div class="pl-scroll" id="pl-scroll"><div class="pl-stage" id="pl-stage"><img id="pl-img" alt="" draggable="false"><svg id="pl-lines" class="pl-lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div id="pl-pins"></div></div></div>
       <div class="pl-info" id="pl-info" hidden></div></div>`);
     document.getElementById('pl-cab').checked = cables;
     document.getElementById('pl-cab').onchange = (e) => { cables = e.target.checked; localStorage.setItem('pl-cables', cables ? '1' : '0'); render(); };
+    // Mouse wheel = zoom at the pointer (like the topology); drag the picture = move it.
+    const sc = document.getElementById('pl-scroll');
+    sc.addEventListener('wheel', (e) => {
+      if (!cur) return; e.preventDefault();
+      const r = sc.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top, x = sc.scrollLeft + ox, y = sc.scrollTop + oy, old = zoom;
+      zoom = Math.max(0.15, Math.min(4, zoom * (e.deltaY < 0 ? 1.18 : 1 / 1.18))); if (zoom === old) return;
+      applyZoom(); render();
+      const k = zoom / old; sc.scrollLeft = x * k - ox; sc.scrollTop = y * k - oy;
+    }, { passive: false });
+    let pan = null, panned = false;
+    sc.addEventListener('dragstart', (e) => e.preventDefault());
+    sc.addEventListener('pointerdown', (e) => { if (editing || e.button !== 0 || e.target.closest('.pl-pin, .pl-info')) return; e.preventDefault(); pan = { x: e.clientX, y: e.clientY, l: sc.scrollLeft, t: sc.scrollTop }; panned = false; });
+    window.addEventListener('pointermove', (e) => { if (!pan) return; const dx = e.clientX - pan.x, dy = e.clientY - pan.y;
+      if (!panned && Math.hypot(dx, dy) < 4) return; panned = true; sc.classList.add('panning'); sc.scrollLeft = pan.l - dx; sc.scrollTop = pan.t - dy; });
+    window.addEventListener('pointerup', () => { if (pan) { pan = null; sc.classList.remove('panning'); setTimeout(() => { panned = false; }, 0); } });
     document.getElementById('pl-stage').addEventListener('click', (e) => {
+      if (panned) return;
       if (!editing) { if (!e.target.closest('.pl-pin')) { focusI = null; info(null); render(); } return; }
     if (e.target.closest('.pl-pin')) return;
       const r = document.getElementById('pl-img').getBoundingClientRect();
@@ -352,11 +368,17 @@ const NMPlans = self.NMPlans = (() => {
     try { await apiPut('/api/netmap/drawing/' + cur.id, { pins }); cur.pins = JSON.stringify(pins); dirty = false; showToast(`${pins.length} pins saved`); }
     catch { showToast('Could not save the pins', 'error'); }
   }
+  // Solo = this tab was opened for the drawing (network-map.html?drawing=…): jumps to the map / racks open in another tab.
+  let solo = false;
   function close() {
     if (dirty && !confirm('Pins changed but not saved. Close anyway?')) return;
     document.getElementById('pl-ov').hidden = true; dirty = false;
+    if (solo) { solo = false; document.title = 'Network map'; const u = new URL(location.href); u.searchParams.delete('drawing'); u.searchParams.delete('pin'); history.replaceState(null, '', u); NM.tab('draw'); }
   }
+  const newTab = (qs) => window.open('/network-map.html?' + qs, '_blank', 'noopener');
   return { open, close, save, pin: show, fixCam, nextBad, missing, editCam, unfocus: () => { focusI = null; info(null); render(); },
-    dev: (id) => { close(); NM.select(id, true); }, rack: (i) => go(pins[i]), edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); render(); },
+    dev: (id) => { if (solo) { const d = D().devices.find(x => x.id === id); return newTab('host=' + encodeURIComponent(d ? d.hostname : '')); } close(); NM.select(id, true); },
+    rack: (i) => (solo ? newTab('rack=' + encodeURIComponent(U(pins[i].ref || pins[i].label).replace(/\s+/g, '-'))) : go(pins[i])),
+    solo: (on) => { solo = !!on; if (on && cur) document.title = cur.name; }, edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); render(); },
     goto: (id, ref) => open(id, null, ref), refresh: () => { if (focusI != null && !document.getElementById('pl-ov').hidden) info(focusI); } };
 })();

@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Map ↔ racks ↔ Server Inventory linked (automatic check), shorter toolbars, drawings in their own tab, wheel zoom",
+    "items": [
+      "After this update the app links everything once by itself: the CCTV switches of the rack layout are added to the map (a switch already there under its OT-report name, e.g. K2_CCTV_01, is linked to its rack slot instead of added twice), placed in their racks, map devices linked to their Server Inventory record (by serial first — e.g. MR-01/ASW-01 to the record with its serial), cameras set on their cabinet's CCTV switch, and the CCTV uplinks linked. Network map → ⬆ Import & check → 🔗 Check links shows what is linked and does it again any time (preview, tick, apply).",
+      "Toolbars: the one-time imports and syncs are in one menu — Server Inventory → ⬆ Import & sync (Switch ports, Ports from MAC tables, Camera switches, CCTV camera list, OT device list, Update from network map); Network map → ⬆ Import & check (implementation doc, Factory Info, Check links).",
+      "Drawings open in a new browser tab (the map stays in the first tab); from a drawing, 🗄 Open in Racks and 🔷 Switch open another tab, so there is no closing and going back.",
+      "Drawings: zoom with the mouse wheel at the pointer (like the topology) and drag the picture to move around."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Edit cameras right on the drawing",
     "items": [
       "Camera drawing: in a cabinet's popup each camera has ✏️ — edit it in a window on the same page (picture, name, IP, MAC, serial, firmware, status, area, switch + port with the free ports to pick from, location, mask / gateway / DNS, HTTP / HTTPS, note). A camera's own popup has ✏️ Edit camera. No need to open Server Inventory.",

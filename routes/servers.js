@@ -465,7 +465,7 @@ router.post('/port-links', wrap(async (req, res) => {
 // ── POST /api/servers/camera-switches — cameras with no switch (or one not on the map) → the CCTV switch their name says
 // (K5-12 → CCTV KABIN 5, HK8-1R → HARICI KABIN 8, K1 → MR-01, K11 → IT KABIN 11), like the camera list import does.
 // body { dry, apply: [server ids] }. Cameras already on a port of a switch are kept. IT admins and OT editors.
-router.post('/camera-switches', wrap(async (req, res) => {
+router.post('/camera-switches', wrap(router.cameraSwitches = async (req, res) => {
   if (!canPortLinks(req)) return res.status(403).json({ error: 'IT admins and OT editors only' });
   const b = req.body || {}, ot = isOT(req);
   const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');

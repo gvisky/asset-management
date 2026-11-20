@@ -394,3 +394,18 @@ async function mergeAssets(deviceId, otherId, after) {
     showToast(m, 'error');
   }
 }
+
+// ── Toolbar dropdowns (.tb-dd): one-time imports / syncs live in a "⬆ Import ▾" menu instead of the toolbar.
+// The menu hides itself when none of its items is shown to this user.
+(function () {
+  function sync(dd) { const items = [...dd.querySelectorAll('.tb-dd-m > button, .tb-dd-m > a')]; dd.style.display = items.some(b => b.style.display !== 'none') ? '' : 'none'; }
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tb-dd').forEach(dd => {
+      sync(dd);
+      new MutationObserver(() => sync(dd)).observe(dd.querySelector('.tb-dd-m'), { subtree: true, attributes: true, attributeFilter: ['style'] });
+      dd.querySelector('.tb-dd-b').addEventListener('click', (e) => { e.stopPropagation(); document.querySelectorAll('.tb-dd.open').forEach(x => { if (x !== dd) x.classList.remove('open'); }); dd.classList.toggle('open'); });
+      dd.querySelector('.tb-dd-m').addEventListener('click', () => dd.classList.remove('open'));
+    });
+    document.addEventListener('click', () => document.querySelectorAll('.tb-dd.open').forEach(x => x.classList.remove('open')));
+  });
+})();

@@ -129,6 +129,10 @@ app.use((err, req, res, next) => {
 // Initialise the database (schema + seed), then start listening.
 init()
   .then(() => {
+    // Once after an update: link the map, racks and Server Inventory together (CCTV switches, records, cameras, uplinks).
+    setTimeout(() => require('./routes/netmap').autoLink()
+      .then(r => { if (r) console.log('[link-check] done:', r.steps.map(x => `${x.key} ${x.done}/${x.found}`).join(', ')); })
+      .catch(e => console.error('[link-check] failed:', e.message)), 3000);
     app.listen(PORT, () => {
       console.log(`\n  Asset Management running at http://localhost:${PORT}\n`);
     });

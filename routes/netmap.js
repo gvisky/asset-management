@@ -20,6 +20,7 @@ const { requireAuth } = require('../middleware/auth');
 const OTA = require('../lib/ot-activity');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
+const H = {};   // handlers also run by the link check (POST /link-check, and once on start-up)
 router.use(requireAuth);
 // Asset users, and the OT team (Operation Technology) — OT only reads, and only its OT view.
 const isOT = (req) => !!req.user && req.user.team === 'OT';
@@ -490,7 +491,7 @@ function cctvPorts(model) {
   if (/3560/.test(model)) return Array.from({ length: 14 }, (_, i) => `GE 1/0/${i + 1}`);
   return [];
 }
-router.post('/cctv-switches', wrap(async (req, res) => {
+router.post('/cctv-switches', wrap(H.cctvSwitches = async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const site = str(req.body.site, 80);
   const items = await all(`SELECT i.*, r.name AS rack, r.kind AS rack_kind FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id
@@ -498,6 +499,7 @@ router.post('/cctv-switches', wrap(async (req, res) => {
   const devs = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
   const have = new Set(devs.map(d => d.hostname.toUpperCase()));
   const servers = await all("SELECT id, hostname, serial_no FROM servers WHERE deleted_at IS NULL AND COALESCE(hostname, '') <> ''");
+  const inRack = new Set((await all('SELECT i.device_id FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id WHERE r.site = ? AND i.device_id IS NOT NULL', [site])).map(r => r.device_id));
   const plan = [];
   for (const it of items) {
     const m = String(it.label || '').match(CCTV_LABEL); if (!m) continue;
@@ -505,6 +507,13 @@ router.post('/cctv-switches', wrap(async (req, res) => {
     if (have.has(hostname) || plan.some(x => x.hostname === hostname)) continue;
     const mr = String(it.rack).match(/^MR-0?(\d+)$/i);
     const location = `${mr ? `MAIN RACK - 0${mr[1]}` : String(it.rack).replace(/^HARICI-/i, 'HARICI ')} (U${it.u}${it.height > 1 ? '-' + (it.u + it.height - 1) : ''})`;
+    // Already on the map under its OT-report name (the report was uploaded first: K2_CCTV_01, HK5_CCTV_01, CCTV_01, CCTV_DIST_01 …):
+    // link that switch to this rack slot instead of adding a second one.
+    const R = String(it.rack).toUpperCase(), num = (re) => (R.match(re) || [])[1];
+    const otName = dsw ? `CCTV_DIST_0${Number((hostname.match(/DSW-0*(\d+)/) || [])[1] || 0)}` : mr ? `CCTV_0${Number((hostname.match(/ASW-0*(\d+)/) || [])[1] || 0)}`
+      : num(/^HARICI-KABIN0*(\d+)$/) ? `HK${Number(num(/^HARICI-KABIN0*(\d+)$/))}_CCTV_01` : num(/^(?:CCTV|IT)-KABIN0*(\d+)$/) ? `K${Number(num(/^(?:CCTV|IT)-KABIN0*(\d+)$/))}_CCTV_01` : '';
+    const same = otName && devs.find(d => [d.hostname, d.alias].some(x => String(x || '').toUpperCase() === otName) && !inRack.has(d.id));
+    if (same) { plan.push({ action: 'link', item_id: it.id, device_id: same.id, hostname: same.hostname, label: hostname, model: same.model || '', location, ports: [] }); have.add(hostname); continue; }
     // No model in the label (MR-01/CCTV-ASW-01): a 48-port Catalyst 9200 like the other main-rack switches.
     const model = dsw ? 'CISCO' : CCTV_MODEL[fam] || CCTV_MODEL['9200'];
     const sv = servers.find(x => x.hostname.toUpperCase() === hostname);
@@ -529,10 +538,16 @@ router.post('/cctv-switches', wrap(async (req, res) => {
     if (!add.length && !removable.length && !rename.length && d.model === model) continue;
     plan.push({ action: 'fix', device_id: d.id, hostname: d.hostname, model, add, rename, remove: removable.map(p => p.id), keep, ports: want });
   }
-  if (req.body.dry) return res.json({ site, rows: plan.map(p => ({ action: p.action, hostname: p.hostname, model: p.model, location: p.location || '', ports: p.ports.length,
+  if (req.body.dry) return res.json({ site, rows: plan.map(p => ({ action: p.action, hostname: p.action === 'link' ? `${p.hostname} = ${p.label}` : p.hostname, model: p.model, location: p.location || '', ports: p.ports.length,
     add: p.add ? p.add.length : p.ports.length, remove: p.remove ? p.remove.length : 0, rename: p.rename ? p.rename.length : 0, keep: p.keep || 0 })) });
   const stmts = [];
   for (const p of plan) {
+    if (p.action === 'link') {
+      stmts.push({ sql: 'UPDATE net_rack_items SET device_id = ? WHERE id = ? AND device_id IS NULL', args: [p.device_id, p.item_id] });
+      stmts.push({ sql: "UPDATE net_devices SET location = ?, updated_at = datetime('now') WHERE id = ?", args: [p.location, p.device_id] });
+      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', `linked to its rack slot (${p.label}, ${p.location})`, req.user.username] });
+      continue;
+    }
     if (p.action === 'fix') {
       stmts.push({ sql: "UPDATE net_devices SET model = ?, updated_at = datetime('now') WHERE id = ?", args: [p.model, p.device_id] });
       p.add.forEach(pt => stmts.push({ sql: 'INSERT OR IGNORE INTO net_ports (device_id, port, sort) VALUES (?, ?, ?)', args: [p.device_id, pt, portSort(pt)] }));
@@ -549,14 +564,14 @@ router.post('/cctv-switches', wrap(async (req, res) => {
     stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', 'device added (CCTV switch from the rack layout)', req.user.username] });
   }
   if (stmts.length) await batch(stmts);
-  const added = plan.filter(p => p.action === 'add').length, fixed = plan.filter(p => p.action === 'fix').length;
+  const added = plan.filter(p => p.action === 'add').length, fixed = plan.filter(p => p.action === 'fix' || p.action === 'link').length;
   await audit(req.user, 'NETMAP', null, `Network map "${site}": ${added} CCTV switch(es) added from the rack layout, ${fixed} corrected`);
   res.json({ ok: true, added, fixed });
 }));
 // ── CCTV switches not in a rack yet (added from the OT CCTV report: K2_CCTV_02, HKn_CCTV_02, CB36-BP05 …) → their cabinet, in a
 // free U next to the cabinet's CCTV switch (below first, then above; U1 = PDU and the top ODF are kept). POST { site, dry } (admins).
 const { rackOfLocation, plan: cctvLinkPlan } = require('../lib/cctv-links');
-router.post('/racks/place-cctv', wrap(async (req, res) => {
+router.post('/racks/place-cctv', wrap(H.placeCctv = async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const site = str(req.body.site, 80);
   const devs = await all(`SELECT d.* FROM net_devices d WHERE d.site = ? AND d.role LIKE '%switch%' AND (d.hostname LIKE '%CCTV%' OR d.alias LIKE '%CCTV%')
@@ -594,7 +609,7 @@ router.post('/racks/place-cctv', wrap(async (req, res) => {
 }));
 // ── CCTV uplinks: every CCTV switch linked to the one above it (cabinet's first switch → CCTV distribution → CCTV core, more
 // switches of a cabinet → its first one) so the CCTV network is one tree on the topology. POST { site, dry } (admins).
-router.post('/cctv-links', wrap(async (req, res) => {
+router.post('/cctv-links', wrap(H.cctvLinks = async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const site = str(req.body.site, 80);
   const devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
@@ -824,9 +839,113 @@ async function inventoryCheck(site) {
   return { site, has_equipment: equip.length > 0, models, issues, doc_only: docOnly };
 }
 router.inventoryCheck = inventoryCheck;
+// ── 🔗 Link check: the map, the racks and the Server Inventory linked together. Steps (each only adds / links what is missing):
+//   cctv     CCTV switches of the rack layout as devices on the map (📹)        place    CCTV switches in their rack (🗄)
+//   records  map devices ↔ Server Inventory records (serial, MAC, unique name, IP; a link to a record with another serial is moved)
+//   cameras  cameras with no switch → their cabinet's CCTV switch (📷)         uplinks  CCTV switches linked to the switch above (🔗)
+// POST /link-check { site, dry, steps: [...] } (IT admins). Also run once on start-up (autoLink).
+const SN = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const HEX = (v) => String(v || '').replace(/[^0-9a-f]/gi, '').toUpperCase();
+async function recordLinks(site, dry, user) {
+  const devs = (await all('SELECT * FROM net_devices WHERE site = ?', [site])).filter(d => d.state !== 'retired');
+  const recs = await all("SELECT id, hostname, serial_no, mac, ip_address, category FROM servers WHERE deleted_at IS NULL");
+  const byId = new Map(recs.map(r => [r.id, r])), taken = new Map();
+  for (const d of devs) if (d.server_id) taken.set(d.server_id, d.id);
+  const ipOf = (v) => String(v || '').split('/')[0].trim();
+  const rows = [], info = [];
+  for (const d of devs) {
+    const sn = [SN(d.serial), SN(d.service_tag)].filter(x => x.length >= 5), mac = HEX(d.mac);
+    const bySn = sn.length ? recs.filter(r => sn.includes(SN(r.serial_no))) : [];
+    const cur = d.server_id ? byId.get(d.server_id) : null;
+    if (cur) {
+      // Linked to a record with another serial while a record with the device's serial exists → move the link.
+      if (sn.length && SN(cur.serial_no) && !sn.includes(SN(cur.serial_no)) && bySn.length === 1 && (!taken.has(bySn[0].id) || taken.get(bySn[0].id) === d.id)) {
+        rows.push({ device_id: d.id, hostname: d.hostname, from: cur.id, to: bySn[0].id, why: `serial ${d.serial || d.service_tag}`, text: `${d.hostname}: record #${cur.id} (serial ${cur.serial_no}) → #${bySn[0].id} (serial ${bySn[0].serial_no})` });
+        taken.delete(cur.id); taken.set(bySn[0].id, d.id);
+        info.push(`Record #${cur.id} "${cur.hostname}" (serial ${cur.serial_no}) has the name of ${d.hostname} but another serial — check it in Server Inventory`);
+      }
+      continue;
+    }
+    const free = (r) => !taken.has(r.id);
+    let hit = bySn.find(free), why = hit ? `serial ${hit.serial_no}` : '';
+    if (!hit && mac.length === 12) { hit = recs.find(r => free(r) && HEX(r.mac) === mac); if (hit) why = `MAC ${d.mac}`; }
+    if (!hit) { const same = recs.filter(r => SN(r.hostname) && (SN(r.hostname) === SN(d.hostname) || (d.alias && SN(r.hostname) === SN(d.alias))));
+      const ok = same.filter(r => free(r) && !(sn.length && SN(r.serial_no) && !sn.includes(SN(r.serial_no))));
+      if (ok.length === 1 && same.length === 1) { hit = ok[0]; why = `name ${hit.hostname}`; } }
+    if (!hit && ipOf(d.mgmt_ip)) { const l = recs.filter(r => free(r) && ipOf(r.ip_address) === ipOf(d.mgmt_ip)); if (l.length === 1) { hit = l[0]; why = `IP ${ipOf(d.mgmt_ip)}`; } }
+    if (!hit) continue;
+    rows.push({ device_id: d.id, hostname: d.hostname, from: null, to: hit.id, why, text: `${d.hostname} → record #${hit.id} ${hit.hostname || ''} (${why})` });
+    taken.set(hit.id, d.id);
+  }
+  if (!dry && rows.length) {
+    await batch(rows.map(r => ({ sql: 'UPDATE net_devices SET server_id = ? WHERE id = ?', args: [r.to, r.device_id] })));
+    await audit(user, 'NETMAP', null, `Link check "${site}": ${rows.length} map device(s) linked to their Server Inventory record`);
+  }
+  return { rows, info };
+}
+// Run a route handler from here (link check / start-up) and get its JSON back.
+async function callH(fn, body, user) {
+  let out = null, code = 200;
+  const res = { status(c) { code = c; return res; }, json(o) { out = o; return res; }, setHeader() {}, send(o) { out = o; return res; } };
+  await fn({ body, query: {}, params: {}, user }, res);
+  if (code >= 400) throw new Error((out && out.error) || `failed (${code})`);
+  return out || {};
+}
+const STEPS = [
+  { key: 'cctv', title: '📹 CCTV switches of the rack layout on the map' },
+  { key: 'place', title: '🗄 CCTV switches in their rack' },
+  { key: 'records', title: '🔗 Map devices ↔ Server Inventory records' },
+  { key: 'cameras', title: '📷 Cameras on their cabinet\'s CCTV switch' },
+  { key: 'uplinks', title: '🔌 CCTV switches linked to the switch above' },
+];
+async function linkCheck(site, user, { dry = true, steps = STEPS.map(x => x.key) } = {}) {
+  const want = new Set(steps), out = [];
+  for (const st of STEPS) {
+    if (!want.has(st.key)) continue;
+    let items = [], done = 0, note = '';
+    try {
+      if (st.key === 'cctv') { const r = await callH(H.cctvSwitches, { site, dry: true }, user); items = r.rows.map(x => `${x.action === 'add' ? '+' : '✎'} ${x.hostname} — ${x.model}${x.location ? ' · ' + x.location : ''}`);
+        if (!dry && items.length) { const a = await callH(H.cctvSwitches, { site }, user); done = (a.added || 0) + (a.fixed || 0); } }
+      if (st.key === 'place') { const r = await callH(H.placeCctv, { site, dry: true }, user); items = r.rows.filter(x => x.u).map(x => `${x.hostname} → ${x.rack} U${x.u}`);
+        if (!dry && items.length) done = (await callH(H.placeCctv, { site }, user)).placed || 0; }
+      if (st.key === 'records') { const r = await recordLinks(site, dry, user); items = r.rows.map(x => x.text); note = r.info.join('\n'); if (!dry) done = r.rows.length; }
+      if (st.key === 'cameras') { const fn = require('./servers').cameraSwitches; const r = await callH(fn, { site, dry: true }, user); const ids = r.rows.filter(x => x.action === 'set').map(x => x.server_id);
+        items = r.rows.filter(x => x.action === 'set').map(x => `${x.hostname} → ${x.to}${x.to_name ? ' (' + x.to_name + ')' : ''}`);
+        if (!dry && ids.length) done = (await callH(fn, { site, apply: ids }, user)).set || 0; }
+      if (st.key === 'uplinks') { const r = await callH(H.cctvLinks, { site, dry: true }, user); items = r.rows.filter(x => x.port).map(x => `${x.name} ${x.port} → ${x.peer_name}`);
+        if (!dry && items.length) done = (await callH(H.cctvLinks, { site }, user)).linked || 0; }
+    } catch (e) { note = 'Could not check: ' + e.message; }
+    out.push({ key: st.key, title: st.title, count: items.length, items: items.slice(0, 400), done, note });
+  }
+  return out;
+}
+router.post('/link-check', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
+  const site = str(req.body.site, 80) || (sites[0] && sites[0].site) || '';
+  const steps = Array.isArray(req.body.steps) ? req.body.steps.map(String) : undefined;
+  const result = await linkCheck(site, req.user, { dry: !!req.body.dry, steps });
+  const last = await get("SELECT value FROM app_meta WHERE key = 'auto_link_check'");
+  res.json({ site, steps: result, last: last ? JSON.parse(last.value) : null });
+}));
+// Once after an update (start-up): the same check, applied — CCTV switches on the map, placed, linked; records linked; cameras on
+// their switch. Recorded in app_meta, so it runs only once per version of the check.
+async function autoLink() {
+  const KEY = 'auto_link_check', VERSION = 1;
+  const prev = await get('SELECT value FROM app_meta WHERE key = ?', [KEY]);
+  if (prev && (JSON.parse(prev.value).version || 0) >= VERSION) return null;
+  const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
+  if (!sites.length) return null;
+  const user = { id: null, username: 'system', full_name: 'Automatic link check', role: 'admin', team: 'IT', country: null, asset_access: 1 };
+  const result = await linkCheck(sites[0].site, user, { dry: false });
+  const summary = { version: VERSION, at: new Date().toISOString(), site: sites[0].site, steps: result.map(x => ({ key: x.key, title: x.title, found: x.count, done: x.done, note: x.note })) };
+  await run('INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [KEY, JSON.stringify(summary)]);
+  return summary;
+}
 router.otOn = otOn;   // which switches the OT team sees (Server Inventory → 🔌 Switch ports for OT editors)
 router.util = { familyOf, macNorm, str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
 
 router.withOwners = withOwners;
-router.restorePort = restorePort;   // OT activity → restore   // switch port owner OT / IT (OT reports)
+router.restorePort = restorePort;
+router.autoLink = autoLink;   // server.js: once after an update   // OT activity → restore   // switch port owner OT / IT (OT reports)
 module.exports = router;
