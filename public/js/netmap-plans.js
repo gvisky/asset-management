@@ -279,7 +279,9 @@ const NMPlans = self.NMPlans = (() => {
     for (const [p, i] of cams) { if (noName(p)) { bad.set(i, 'noname'); continue; } const k = camKey(p.ref || p.label); if (seen.has(k)) { bad.set(i, 'twice'); bad.set(seen.get(k), 'twice'); } else seen.set(k, i); }
     for (const [p, i] of cams) if (!bad.has(i) && !camRec(p)) bad.set(i, 'unknown');
     const camList = (D().records || []).filter(r => /camera/i.test(r.category || ''));
-    const missing = cams.length ? camList.filter(r => !seen.has(camKey(r.hostname))).sort((a, b) => String(a.hostname).localeCompare(b.hostname, undefined, { numeric: true })) : [];
+    // Only the camera groups this drawing shows (K1 on the office plan, all of them on the site plan).
+    const grp = (n) => (camKey(n).match(/^(HK|K)\d+/) || [''])[0], groups = new Set(cams.map(([p]) => grp(p.ref || p.label)).filter(Boolean));
+    const missing = cams.length ? camList.filter(r => !seen.has(camKey(r.hostname)) && (!grp(r.hostname) ? groups.size > 3 : groups.has(grp(r.hostname)))).sort((a, b) => String(a.hostname).localeCompare(b.hostname, undefined, { numeric: true })) : [];
     return { n: cams.length, bad, missing };
   }
   const canFixCam = () => !!(D().can.edit || D().can.port);

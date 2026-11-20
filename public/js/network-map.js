@@ -696,6 +696,12 @@ const NM = (() => {
     $('nm-add').onclick = () => editDevice(0);
     $('nm-cctvlink').onclick = linkCctv;
     $('nm-linkcheck').onclick = linkCheck;
+    // ⛶ Full screen: the same page in a new tab without the menu, top bar and device list (?full=1), on the selected device.
+    $('nm-full').onclick = () => { const q = new URLSearchParams({ full: '1' }); if (sel && byId.get(sel)) q.set('host', byId.get(sel).hostname); window.open('/network-map.html?' + q, '_blank', 'noopener'); };
+    if (new URLSearchParams(location.search).get('full')) {
+      document.body.classList.add('nm-full'); document.title = 'Network topology';
+      $('nm-full').textContent = '✕ Close'; $('nm-full').title = 'Close this tab'; $('nm-full').onclick = () => { window.close(); setTimeout(() => { location.href = '/network-map.html'; }, 150); };
+    }
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.v); });
     const qp = new URLSearchParams(location.search), want = qp.get('host'), dw = Number(qp.get('drawing')), rk = qp.get('rack');
     load().then(async () => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit();

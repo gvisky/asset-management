@@ -153,10 +153,13 @@ const NMRacks = (() => {
     const f = $('dw-file');
     if (f) f.onchange = async (e) => {
       const files = [...e.target.files]; e.target.value = '';
+      const merged = new Set();
       for (const file of files) {
         // Drawing package (.json: name, category, mime, data_b64, pins) — e.g. a floor plan made from the CAD file, pins included.
         if (/\.json$/i.test(file.name)) {
-          try { const pk = JSON.parse(await file.text()); if (!pk.data_b64) throw new Error('no picture');
+          try { const pk = JSON.parse(await file.text());
+            if (pk.merge) { const r = await apiPost('/api/netmap/drawings', { site: D().site, name: pk.name, merge: true, pins: pk.pins || [] }); showToast(`${pk.name}: ${r.added} pin${r.added === 1 ? '' : 's'} added (${r.kept} kept)`); merged.add(file); continue; }
+            if (!pk.data_b64) throw new Error('no picture');
             await apiPost('/api/netmap/drawings', { site: D().site, name: pk.name || file.name.replace(/\.json$/i, ''), category: pk.category || $('dw-cat').value, mime: pk.mime || 'image/png', data_b64: pk.data_b64, pins: pk.pins || [], links: pk.links || [] }); }
           catch (err) { showToast(`${file.name}: ${errText(err, 'not a drawing package')}`, 'error'); }
           continue;
@@ -165,7 +168,7 @@ const NMRacks = (() => {
         try { await apiPost('/api/netmap/drawings', { site: D().site, name: file.name.replace(/\.[^.]+$/, ''), category: $('dw-cat').value, mime: file.type || 'image/png', data_b64: b64 }); }
         catch (err) { showToast(`${file.name}: ${errText(err, 'upload failed')}`, 'error'); }
       }
-      await load(); renderDrawings(); showToast(`${files.length} picture${files.length > 1 ? 's' : ''} uploaded`);
+      await load(); renderDrawings(); const pics = files.filter(f => !merged.has(f)).length; if (pics) showToast(`${pics} picture${pics > 1 ? 's' : ''} uploaded`);
     };
   }
   // Rack items that are CCTV switches but not devices of the map yet.
