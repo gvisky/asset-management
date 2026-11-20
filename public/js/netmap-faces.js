@@ -31,7 +31,7 @@ const NMFaces = self.NMFaces = (() => {
   ];
   const SZ = { rj45: [26, 22], sfp: [24, 16] };
 
-  function portClass(p) { return !p ? 'pt-free' : (NM.isNet ? NM.isNet(p.peer_host) : NM.known(p.peer_host)) ? 'pt-dev' : (p.peer_host || p.patch || p.vlan || p.mode) ? 'pt-end' : 'pt-free'; }
+  const portClass = (p) => NM.portClass(p);   // OT blue, IT green, free grey (network-map.js)
   function render(d, ports, hl) {
     const m = MODELS.find(x => x.re.test(d.model || ''));
     if (!m) return null;

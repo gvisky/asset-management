@@ -41,6 +41,7 @@ async function itPortCheck(site) {
   const k = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const itName = new Set(itRecs.map(r => k(r.hostname)).filter(x => x.length >= 4)), otName = new Set(otRecs.map(r => k(r.hostname)).filter(x => x.length >= 3));
   const itMac = itRecs.map(r => hx(r.mac)).filter(m => m.length === 12), itSp = new Set(itRecs.map(r => String(r.switch_port || '').trim()).filter(Boolean));
+  const otMac = otRecs.map(r => hx(r.mac)).filter(m => m.length === 12), otSp = new Set(otRecs.map(r => String(r.switch_port || '').trim()).filter(Boolean));
   // Returns why the port / name is IT's, or ''.
   return {
     port: (devHost, p) => {
@@ -54,7 +55,33 @@ async function itPortCheck(site) {
       return '';
     },
     name: (n) => (!n ? '' : otName.has(k(n)) ? '' : itName.has(k(n)) ? `${n} is an IT device in the Server Inventory` : IT_NAME.test(n) ? `${n} looks like an IT device (access point / printer / phone / PC)` : ''),
+    // Why the port is OT's (an OT device of the Server Inventory on it), or ''.
+    ot: (devHost, p) => {
+      if (!p) return '';
+      const peer = String(p.peer_host || ''), text = `${peer} ${p.peer_port || ''} ${p.note || ''}`;
+      if (otSp.has(`${devHost} ${p.port}`)) return 'an OT device of the Server Inventory is connected here';
+      if (peer && otName.has(k(peer))) return `${peer} is an OT device in the Server Inventory`;
+      if (otMac.some(m => hx(text).includes(m))) return 'the MAC on this port is an OT device';
+      return '';
+    },
   };
+}
+// Owner of a switch port: OT (blue) or IT (green), '' = free. Set by IT (net_ports.ot 1 / 0), else automatic: a network device
+// is IT's; an OT / IT device of the Server Inventory (port, name or MAC) decides; any other end device belongs to the switch's
+// side (OT switch → OT). Returns { owner, why }.
+function portOwner(dev, p, itc, hosts) {
+  if (p.ot === 1) return { owner: 'OT', why: 'set to OT by IT' };
+  if (p.ot === 0) return { owner: 'IT', why: 'set to IT by IT' };
+  if (p.peer_host && hosts.has(p.peer_host)) return { owner: 'IT', why: `cabled to the network device ${p.peer_host}` };
+  if (itc.ot(dev.hostname, p) && !itc.port(dev.hostname, p).startsWith('an IT device of the Server Inventory')) return { owner: 'OT', why: itc.ot(dev.hostname, p) };
+  const it = itc.port(dev.hostname, p); if (it) return { owner: 'IT', why: it };
+  if (!(p.peer_host || p.patch || p.vlan || p.mode || p.note)) return { owner: '', why: 'free' };
+  return otOn(dev) ? { owner: 'OT', why: 'end device on an OT switch' } : { owner: 'IT', why: 'end device on an IT switch' };
+}
+async function withOwners(site, devices, ports) {
+  const itc = await itPortCheck(site), byId = new Map(devices.map(d => [d.id, d]));
+  const hosts = new Set((await all('SELECT hostname FROM net_devices WHERE site = ?', [site])).map(r => r.hostname));
+  return ports.map(p => { const d = byId.get(p.device_id); if (!d) return p; const o = portOwner(d, p, itc, hosts); return { ...p, owner: o.owner, owner_why: o.why }; });
 }
 const otAuto = (d) => /switch/i.test(d.role || '') && (/KABIN/i.test(d.location || '') || /CCTV|CAMERA|CARD.?READER|ACCESS.?CONTROL|SECURITY/i.test(`${d.hostname} ${d.alias || ''}`));
 const otOn = (d) => (d.ot === 1 ? true : d.ot === 0 ? false : otAuto(d));
@@ -107,11 +134,13 @@ router.get('/', wrap(async (req, res) => {
     for (const s2 of sites) { const n = s2.site === site ? sl.devices.filter(d => !d.ot_context).length
       : (await all('SELECT * FROM net_devices WHERE site = ?', [s2.site])).filter(d => d.state !== 'retired' && otOn(d)).length; if (n) otSites.push({ site: s2.site, devices: n }); }
     const otRecords = await records(req, true);
-    const itc = await itPortCheck(site), hostOf = new Map(sl.devices.map(d => [d.id, d.hostname]));
-    const itPorts = sl.ports.map(p => ({ id: p.id, why: itc.port(hostOf.get(p.device_id), p) })).filter(x => x.why);
-    return res.json({ site, sites: otSites, records: otRecords, it_ports: itPorts, devices: sl.devices, ports: sl.ports, net_hosts: sl.netHosts, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
+    const fullDev = new Map(devices.map(d => [d.id, d]));
+    const owned = await withOwners(site, sl.ports.map(p => fullDev.get(p.device_id)).filter(Boolean).filter((d, i, a) => a.indexOf(d) === i), sl.ports);
+    const itPorts = owned.filter(p => p.owner === 'IT').map(p => ({ id: p.id, why: p.owner_why }));
+    return res.json({ site, sites: otSites, records: otRecords, it_ports: itPorts, devices: sl.devices, ports: owned, net_hosts: sl.netHosts, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
       can: { edit: false, admin: false, port: otPortEdit(req) }, team });
   }
+  ports = await withOwners(site, devices, ports);
   devices = devices.map(d => ({ ...d, ot_on: otOn(d) ? 1 : 0, ot_auto: otAuto(d) ? 1 : 0 }));
   res.json({ site, sites, devices, ports, vlans, patches, records: await records(req, false), view: 'it', can: { edit: canEdit(req), admin: isAdmin(req) }, team });
 }));
@@ -276,9 +305,9 @@ router.put('/port', wrap(async (req, res) => {
     const cur = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
     if (cur && cur.peer_host && hosts.has(cur.peer_host)) return res.status(403).json({ error: `${port} is cabled to the network device ${cur.peer_host} — only IT can change it.` });
     if (hosts.has(str(req.body.peer_host, 80))) return res.status(403).json({ error: 'Connecting a network device is for IT — use a camera / access-control / end-device name.' });
-    const it = await itPortCheck(dev.site), why = it.port(dev.hostname, cur);
-    if (why) return res.status(403).json({ error: `${port}: ${why} — only IT can change it.` });
-    const whyNew = it.name(str(req.body.peer_host, 80));
+    const it = await itPortCheck(dev.site), o = cur ? portOwner(dev, cur, it, hosts) : { owner: '' };
+    if (o.owner === 'IT') return res.status(403).json({ error: `${port}: ${o.why} — only IT can change it.` });
+    const whyNew = cur && cur.ot === 1 ? '' : it.name(str(req.body.peer_host, 80));
     if (whyNew) return res.status(403).json({ error: `${whyNew} — only IT can connect it.` });
     req.body.grp = cur ? cur.grp : '';
   }
@@ -287,6 +316,20 @@ router.put('/port', wrap(async (req, res) => {
   await mirror(dev, port, before, v, req.user.username);
   await audit(req.user, 'NETMAP', null, `Network map "${dev.site}": ${dev.hostname} ${port}: ${desc(before)} → ${desc(v)}`);
   res.json({ ok: true });
+}));
+// IT team: set a port's owner — OT (blue: the OT team may change it), IT (green) or automatic. PUT { device_id, port, ot: 1 | 0 | null }.
+router.put('/port/owner', wrap(async (req, res) => {
+  if (!canEdit(req)) return res.status(403).json({ error: 'IT admins and editors only' });
+  const dev = await deviceOf(req.body.device_id), port = str(req.body.port, 40);
+  if (!dev || !port) return res.status(400).json({ error: 'Device and port are required' });
+  const ot = req.body.ot === 1 || req.body.ot === '1' ? 1 : req.body.ot === 0 || req.body.ot === '0' ? 0 : null;
+  const cur = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
+  if (!cur) await run('INSERT INTO net_ports (device_id, port, sort, ot, updated_by) VALUES (?, ?, ?, ?, ?)', [dev.id, port, portSort(port), ot, req.user.username]);
+  else await run("UPDATE net_ports SET ot = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?", [ot, req.user.username, cur.id]);
+  const lbl = (v) => (v === 1 ? 'OT' : v === 0 ? 'IT' : 'automatic');
+  await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [dev.site, dev.hostname, port, `owner ${lbl(cur ? cur.ot : null)}`, `owner ${lbl(ot)}`, req.user.username]);
+  await audit(req.user, 'NETMAP', null, `Network map "${dev.site}": ${dev.hostname} ${port} owner → ${lbl(ot)}`);
+  res.json({ ok: true, ot });
 }));
 // Swap the cabling of two ports of one device (move a cable to another port).
 router.post('/port/move', wrap(async (req, res) => {
@@ -754,4 +797,5 @@ router.inventoryCheck = inventoryCheck;
 router.otOn = otOn;   // which switches the OT team sees (Server Inventory → 🔌 Switch ports for OT editors)
 router.util = { familyOf, macNorm, str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
 
+router.withOwners = withOwners;   // switch port owner OT / IT (OT reports)
 module.exports = router;

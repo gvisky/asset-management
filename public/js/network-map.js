@@ -31,7 +31,7 @@ const NM = (() => {
   // A network device — on the map, or (OT view) one OT does not see such as an AP or another switch.
   const isNet = (h) => byHost.has(h) || !!(h && D && D.net_hosts && D.net_hosts.includes(h));
   // OT editor: may change a port that is free or goes to an end device.
-  const itWhy = (p) => ((D.it_ports || []).find(x => x.id === p.id) || {}).why || '';
+  const itWhy = (p) => (p.owner === 'IT' ? p.owner_why || 'IT port' : ((D.it_ports || []).find(x => x.id === p.id) || {}).why || '');
   const otPortOk = (p) => !!(D.can.port && !isNet(p.peer_host) && !itWhy(p));
 
   // ── Data ──────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ const NM = (() => {
   // ── Device list (left) ────────────────────────────────────────────────────
   function stats(d) {
     const ps = portsOf.get(d.id) || [];
-    return { total: ps.length, dev: ps.filter(p => isNet(p.peer_host)).length, end: ps.filter(p => !isNet(p.peer_host) && (p.peer_host || p.patch || p.vlan || p.mode)).length };
+    return { total: ps.length, it: ps.filter(p => portClass(p) === 'pt-it').length, ot: ps.filter(p => portClass(p) === 'pt-ot').length, end: ps.filter(p => !isNet(p.peer_host) && portUsed(p)).length };
   }
   function renderList() {
     const qq = q.toLowerCase();
@@ -115,7 +115,7 @@ const NM = (() => {
       <div class="nm-grp${grp === r ? ' on' : ''}" style="--gc:${gcol(r)}"><div class="nm-grp-h" onclick="NM.group(${jsArg(r)})" title="Show this group on the map (click again to show all)">${icon(r, 0, 0, 18, true)} ${esc(r)} <span>${grp === r ? '✕ ' : ''}${list.length}</span></div>
       ${list.sort((a, b) => natural(a.hostname, b.hostname)).map(d => { const s = stats(d); return `<div class="nm-item${sel === d.id ? ' on' : ''}" onclick="NM.select(${d.id}, true)">
         <b>${esc(d.hostname)}</b>${D.view === 'it' && d.ot_on ? ' <span class="nm-otb" title="Shown to the OT team">OT</span>' : ''}${d.ot_context ? ' <span class="nm-otb ctx" title="Uplink switch, shown so the Kabins connect on the map: only its ports to Kabin switches">uplink</span>' : ''}<div class="text-muted text-sm">${esc(d.alias || d.model || '')}</div>
-        <div class="nm-mini">${s.dev ? `<i class="m-dev">${s.dev}</i>` : ''}${s.end ? `<i class="m-end">${s.end}</i>` : ''}<i class="m-tot">${s.total}</i></div></div>`; }).join('')}</div>`).join('')
+        <div class="nm-mini">${s.it ? `<i class="m-dev" title="IT ports">${s.it}</i>` : ''}${s.ot ? `<i class="m-ot" title="OT ports">${s.ot}</i>` : ''}<i class="m-tot">${s.total}</i></div></div>`; }).join('')}</div>`).join('')
       || '<p class="text-muted" style="padding:12px">No devices.</p>';
   }
 
@@ -392,7 +392,7 @@ const NM = (() => {
     if (!l && !n) { tip.hidden = true; return; }
     let html = '';
     if (l) { const [a, b] = l.dataset.k.split('~'); html = `<b>${esc(a)} ⇄ ${esc(b)}</b>` + links().filter(x => [x.a, x.b].sort().join('~') === l.dataset.k).map(x => `<div>${esc(x.a === a ? x.ap : x.bp)} ⇄ ${esc(x.a === a ? x.bp : x.ap)} · ${esc(x.cable || '?')}${x.grp ? ' · Po' + esc(x.grp) : ''}</div>`).join(''); }
-    else { const d = byId.get(Number(n.dataset.id)), s = stats(d); html = `<b>${esc(d.hostname)}</b><div>${esc(d.model)}</div><div>${esc(d.mgmt_ip)} · ${esc(d.location)}</div>${d.mac ? `<div>MAC ${esc(d.mac)}</div>` : ''}<div>${s.dev} to devices · ${s.end} to users / patch · ${s.total - s.dev - s.end} free</div>`; }
+    else { const d = byId.get(Number(n.dataset.id)), s = stats(d); html = `<b>${esc(d.hostname)}</b><div>${esc(d.model)}</div><div>${esc(d.mgmt_ip)} · ${esc(d.location)}</div>${d.mac ? `<div>MAC ${esc(d.mac)}</div>` : ''}<div>${s.it} IT · ${s.ot} OT · ${s.total - s.it - s.ot} free ports</div>`; }
     const r = $('nm-view-topo').getBoundingClientRect();
     tip.innerHTML = html; tip.hidden = false; tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 260) + 'px'; tip.style.top = (e.clientY - r.top + 12) + 'px';
   }
@@ -405,7 +405,10 @@ const NM = (() => {
     if (typeof NMRacks !== 'undefined' && !$('nm-view-rack').hidden) NMRacks.mark(true);
     // The page does not scroll: the topology stays where it is (the device panel is below it).
   }
-  const portClass = (p) => (isNet(p.peer_host) ? 'pt-dev' : (p.peer_host || p.patch || p.vlan || p.mode) ? 'pt-end' : 'pt-free');
+  // Port colour by owner (server: p.owner): OT blue, IT green, free grey. An owner set by IT colours a free port too.
+  const portUsed = (p) => !!(p && (p.peer_host || p.patch || p.vlan || p.mode || p.note));
+  const ownerOf = (p) => (p && p.owner) || (p && isNet(p.peer_host) ? 'IT' : '');
+  const portClass = (p) => (!p ? 'pt-free' : (portUsed(p) || p.ot != null) && ownerOf(p) ? (ownerOf(p) === 'OT' ? 'pt-ot' : 'pt-it') : 'pt-free');
   const portTip = (p) => `${p.port}${known(p.peer_host) ? ` → ${p.peer_host} ${p.peer_port}` : p.peer_host ? ` → ${p.peer_host} ${p.peer_port}` : ''}${p.patch ? ` · patch ${p.patch}` : ''}${p.cable ? ' · ' + p.cable : ''}${p.mode ? ' · ' + p.mode : ''}${p.vlan ? ' · VLAN ' + p.vlan : ''}${p.grp ? ' · Po' + p.grp : ''}${p.note ? ' · ' + p.note : ''}` || 'free';
   function faceplate(d, hlPorts) {
     const ps = portsOf.get(d.id) || [];
@@ -428,7 +431,7 @@ const NM = (() => {
     const d = byId.get(sel), ps = portsOf.get(d.id) || [], s = stats(d);
     const hl = new Set();
     if (linkKey) for (const l of links()) if ([l.a, l.b].sort().join('~') === linkKey) hl.add(l.a === d.hostname ? l.ap : l.bp);
-    const shown = ps.filter(p => (portFilter === 'all' || (portFilter === 'dev' && isNet(p.peer_host)) || (portFilter === 'end' && portClass(p) === 'pt-end') || (portFilter === 'free' && portClass(p) === 'pt-free')));
+    const shown = ps.filter(p => portFilter === 'all' || portClass(p) === 'pt-' + portFilter);
     box.innerHTML = `<div class="nm-dh">${icon(d.role, 0, 0, 40, true)}
         <div><div class="nm-dt">${esc(d.hostname)} ${DeviceSpecs.btn(d.model, d.role)}${live(d) ? '' : ' <span class="nm-retired">Retired — not in use</span>'}</div>
           <div class="text-muted text-sm">${esc([d.alias, d.role, d.model].filter(Boolean).join(' · '))}</div>
@@ -438,12 +441,12 @@ const NM = (() => {
         <span style="flex:1"></span>
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.editDevice(${d.id})">✏️ Device</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="NM.showLog(${jsArg(d.hostname)})">🕓 Changes</button></div>
-      <div class="nm-stats"><span class="st-dev">${s.dev} to network devices</span><span class="st-end">${s.end} to users / patch panel</span><span class="st-free">${s.total - s.dev - s.end} free</span><span>${s.total} ports</span></div>
+      <div class="nm-stats"><span class="st-it" title="IT: network devices, PCs, printers, APs, phones …">${s.it} IT</span><span class="st-ot" title="OT: cameras, access control, PLCs … — the OT team may change these">${s.ot} OT</span><span class="st-free">${s.total - s.it - s.ot} free</span><span>${s.total} ports</span></div>
       ${(self.NMFaces && ps.length && NMFaces.render(d, ps, hl)) || `<div class="fp">${ps.length ? faceplate(d, hl) : '<span class="text-muted">No ports yet.</span>'}</div>`}
-      <div class="nm-pt-bar"><span class="nm-tabs small">${[['all', 'All'], ['dev', 'To devices'], ['end', 'Users / patch'], ['free', 'Free']].map(([k, l]) => `<button class="${portFilter === k ? 'on' : ''}" onclick="NM.filter('${k}')">${l}</button>`).join('')}</span>
+      <div class="nm-pt-bar"><span class="nm-tabs small">${[['all', 'All'], ['it', 'IT'], ['ot', 'OT'], ['free', 'Free']].map(([k, l]) => `<button class="${portFilter === k ? 'on' : ''}" onclick="NM.filter('${k}')">${l}</button>`).join('')}</span>
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.addPort(${d.id})">+ Port</button>` : ''}</div>
       <div class="table-wrap nm-ptbl"><table><thead><tr><th>Port</th><th>Connected to</th><th>Far port</th><th>Cable</th><th>Mode</th><th>VLAN</th><th>Po</th><th>Patch</th><th>Note</th></tr></thead><tbody>
-        ${shown.map(p => `<tr class="${hl.has(p.port) ? 'hl' : ''}" onclick="NM.openPort(${d.id}, ${jsArg(p.port)})"><td><span class="dot ${portClass(p)}"></span><b>${esc(p.port)}</b></td>
+        ${shown.map(p => `<tr class="${hl.has(p.port) ? 'hl' : ''}" onclick="NM.openPort(${d.id}, ${jsArg(p.port)})"><td><span class="dot ${portClass(p)}" title="${esc((ownerOf(p) || 'free') + (p.owner_why ? ' — ' + p.owner_why : ''))}"></span><b>${esc(p.port)}</b></td>
           <td>${known(p.peer_host) ? `<a href="#" onclick="event.stopPropagation();NM.select(${byHost.get(p.peer_host).id}, true);return false">${esc(p.peer_host)}</a>` : esc(p.peer_host)}${recLinks(d, p)}</td><td>${esc(p.peer_port)}</td>
           <td>${esc(p.cable)}</td><td>${esc(p.mode)}</td><td>${esc(p.vlan)}</td><td>${esc(p.grp)}</td><td>${p.patch && /^[DT]\d+$/i.test(p.patch) ? `<a href="#" onclick="event.stopPropagation();NM.outlet(${jsArg(p.patch)});return false">${esc(p.patch)}</a>` : esc(p.patch)}</td><td class="text-sm">${esc(p.note)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty-state">No ports here.</td></tr>'}
       </tbody></table></div>`;
@@ -469,6 +472,9 @@ const NM = (() => {
         <div class="form-group"><label class="form-label">Patch panel port</label><input class="form-control" id="pp-patch" value="${esc(p.patch)}" ${ro} placeholder="e.g. D01"></div>
         <div class="form-group"><label class="form-label">Note</label><input class="form-control" id="pp-note" value="${esc(p.note)}" ${ro}></div>
       </div>
+      <div class="nm-owner"><span class="dot ${portClass(p)}"></span> <b>${ownerOf(p) === 'OT' ? 'OT port' : ownerOf(p) === 'IT' ? 'IT port' : 'Free port'}</b>${p.owner_why ? ` <span class="text-muted text-sm">— ${esc(p.owner_why)}</span>` : ''}
+        ${D.can.edit && !d.ot_context ? `<label class="text-sm" style="margin-left:auto">Owner <select class="form-control" id="pp-owner" style="display:inline-block;width:auto;padding:2px 6px" title="OT ports are blue and the OT team may change them; IT ports are green">
+          <option value=""${p.ot == null ? ' selected' : ''}>Automatic</option><option value="1"${p.ot === 1 ? ' selected' : ''}>OT (blue)</option><option value="0"${p.ot === 0 ? ' selected' : ''}>IT (green)</option></select></label>` : ''}</div>
       <div id="pp-warn" class="text-sm"></div>
       ${D.can.port && !canSave ? `<p class="text-sm" style="color:#9a3412;margin:6px 0 0">🔒 ${isNet(p.peer_host) ? `Cabled to the network device <b>${esc(p.peer_host)}</b> — only IT can change this port.` : itWhy(p) ? `${esc(itWhy(p))} — only IT can change this port.` : 'Only IT can change this port.'}</p>` : ''}
       ${ot ? '<p class="text-muted text-sm" style="margin:6px 0 0">You can set the end device on this port (camera, access control, PC …), its VLAN, patch point and note. Ports to network devices are for IT.</p>' : ''}
@@ -487,6 +493,12 @@ const NM = (() => {
         ? `⚠ ${esc(h)} ${esc(pp.port)} is now connected to <b>${esc(pp.peer_host)} ${esc(pp.peer_port)}</b> — saving moves it here.` : pd ? `✓ ${esc(h)} will show this connection on its own port too.` : '';
     };
     ['pp-host', 'pp-port'].forEach(id => $(id).addEventListener('input', fill)); fill();
+    if ($('pp-owner')) $('pp-owner').onchange = async (e) => {
+      const v = e.target.value === '' ? null : Number(e.target.value);
+      try { await apiPut('/api/netmap/port/owner', { device_id: d.id, port, ot: v }); showToast(`${d.hostname} ${port}: ${v === 1 ? 'OT port' : v === 0 ? 'IT port' : 'owner automatic'}`);
+        await load(D.site); select(d.id); openPort(d.id, port); if (self.NMPlans && NMPlans.refresh) NMPlans.refresh(); }
+      catch (err) { showToast(errText(err, 'Could not change the owner'), 'error'); }
+    };
     $('nm-port-ov').classList.add('open');
   }
   const closePort = () => $('nm-port-ov').classList.remove('open');
@@ -666,7 +678,7 @@ const NM = (() => {
     load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { data: () => D, reload: () => load(D.site), endItems, openRec, isAccess: (d) => /access switch/i.test((d && d.role) || ''), known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
+  return { data: () => D, reload: () => load(D.site), endItems, openRec, isAccess: (d) => /access switch/i.test((d && d.role) || ''), known, portTip, portClass, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); }, isNet,
     outlet: (o) => { const pp = (D.patches || []).find(x => String(x.outlet).toUpperCase() === String(o).toUpperCase()); if (pp && self.NMFaces) NMFaces.panel(pp.panel); else showToast('Outlet ' + o + ' is not in the patch-panel list', 'error'); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, group: setGroup, groupShown: () => grp, groupOf, gcol, tab: (v) => tab(v),
