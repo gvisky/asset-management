@@ -25,6 +25,7 @@ const PortLinksUI = (() => {
       <div class="us-sum"><div><b>${C.ports}</b><span>access-switch ports in use</span></div><div class="u"><b>${C.links}</b><span>devices found on a port</span></div>
         <div class="s"><b>${C.change}</b><span>"Connected to" to set / correct</span></div><div class="f"><b>${C.missing}</b><span>on a port, no record yet</span></div>
         <div><b>${C.unmatched}</b><span>records not found on any port</span></div></div>
+      ${(window.CURRENT_USER || {}).team === 'OT' ? '<p class="text-sm" style="margin:6px 0 0;color:#9a3412">OT view: only the OT devices and the Kabin switches the OT team sees; devices you add are OT.</p>' : ''}
       <p class="text-muted text-sm" style="margin:6px 0 10px">Found by: the map's device (APs, card-reader switches …) cabled to the port, the MAC or IP written on the port, or the same name. Switches, routers and servers are the network itself and are not listed. Nothing changes before Apply.</p>
       <h4 style="margin:12px 0 6px">① Devices found on a port (${P.links.length}) — tick to write "Connected to"</h4>
       <table class="nm-vt oi-t"><thead><tr><th><input type="checkbox" id="pl-all-l" ${ch.length ? 'checked' : 'disabled'}></th><th>Device</th><th>IT/OT</th><th>Connected to</th><th>Now</th><th>Found by</th></tr></thead><tbody>
@@ -35,7 +36,7 @@ const PortLinksUI = (() => {
       ${P.missing.length ? `<table class="nm-vt oi-t"><thead><tr><th><input type="checkbox" id="pl-all-m"></th><th>Switch port</th><th>Name</th><th>IT / OT</th><th>Category</th><th>VLAN</th><th>MAC / IP</th><th>On the port</th></tr></thead><tbody>
       ${P.missing.map(m => `<tr data-p="${m.port_id}"><td><input type="checkbox" class="pl-m"></td><td class="text-sm">${esc(m.switch)}<br><b>${esc(m.port)}</b></td>
         <td><input class="form-control" data-f="name" value="${esc(m.name)}" style="min-width:170px"></td>
-        <td><select class="form-control" data-f="it_ot"><option value="IT"${m.it_ot === 'IT' ? ' selected' : ''}>IT</option><option value="OT"${m.it_ot === 'OT' ? ' selected' : ''}>OT</option></select></td>
+        <td><select class="form-control" data-f="it_ot"${(window.CURRENT_USER || {}).team === 'OT' ? ' disabled' : ''}><option value="IT"${m.it_ot === 'IT' ? ' selected' : ''}>IT</option><option value="OT"${m.it_ot === 'OT' ? ' selected' : ''}>OT</option></select></td>
         <td><input class="form-control" data-f="category" list="pl-cats" value="${esc(m.category)}" style="min-width:140px"></td><td>${esc(m.vlan)}</td>
         <td class="text-sm">${esc(m.mac)}${m.ip ? '<br>' + esc(m.ip) : ''}</td><td class="text-sm text-muted">${esc(m.note)}</td></tr>`).join('')}</tbody></table>` : '<p class="text-muted text-sm">None.</p>'}
       ${P.unmatched.length ? `<h4 style="margin:16px 0 6px">③ Records not found on any access-switch port (${P.unmatched.length})</h4>

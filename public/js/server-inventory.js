@@ -363,6 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
 document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin') document.getElementById('btn-netsync').style.display = '';
   if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; }
   // OT team: read-only list of the OT devices.
+  if (window.CURRENT_USER.team === 'OT' && window.CURRENT_USER.role === 'editor') document.getElementById('btn-portlinks').style.display = '';
   if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-t=phys]'); if (s) s.textContent = '🏭 OT devices'; }
   const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v); }, 150); });
 let nsChoose = {};

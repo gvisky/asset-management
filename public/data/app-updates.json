@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Topology: every device plugged into an access switch; OT editors get 🔌 Switch ports",
+    "items": [
+      "Network map → Topology: click an access switch (focus view) and everything plugged into it is drawn below it on a bus — the Server Inventory devices of each port, else the name on the port — with the port number, an icon (camera, printer, access control, kiosk, TV, PLC, Moxa, gateway, sensor …) and OT devices in orange. Click one to open its port. Other switches show only the network devices as before.",
+      "OT editors now have 🔌 Switch ports on Server Inventory too: only the OT devices, on the Kabin switches the OT team sees; the devices to add are only the OT-looking ones and are saved as OT."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Server Inventory: 🔌 every device linked to its access-switch port; OT editors can add OT devices",
     "items": [
       "New 🔌 Switch ports (IT admins) on Server Inventory: for every IT and OT device it finds the access-switch port it is cabled to on the network map — the map's device on that port (access points, card-reader switches …), its MAC or IP written on the port, or the same name — and writes it to \"Connected to\" (preview, tick what to apply). Devices behind a hub / Moxa keep the port the OT device list gave them.",
