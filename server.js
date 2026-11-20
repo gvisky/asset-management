@@ -50,6 +50,7 @@ app.use('/api/lifecycle', require('./routes/lifecycle'));
 app.use('/api/netmap/workbook', require('./routes/netmap-workbook'));
 app.use('/api/netmap', require('./routes/netmap'));
 app.use('/api/ot-reports', require('./routes/ot-reports'));
+app.use('/api/ot-activity', require('./routes/ot-activity'));
 app.use('/api/confirm-forms', require('./routes/confirm').forms);
 app.use('/api/confirm', require('./routes/confirm').admin);
 app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff confirm their devices with a personal link

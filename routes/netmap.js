@@ -17,6 +17,7 @@ const express = require('express');
 const router = express.Router();
 const { get, all, run, batch, audit } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
+const OTA = require('../lib/ot-activity');
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 router.use(requireAuth);
@@ -260,14 +261,23 @@ router.delete('/device/:id', wrap(async (req, res) => {
 
 // Write one port; when it points at a device of the site, make that device's port point back; when it used to
 // point at another device's port that still points here, clear that one.
-async function setPort(dev, port, values, user) {
+// meta (optional): OT activity log entry details ({ kind, restore_of, prefix, force, withOt: also set the owner column }).
+async function setPort(dev, port, values, user, meta = {}) {
   const before = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
   const v = Object.fromEntries(FIELDS.map(k => [k, str(values[k], k === 'note' ? 200 : 80)]));
   await run(`INSERT INTO net_ports (device_id, port, sort, ${FIELDS.join(', ')}, updated_by) VALUES (?, ?, ?, ${FIELDS.map(() => '?').join(', ')}, ?)
       ON CONFLICT(device_id, port) DO UPDATE SET ${FIELDS.map(k => `${k} = excluded.${k}`).join(', ')}, updated_by = excluded.updated_by, updated_at = datetime('now')`,
     [dev.id, port, portSort(port), ...FIELDS.map(k => v[k]), user]);
+  if (meta.withOt) await run('UPDATE net_ports SET ot = ? WHERE device_id = ? AND port = ?', [values.ot === 1 || values.ot === 0 ? values.ot : null, dev.id, port]);
   if (desc(before) !== desc(v)) await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [dev.site, dev.hostname, port, desc(before), desc(v), user]);
+  await OTA.logPort(user, dev, before, await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]), { ...meta, port });
   return { before, v };
+}
+// OT activity → restore a port as it was (and its far end, like a normal edit).
+async function restorePort(dev, port, values, user, meta) {
+  const u = typeof user === 'object' ? user.username : user;
+  const { before, v } = await setPort(dev, port, values, u, { ...meta, withOt: true });
+  await mirror(dev, port, before, v, u);
 }
 async function mirror(dev, port, before, v, user) {
   const peerOf = async (host) => (host ? get('SELECT * FROM net_devices WHERE site = ? AND hostname = ?', [dev.site, host]) : null);
@@ -326,6 +336,7 @@ router.put('/port/owner', wrap(async (req, res) => {
   const cur = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
   if (!cur) await run('INSERT INTO net_ports (device_id, port, sort, ot, updated_by) VALUES (?, ?, ?, ?, ?)', [dev.id, port, portSort(port), ot, req.user.username]);
   else await run("UPDATE net_ports SET ot = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?", [ot, req.user.username, cur.id]);
+  await OTA.logPort(req.user, dev, cur || null, await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]), { kind: 'port_owner', port, force: true });
   const lbl = (v) => (v === 1 ? 'OT' : v === 0 ? 'IT' : 'automatic');
   await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [dev.site, dev.hostname, port, `owner ${lbl(cur ? cur.ot : null)}`, `owner ${lbl(ot)}`, req.user.username]);
   await audit(req.user, 'NETMAP', null, `Network map "${dev.site}": ${dev.hostname} ${port} owner → ${lbl(ot)}`);
@@ -591,7 +602,7 @@ router.post('/cctv-links', wrap(async (req, res) => {
     .flatMap(r => { try { const l = JSON.parse(r.links); return Array.isArray(l) ? l : []; } catch { return []; } });
   const rows = cctvLinkPlan(devices, ports, fibre);
   if (req.body.dry) return res.json({ site, rows });
-  const ok = rows.filter(r => r.port_id), stmts = [];
+  const ok = rows.filter(r => r.port_id), stmts = [], snap = await OTA.snapOTPorts(site);
   for (const r of ok) {
     // A new link goes on a free port; a moved one (HK chain) only if the port still points where it did.
     stmts.push({ sql: `UPDATE net_ports SET peer_host = ?, peer_port = '', cable = 'SFP', mode = 'trunk', note = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ? AND COALESCE(peer_host, '') = ?`,
@@ -599,6 +610,7 @@ router.post('/cctv-links', wrap(async (req, res) => {
     stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, r.hostname, r.port, r.from ? `${r.from} trunk` : '(free)', `${r.peer} trunk (CCTV uplink)`, req.user.username] });
   }
   if (stmts.length) await batch(stmts);
+  await OTA.logPortsBulk(req.user, site, snap, 'CCTV uplinks');
   await audit(req.user, 'NETMAP', null, `Network map "${site}": ${ok.length} CCTV uplink(s) linked`);
   res.json({ ok: true, linked: ok.length, rows });
 }));
@@ -797,5 +809,6 @@ router.inventoryCheck = inventoryCheck;
 router.otOn = otOn;   // which switches the OT team sees (Server Inventory → 🔌 Switch ports for OT editors)
 router.util = { familyOf, macNorm, str, portSort, desc, FIELDS, normSn, snEq, parseLoc, placeDevices, modelCode, sameModel, CAT, isAdmin, canEdit };
 
-router.withOwners = withOwners;   // switch port owner OT / IT (OT reports)
+router.withOwners = withOwners;
+router.restorePort = restorePort;   // OT activity → restore   // switch port owner OT / IT (OT reports)
 module.exports = router;

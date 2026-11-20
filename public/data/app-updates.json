@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-20",
+    "title": "🕓 OT Activity log + OT admin: check and restore",
+    "items": [
+      "New role OT admin (Users & Audit: team OT + role Admin): everything an OT editor can do, plus deleting OT devices and the 🕓 OT Activity page. No IT admin rights (no users, asset inventory or network-map admin tools).",
+      "🕓 OT Activity (OT admins, IT): every change to an OT device and to a port of an OT switch — by the OT team or IT, one by one or from an import (camera list, OT device list, Switch ports, MAC tables, CCTV uplinks) — with who, when and what changed. Search and filter by period, kind, team and person.",
+      "↩ Restore puts the device or port back as it was before that change: a wrong edit, a disconnected port or a deleted device. A change that was changed again later is flagged; every restore is logged too."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "🔎 Camera ports from the switch MAC tables",
     "items": [
       "Server Inventory → 🔎 Ports from MAC tables (IT admins, OT editors) and OT Needs Attention → Switch port not known → 🔎 Find the ports from the switch MAC tables: paste the output of show mac address-table dynamic of one or more switches (or choose the .txt files). Each camera / device whose MAC is on an access port gets its switch port; the free port on the map gets its name and MAC and turns blue (OT).",

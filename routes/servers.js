@@ -10,6 +10,7 @@ const { scopeList, inScope, countrySql, singleScope, resolveScopedCountry } = re
 const HISTORY_OWNER = process.env.HISTORY_OWNER || 'viet';
 
 // Identity fields that only IT may edit; editing one locks the record until an IT admin unlocks it.
+const OTA = require('../lib/ot-activity');
 const PROTECTED_FIELDS = { serial_no: 'Serial', brand_model: 'Brand/Model', asset_code: 'Asset Code' };
 
 router.use(requireAuth);
@@ -19,6 +20,7 @@ const isOT = (req) => !!req.user && req.user.team === 'OT';
 router.use((req, res, next) => {
   if (isOT(req)) {
     if (req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path)) return next();
+    if (req.user.ot_admin && req.method === 'DELETE' && /^\/\d+$/.test(req.path)) return next();   // OT admin: delete an OT device (restorable)
     if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && (req.path === '/' || req.path === '/port-links' || req.path === '/mac-ports')))) return next();
     return res.status(403).json({ error: 'OT: the OT devices only (editors can add and edit them)' });
   }
@@ -238,6 +240,7 @@ router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
   const p = OTImport.plan(rows, { devices, ports, servers }, b.overrides && typeof b.overrides === 'object' ? b.overrides : {});
   const switches = devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired').map(d => ({ id: d.id, hostname: d.hostname, location: d.location })).sort((x, y) => x.hostname.localeCompare(y.hostname));
   if (b.dry) return res.json({ site, sites: sites.map(x => x.site), switches, ...p });
+  const otSnap = await OTA.snapOT(), portSnap = await OTA.snapOTPorts(site);   // OT activity log
   const doServers = !b.apply || b.apply.servers !== false, doPorts = !b.apply || b.apply.ports !== false;
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
   const done = { added: 0, updated: 0, ports: 0 };
@@ -272,6 +275,8 @@ router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
     await batch(stmts); done.ports = p.fills.length;
   }
   await audit(req.user, 'CREATE', null, `OT device list: ${done.added} OT device(s) added, ${done.updated} filled in Server Inventory; ${done.ports} switch port(s) filled on the network map "${site}"`);
+  await OTA.logOTBulk(req.user, otSnap, 'OT device list');
+  await OTA.logPortsBulk(req.user, site, portSnap, 'OT device list');
   res.json({ ok: true, ...done });
 }));
 
@@ -299,6 +304,7 @@ router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
   const itot = b.it_ot === 'IT' ? '' : 'OT';
   if (b.dry) return res.json({ site, switches: devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired').map(d => ({ id: d.id, hostname: d.hostname, location: d.location }))
     .sort((x, y) => (/CCTV/.test(y.hostname) - /CCTV/.test(x.hostname)) || x.hostname.localeCompare(y.hostname)), ...p });
+  const otSnap = await OTA.snapOT(), portSnap = await OTA.snapOTPorts(site);   // OT activity log
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
   const country = /thai/i.test(site) ? 'Thailand' : /malay/i.test(site) ? 'Malaysia' : 'Vietnam';
   const ids = {}; let added = 0, updated = 0;
@@ -375,6 +381,8 @@ router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
     }
   }
   await audit(req.user, 'CREATE', null, `CCTV camera list: ${added} camera(s) added, ${updated} filled, ${goneDone} set to Stock${p.report ? `; OT report: ${done.switchesUpdated} switch(es) updated, ${done.switchesAdded} added, ${done.nvr} recording server(s)` : ''}`);
+  await OTA.logOTBulk(req.user, otSnap, 'CCTV import');
+  await OTA.logPortsBulk(req.user, site, portSnap, 'CCTV import');
   res.json({ ok: true, added, updated, ids, gone: goneDone, ...done });
 }));
 
@@ -424,6 +432,7 @@ router.post('/port-links', wrap(async (req, res) => {
   // OT editors: only what looks like OT (VLANs 124 / 125 / 131 / 133, Matrix, Moxa, kiosks, gateways …) — printers / PCs stay IT's.
   if (ot) { p.missing = p.missing.filter(m => m.it_ot === 'OT'); p.counts.missing = p.missing.length; }
   if (b.dry) return res.json({ site, sites: sites.map(x => x.site), ...p });
+  const otSnap = await OTA.snapOT();   // OT activity log
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
   const HIST = `history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END`;
   const want = new Set((Array.isArray(b.link) ? b.link : []).map(Number));
@@ -448,6 +457,7 @@ router.post('/port-links', wrap(async (req, res) => {
   }
   if (stmts.length) await batch(stmts);
   await audit(req.user, 'UPDATE', null, `Switch ports: ${linked} device(s) linked to their access-switch port, ${added} device(s) added from the network map "${site}"`);
+  await OTA.logOTBulk(req.user, otSnap, 'Switch ports');
   res.json({ ok: true, linked, added });
 }));
 
@@ -476,6 +486,7 @@ router.post('/mac-ports', wrap(async (req, res) => {
   const switches = devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired').map(d => ({ id: d.id, hostname: d.hostname, alias: d.alias || '' }))
     .sort((x, y) => x.hostname.localeCompare(y.hostname, undefined, { numeric: true }));
   if (b.dry) return res.json({ site, switches_all: switches, ...p });
+  const otSnap = await OTA.snapOT(), portSnap = await OTA.snapOTPorts(site);   // OT activity log
   const want = new Set((Array.isArray(b.apply) ? b.apply : []).map(Number));
   const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
   const HIST = `history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END`;
@@ -499,6 +510,8 @@ router.post('/mac-ports', wrap(async (req, res) => {
   }
   if (stmts.length) await batch(stmts);
   await audit(req.user, 'UPDATE', null, `MAC tables: ${records} device(s) set to their switch port, ${mapped} port(s) filled on the network map "${site}"`);
+  await OTA.logOTBulk(req.user, otSnap, 'MAC tables');
+  await OTA.logPortsBulk(req.user, site, portSnap, 'MAC tables');
   res.json({ ok: true, records, mapped });
 }));
 
@@ -518,6 +531,7 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const result = await run(
     `INSERT INTO servers (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
   const created = await get('SELECT * FROM servers WHERE id = ?', [result.lastInsertRowid]);
+  await OTA.logServer(req.user, null, created);
   await audit(req.user, 'CREATE', created.id, `Created server "${created.hostname || created.asset_code || 'untitled'}" (${finalCountry})`);
   res.status(201).json(created);
 }));
@@ -597,6 +611,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     `UPDATE servers SET ${setFields.map(c => c + ' = ?').join(', ')} WHERE id = ? AND deleted_at IS NULL`,
     [...setVals, req.params.id]);
   const updated = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);
+  await OTA.logServer(req.user, existing, updated);
   await audit(req.user, 'UPDATE', updated.id, `Updated server "${updated.hostname || updated.asset_code || 'untitled'}"`);
   res.json(updated);
 }));
@@ -606,7 +621,9 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Server not found' });
   if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
+  if (isOT(req) && !(req.user.ot_admin && existing.it_ot === 'OT')) return res.status(403).json({ error: 'Only an OT admin can delete OT devices' });
   await run("UPDATE servers SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?", [req.user.username, req.params.id]);
+  await OTA.logServer(req.user, existing, await get('SELECT * FROM servers WHERE id = ?', [req.params.id]));
   const label = existing.hostname || existing.asset_code || 'untitled';
   await audit(req.user, 'DELETE', Number(req.params.id), `Deleted server "${label}"`);
   await notify({ audience: 'all', country: existing.country, scope: 'asset', level: 'warning',
