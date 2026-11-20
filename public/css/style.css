@@ -1601,3 +1601,8 @@ tr.oac-done td { opacity: .55; }
 .lc-step { padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; } .lc-step label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .lc-step .sg-cnt.ok { background: #dcfce7; color: #166534; } .lc-items { max-height: 180px; overflow: auto; padding: 4px 0 0 22px; color: #475569; }
 .pl-scroll { cursor: grab; } .pl-scroll.panning { cursor: grabbing; user-select: none; } .pl-stage.editing { cursor: crosshair; }
+/* Network map full screen (?full=1, new tab): no menu, top bar or device list — the topology fills the window */
+body.nm-full .sidebar, body.nm-full .topbar, body.nm-full .nm-side { display: none !important; }
+body.nm-full .main-wrap { margin-left: 0 !important; } body.nm-full .content.nm-main { padding: 8px 10px; }
+body.nm-full .nm-wrap { display: block; } body.nm-full .nm-center { width: 100%; }
+body.nm-full .nm-svg { height: calc(100vh - 78px); } body.nm-full .nm-scroll { max-height: calc(100vh - 78px); }

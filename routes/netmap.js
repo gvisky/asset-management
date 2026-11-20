@@ -747,6 +747,19 @@ const cleanLinks = (l) => JSON.stringify((Array.isArray(l) ? l : []).slice(0, 30
   path: (Array.isArray(k.path) ? k.path : []).slice(0, 400).map(p => [pct(p[0]), pct(p[1])]) })).filter(k => k.a && k.b));
 router.post('/drawings', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  // "Add pins" package ({ name, merge: true, pins }): adds its pins to the drawing of that name — the picture and the pins already
+  // there (also ones moved / renamed by hand) stay; a pin of the same kind and link is not added twice.
+  if (req.body.merge) {
+    const site = str(req.body.site, 80), name = str(req.body.name, 100);
+    const d = await get('SELECT id, pins FROM net_drawings WHERE site = ? AND name = ?', [site, name]);
+    if (!d) return res.status(404).json({ error: `Drawing "${name}" is not here yet — upload it first` });
+    let cur = []; try { cur = JSON.parse(d.pins || '[]'); } catch { cur = []; }
+    const key = (p) => `${String(p.kind || '')}|${String(p.ref || p.label || '').toUpperCase()}`, have = new Set(cur.map(key));
+    const add = (Array.isArray(req.body.pins) ? req.body.pins : []).filter(p => !have.has(key(p)));
+    await run('UPDATE net_drawings SET pins = ? WHERE id = ?', [cleanPins([...cur, ...add]), d.id]);
+    await audit(req.user, 'NETMAP', null, `Network map "${site}": ${add.length} pin(s) added to drawing "${name}"`);
+    return res.json({ ok: true, merged: true, added: add.length, kept: cur.length });
+  }
   const mime = str(req.body.mime, 40);
   if (!/^image\/(png|jpeg|svg\+xml|webp)$/.test(mime)) return res.status(400).json({ error: 'PNG, JPG, SVG or WebP only' });
   const data = String(req.body.data_b64 || ''); if (data.length > 20 * 1024 * 1024) return res.status(413).json({ error: 'Picture too large (max ≈15 MB)' });

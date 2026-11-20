@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Office K1 cameras on the K1 drawing, topology full screen",
+    "items": [
+      "Drawings: a drawing package can add pins to a drawing already here (\"merge\") — the picture and the pins on it stay, nothing is added twice. The 24 office cameras (K1-1 … K1-24) are added this way to Office building K1 — access points, on both floors, from the CCTV CAD drawing.",
+      "\"📷 n not on the drawing\" only counts the cameras of the groups that drawing shows (K1 on the office plan).",
+      "Topology: ⛶ Full screen opens the map in a new tab without the menu, top bar and device list (on the device you had selected); ✕ Close closes that tab."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Map ↔ racks ↔ Server Inventory linked (automatic check), shorter toolbars, drawings in their own tab, wheel zoom",
     "items": [
       "After this update the app links everything once by itself: the CCTV switches of the rack layout are added to the map (a switch already there under its OT-report name, e.g. K2_CCTV_01, is linked to its rack slot instead of added twice), placed in their racks, map devices linked to their Server Inventory record (by serial first — e.g. MR-01/ASW-01 to the record with its serial), cameras set on their cabinet's CCTV switch, and the CCTV uplinks linked. Network map → ⬆ Import & check → 🔗 Check links shows what is linked and does it again any time (preview, tick, apply).",
