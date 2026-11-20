@@ -126,18 +126,21 @@ const NMPlans = self.NMPlans = (() => {
     const camQuiet = pins.filter(p => p.kind === 'camera').length > 60 && zoom < 0.55;
     const quiet = (i) => camQuiet && pins[i].kind === 'camera' && focusI !== i;
     pins.map((p, i) => i).filter(i => !quiet(i)).sort((a, c) => pins[a].y - pins[c].y || pins[a].x - pins[c].x).forEach(i => {
-      const p = pins[i], px = p.x / 100 * W, py = p.y / 100 * H, w = String(p.label).length * 6.6 + 14;
+      const p = pins[i], px = p.x / 100 * W, py = p.y / 100 * H, w = Math.max(String(p.label).length * 6.6, p.kind === 'camera' ? camPort(p).sub.length * 5.4 : 0) + 14;
       let dy = 0;
-      for (let k = 0; k < 10; k++) { const r = [px - w / 2, py - 16 + dy, px + w / 2, py + dy]; if (!hit(r)) { placed.push(r); break; } dy += 17; if (k === 9) placed.push(r); }
+      const lh = p.kind === 'camera' && camPort(p).sub ? 29 : 16;   // two lines: name + switch port
+      for (let k = 0; k < 10; k++) { const r = [px - w / 2, py - 16 + dy, px + w / 2, py - 16 + lh + dy]; if (!hit(r)) { placed.push(r); break; } dy += lh + 1; if (k === 9) placed.push(r); }
       off[i].dy = dy;
     });
     const camBad = camCheck().bad;
     box.innerHTML = pins.map((p, i) => { const k = KIND[p.kind] || KIND.note;
-      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}${camBad.has(i) ? ' bad' : ''}${quiet(i) ? ' quiet' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${icoOf(p.kind, k)}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
+      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}${camBad.has(i) ? ' bad' : ''}${quiet(i) ? ' quiet' : ''}${p.kind === 'camera' ? ' cam-' + camPort(p).st : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : '') + (p.kind === 'camera' ? '\n' + camPort(p).tip : ''))}"><span class="pl-dot">${icoOf(p.kind, k)}</span><span class="pl-lbl">${esc(p.label)}${p.kind === 'camera' && camPort(p).sub ? `<span class="pl-sub">${esc(camPort(p).sub)}</span>` : ''}</span></div>`; }).join('');
     const cnt = Object.keys(KIND).map(k => [k, pins.filter(p => p.kind === k).length]).filter(([, n]) => n);
     document.getElementById('pl-sum').textContent = cnt.length ? ' · ' + cnt.map(([k, n]) => `${n} ${KIND[k][2].toLowerCase()}${n > 1 ? 's' : ''}`).join(' · ') : ' · no pins yet';
     // Cameras: pins whose name is not in the camera list (or twice on the drawing) are red; cameras of the list not on it.
     const cc = camCheck();
+    if (cc.n) { const st = { port: 0, sw: 0, none: 0 }; pins.forEach(p => { if (p.kind === 'camera' && camRec(p)) st[camPort(p).st]++; });
+      document.getElementById('pl-sum').insertAdjacentHTML('beforeend', ` <span class="pl-cst" title="Cameras by what is known of their switch port (ring around the icon)"><i class="port"></i>${st.port} on a port <i class="sw"></i>${st.sw} switch only <i class="none"></i>${st.none} no switch</span>`); }
     if (cc.n) document.getElementById('pl-sum').insertAdjacentHTML('beforeend', `${cc.bad.size ? ` <button class="pl-cbad" onclick="NMPlans.nextBad()" title="Camera pins whose name is not in the camera list (Excel / NVR) or is on the drawing twice — click to go through them">⚠ ${cc.bad.size} camera pin${cc.bad.size > 1 ? 's' : ''} to check</button>` : ''}${cc.missing.length ? ` <button class="pl-cmiss" onclick="NMPlans.missing()" title="Cameras of the camera list that have no pin on this drawing">📷 ${cc.missing.length} not on the drawing</button>` : ''}`);
     // Length labels on the cables of the chosen cabinet (in the pin layer, so the text is not stretched).
     if (cables) box.insertAdjacentHTML('beforeend', fHot.filter(l => l.path.length > 1).map(l => { const m = mid(l.path); return `<div class="pl-flab" style="left:${m[0]}%;top:${m[1]}%;--c:${fibCol(l)}">${esc(fibText(l) || 'fibre')}</div>`; }).join(''));
@@ -274,6 +277,15 @@ const NMPlans = self.NMPlans = (() => {
       <p class="text-muted text-sm" style="margin:4px 0 8px">In the camera list but no pin here: new cameras not drawn yet, or a red pin with the wrong name — open a red pin to correct it.</p>
       <div class="pl-i-chips">${l.map(r => `<a href="#" onclick="NM.openRec(${r.id});return false">${esc(r.hostname)}</a>`).join('')}</div>`;
     box.hidden = false;
+  }
+  // A camera's switch port for its pin: st = 'port' (switch + port known) / 'sw' (switch only) / 'none'; sub = "K2_CCTV_01 · GE 1/0/5".
+  function camPort(p) {
+    const rec = camRec(p), sp = String((rec && rec.switch_port) || '').trim();
+    if (!sp) return { st: 'none', sub: '', tip: rec ? 'Switch port: not known yet (no switch)' : '' };
+    const m = sp.match(/^(\S+)\s+(.+)$/), host = m ? m[1] : sp, port = m ? m[2] : '';
+    const d = D().devices.find(x => x.hostname === host), name = d && /_CCTV_|^CCTV_/i.test(d.alias || '') ? d.alias : host;
+    return port ? { st: 'port', sub: `${name} · ${port}`, tip: `Switch port: ${host}${name !== host ? ' (' + name + ')' : ''} ${port}` }
+      : { st: 'sw', sub: `${name} · port ?`, tip: `Switch: ${host}${name !== host ? ' (' + name + ')' : ''} — port not known yet` };
   }
   async function camFill(rec) {
     const el = document.getElementById('pl-cam'); if (!el || Number(el.dataset.id) !== rec.id) return;
