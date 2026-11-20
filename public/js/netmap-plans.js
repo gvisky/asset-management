@@ -5,7 +5,7 @@
 
 const NMPlans = self.NMPlans = (() => {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const KIND = { cabinet: ['🗄', '#0e7490', 'Cabinet / rack'], ap: ['📶', '#dc2626', 'Access point'], device: ['🔷', '#1d4ed8', 'Network device'], note: ['📝', '#7c3aed', 'Note'] };
+  const KIND = { cabinet: ['🗄', '#0e7490', 'Cabinet / rack'], ap: ['📶', '#dc2626', 'Access point'], device: ['🔷', '#1d4ed8', 'Network device'], camera: ['📷', '#ea580c', 'Camera'], note: ['📝', '#7c3aed', 'Note'] };
   let cur = null, pins = [], fib = [], dirty = false, zoom = 1, editing = false, cables = localStorage.getItem('pl-cables') !== '0', focusI = null, racks = null;
   const PAL = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5', '#0d9488', '#be123c', '#7c3aed'];
   const D = () => NM.data();
@@ -194,6 +194,12 @@ const NMPlans = self.NMPlans = (() => {
         ${plugged(p)}
         ${aps.length ? `<div class="pl-i-h">Access points cabled here (${aps.length})</div><div class="pl-i-chips">${aps.map(a => `<a href="#" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>`).join('')}</div>` : ''}
         <div class="pl-i-b"><button class="btn btn-ghost btn-sm" onclick="NMPlans.rack(${i})">🗄 Open in Racks</button></div>`;
+    } else if (p.kind === 'camera') {
+      // A camera of the CCTV drawing → its Server Inventory record (picture, IP, switch port), filled in below.
+      const rec = camRec(p);
+      body = rec ? `<div id="pl-cam" data-id="${rec.id}"><p class="text-muted text-sm">Loading…</p></div>`
+        : `<p class="text-muted text-sm">${esc(p.ref || p.label)} is not in the Server Inventory (not in the camera list) — check the name on the drawing and on the NVR.</p>`;
+      if (rec) setTimeout(() => camFill(rec), 0);
     } else {
       const d = deviceOf(p), sw = switchPort(p), cj = L.find(l => l.a === i);
       // Check: the cabinet in the AP name vs the cabinet its switch is in.
@@ -210,6 +216,20 @@ const NMPlans = self.NMPlans = (() => {
     if (also.length) body += `<div class="pl-i-h">Also on</div><div class="pl-i-b" style="margin-top:2px;flex-wrap:wrap">${also.map(x => `<button class="btn btn-ghost btn-sm" onclick="NMPlans.goto(${x.id}, ${jsArg(p.ref || p.label)})">📄 ${esc(short(x.name))}</button>`).join('')}</div>`;
     box.innerHTML = `<div class="pl-i-t"><span>${k[0]}</span><b>${esc(p.label)}</b><span class="text-muted text-sm">${esc(k[2])}</span><span style="flex:1"></span><button class="modal-close" aria-label="Close" onclick="NMPlans.unfocus()">✕</button></div>${body}`;
     box.hidden = false;
+  }
+  // Camera pins: K1-01 on the drawing = K1-1 in the camera list.
+  const camKey = (n) => U(n).replace(/\s+/g, '').replace(/-0+(\d)/, '-$1');
+  const camRec = (p) => (D().records || []).find(r => camKey(r.hostname) === camKey(p.ref || p.label));
+  async function camFill(rec) {
+    const el = document.getElementById('pl-cam'); if (!el || Number(el.dataset.id) !== rec.id) return;
+    let s; try { s = await apiGet('/api/servers/' + rec.id); } catch { el.innerHTML = '<p class="text-muted text-sm">Not available.</p>'; return; }
+    const sp = String(s.switch_port || '').trim(), m = sp.match(/^(\S+)\s+(.+)$/), sw = D().devices.find(d => d.hostname === (m ? m[1] : sp));
+    const can = D().can.edit || D().can.port;
+    el.innerHTML = `<img class="nm-rec-img" src="/api/servers/${s.id}/photo" alt="" onerror="this.remove()" style="max-height:170px">
+      ${row('Name', s.hostname)}${row('Area', s.role)}${row('Model', s.brand_model)}${row('IP', s.ip_address)}${row('MAC', s.mac)}${row('Status', s.status)}${row('Firmware', s.os)}
+      <div class="pl-i-h">Connected to</div>${sw ? row('Switch', `${sw.hostname}${sw.alias ? ' · ' + sw.alias : ''}`) : ''}${row('Port', m ? m[2] : sp ? 'not known yet' : '')}${!sp ? '<p class="text-muted text-sm">No switch yet.</p>' : ''}
+      <div class="pl-i-b" style="margin-top:6px;flex-wrap:wrap">${sw && m ? `<button class="btn btn-ghost btn-sm" onclick="NM.openPort(${sw.id}, ${jsArg(m[2])})">🔌 ${can ? 'Edit' : 'Open'} port</button>` : ''}
+        ${sw ? `<button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${sw.id})">🔷 Switch</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="NM.openRec(${s.id})">📦 Record</button></div>`;
   }
   // Leave the plan for the map / racks only when asked (buttons in the popup).
   function go(p) {
@@ -234,7 +254,7 @@ const NMPlans = self.NMPlans = (() => {
     const ov = document.getElementById('nm-dev-ov'); ov.classList.add('open'); ov.style.zIndex = 3000;
     // Guess the kind from what is typed.
     document.getElementById('pn-label').addEventListener('input', (e) => { const v = e.target.value.toUpperCase();
-      document.getElementById('pn-kind').value = D().devices.some(d => d.hostname === v) ? 'device' : /KABIN|RACK|^MR-0\d$/.test(v) ? 'cabinet' : /AP\d|-AP/.test(v) ? 'ap' : document.getElementById('pn-kind').value; });
+      document.getElementById('pn-kind').value = D().devices.some(d => d.hostname === v) ? 'device' : /KABIN|RACK|^MR-0\d$/.test(v) ? 'cabinet' : /AP\d|-AP/.test(v) ? 'ap' : /^(HK|K)\d+-\d+R?$/.test(v) ? 'camera' : document.getElementById('pn-kind').value; });
   }
   function addPin(x, y) { pinForm({ x, y, kind: 'ap', label: '' }, (p) => { if (!p.label) return; pins.push(p); dirty = true; render(); }); }
   function editPin(i) { pinForm(pins[i], (p) => { pins[i] = p; dirty = true; render(); }, () => { pins.splice(i, 1); dirty = true; render(); }); }
