@@ -392,6 +392,43 @@ router.get('/racks', wrap(async (req, res) => {
   if (otView(req)) { racks = racks.filter(otRack); const ids = new Set(racks.map(r => r.id)); items = items.filter(i => ids.has(i.rack_id)); }
   res.json({ racks, items });
 }));
+// ── CCTV switches: in the racks only as labels ("SR-02/CCTV-ASW-03(9200)", "MR-02/CCTV-DSW-01") → real devices of the map
+// with ports, linked to their rack slot. POST { site, dry } (admins). Default ports: Catalyst 9200 = 24 × GE + 4 × TE uplinks,
+// 3560CX = 12 × GE + 2 uplinks (GE 1/0/13–14, like the card-reader switches); distribution switches none (add them by hand).
+const CCTV_LABEL = /^\s*([A-Z]{2}-\d+\/CCTV-(ASW|DSW)-\d+)\s*(?:\((\w+)\))?\s*$/i;
+router.post('/cctv-switches', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  const site = str(req.body.site, 80);
+  const items = await all(`SELECT i.*, r.name AS rack, r.kind AS rack_kind FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id
+    WHERE r.site = ? AND i.device_id IS NULL ORDER BY r.sort, r.name, i.u DESC`, [site]);
+  const have = new Set((await all('SELECT hostname FROM net_devices WHERE site = ?', [site])).map(d => d.hostname.toUpperCase()));
+  const servers = await all("SELECT id, hostname, serial_no FROM servers WHERE deleted_at IS NULL AND COALESCE(hostname, '') <> ''");
+  const plan = [];
+  for (const it of items) {
+    const m = String(it.label || '').match(CCTV_LABEL); if (!m) continue;
+    const hostname = m[1].toUpperCase(), dsw = /DSW/i.test(m[2]), fam = String(m[3] || '').toUpperCase();
+    if (have.has(hostname) || plan.some(x => x.hostname === hostname)) continue;
+    const mr = String(it.rack).match(/^MR-0?(\d+)$/i);
+    const location = `${mr ? `MAIN RACK - 0${mr[1]}` : String(it.rack).replace(/^HARICI-/i, 'HARICI ')} (U${it.u}${it.height > 1 ? '-' + (it.u + it.height - 1) : ''})`;
+    const model = fam === '9200' ? 'CISCO C9200' : fam === '3560' ? 'CISCO 3560CX' : fam ? 'CISCO ' + fam : 'CISCO';
+    const ports = dsw ? [] : fam === '3560' ? Array.from({ length: 14 }, (_, i) => `GE 1/0/${i + 1}`)
+      : [...Array.from({ length: 24 }, (_, i) => `GE 1/0/${i + 1}`), ...Array.from({ length: 4 }, (_, i) => `TE 1/1/${i + 1}`)];
+    const sv = servers.find(x => x.hostname.toUpperCase() === hostname);
+    plan.push({ item_id: it.id, rack: it.rack, u: it.u, hostname, role: dsw ? 'Distribution switch' : 'Access switch', model, location, ports, server_id: sv ? sv.id : null, alias: `CCTV ${dsw ? 'distribution' : 'access'} switch` });
+  }
+  if (req.body.dry) return res.json({ site, rows: plan.map(p => ({ ...p, ports: p.ports.length })) });
+  const stmts = [];
+  for (const p of plan) {
+    stmts.push({ sql: `INSERT OR IGNORE INTO net_devices (site, hostname, alias, role, model, location, notes, source, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'racks', ?)`,
+      args: [site, p.hostname, p.alias, p.role, p.model, p.location, 'Added from the rack layout (CCTV) — check the model and port count', p.server_id] });
+    p.ports.forEach((pt, i) => stmts.push({ sql: `INSERT OR IGNORE INTO net_ports (device_id, port, sort) SELECT id, ?, ? FROM net_devices WHERE site = ? AND hostname = ?`, args: [pt, portSort(pt) || i + 1, site, p.hostname] }));
+    stmts.push({ sql: `UPDATE net_rack_items SET device_id = (SELECT id FROM net_devices WHERE site = ? AND hostname = ?) WHERE id = ? AND device_id IS NULL`, args: [site, p.hostname, p.item_id] });
+    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', 'device added (CCTV switch from the rack layout)', req.user.username] });
+  }
+  if (stmts.length) await batch(stmts);
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": ${plan.length} CCTV switch(es) added from the rack layout`);
+  res.json({ ok: true, added: plan.length });
+}));
 router.post('/racks/build', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const site = str(req.body.site, 80);

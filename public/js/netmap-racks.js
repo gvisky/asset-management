@@ -72,6 +72,7 @@ const NMRacks = (() => {
     const rackDraw = drawings.filter(d => /rack/i.test(d.category + ' ' + d.name));
     box.innerHTML = `<div class="rk-bar">${D().can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.addItem()">+ Item (patch panel, PDU …)</button><button class="btn btn-ghost btn-sm" onclick="NMRacks.addRack()">+ Rack / cabinet</button>` : ''}
         ${D().can.admin ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.build(false)" title="Place devices that are not in a rack yet">⚙ Place new devices</button>` : ''}
+        ${D().can.admin && cctvCount() ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.addCctv()" title="The CCTV switches are only labels in the racks: add them to the map as devices with ports, linked to their rack slot">📹 Add ${cctvCount()} CCTV switch${cctvCount() > 1 ? 'es' : ''} to the map</button>` : ''}
         ${rackDraw.length ? `<label class="text-sm"><input type="checkbox" ${showDrawing ? 'checked' : ''} onchange="NMRacks.toggleDrawing(this.checked)"> 📄 Show the document's rack drawing</label>` : ''}
         <span class="text-muted text-sm">Click a device to see its ports${D().can.edit ? ' · click a patch panel / PDU to edit it' : ''}</span><span id="rk-where" class="rk-where"></span>
         ${unplaced.length ? `<span class="text-sm" style="margin-left:auto">Not in a rack: ${unplaced.slice(0, 6).map(d => `<a href="#" onclick="NMRacks.addItem(${d.id});return false">${esc(d.hostname)}</a>`).join(', ')}${unplaced.length > 6 ? ` +${unplaced.length - 6}` : ''}</span>` : ''}</div>
@@ -166,9 +167,23 @@ const NMRacks = (() => {
       await load(); renderDrawings(); showToast(`${files.length} picture${files.length > 1 ? 's' : ''} uploaded`);
     };
   }
+  // Rack items that are CCTV switches but not devices of the map yet.
+  const CCTV = /^\s*[A-Z]{2}-\d+\/CCTV-(ASW|DSW)-\d+\s*(\(\w+\))?\s*$/i;
+  const cctvCount = () => R.items.filter(i => !i.device_id && CCTV.test(i.label || '')).length;
+  async function addCctv() {
+    try {
+      const r = await apiPost('/api/netmap/cctv-switches', { site: D().site, dry: true });
+      if (!r.rows.length) return showToast('No CCTV switch labels left in the racks');
+      const list = r.rows.map(x => `${x.hostname} — ${x.model}, ${x.ports ? x.ports + ' ports' : 'no ports'} · ${x.location}`).join('\n');
+      if (!confirm(`Add ${r.rows.length} CCTV switch${r.rows.length > 1 ? 'es' : ''} to the map?\n\n${list}\n\nCatalyst 9200: 24 + 4 uplink ports, 3560CX: 14 ports (change them later if the model differs). They are linked to their rack slot and shown to the OT team.`)) return;
+      const a = await apiPost('/api/netmap/cctv-switches', { site: D().site });
+      showToast(`${a.added} CCTV switch${a.added === 1 ? '' : 'es'} added`);
+      await NM.reload(); await load(); render();
+    } catch (e) { showToast(errText(e, 'Could not add'), 'error'); }
+  }
   function openDrawing(id) { if (window.NMPlans && NMPlans.open(id, drawings)) return; window.open('/api/netmap/drawing/' + id, '_blank'); }
   async function delDrawing(id) { if (!confirm('Delete this picture?')) return; await apiDelete('/api/netmap/drawing/' + id); await load(); renderDrawings(); }
 
-  return { async show(v) { await load(); v === 'draw' ? renderDrawings() : render(); }, build, addItem, saveItem, delItem, addRack, openDrawing, delDrawing,
+  return { async show(v) { await load(); v === 'draw' ? renderDrawings() : render(); }, build, addItem, saveItem, delItem, addRack, openDrawing, delDrawing, addCctv,
     toggleDrawing: (on) => { showDrawing = on; render(); }, mark: () => mark(true), racksFor: (deviceId) => R.items.find(i => i.device_id === deviceId), drawings: () => drawings, reload: load };
 })();

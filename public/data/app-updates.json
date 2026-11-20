@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Network map: CCTV switches added from the racks",
+    "items": [
+      "Racks tab (admins): 📹 Add CCTV switches to the map turns the CCTV switches that were only labels in the racks (SR-02/CCTV-ASW-03(9200) … SR-31/CCTV-ASW-24(3560), MR-01/CCTV-ASW-01/02, the CCTV distribution switches MR-02/CCTV-DSW-01 and MR-03/CCTV-DSW-02) into real devices of the map, linked to their rack slot, with ports: Catalyst 9200 = 24 + 4 uplinks, 3560CX = 14, distribution switches none (add their ports by hand). Preview first; the button disappears once done.",
+      "They show in the device list, the Topology, the CCTV / HARICI KABIN popups of the site plan (\"Plugged into …\") and in the OT view. Their cameras appear as soon as the ports are filled (port edit, OT device list or 🔌 Switch ports); set the uplink port to the CCTV distribution switch to connect them on the Topology."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Site plan: click a Kabin to see and edit everything plugged into it",
     "items": [
       "Drawings → Site — outdoor cabinets & fibre routes (and the other plans): click a cabinet (IT KABIN, HARICI KABIN …) and its popup now lists, per switch in that cabinet, every device plugged into it — port number, icon, name, OT devices in orange. Click a device to open its port right on top of the plan and edit it (name, VLAN, patch, note …); the popup refreshes after saving. IT editors can edit any port, OT editors the end-device ports of their switches (ports to network devices stay IT's).",
