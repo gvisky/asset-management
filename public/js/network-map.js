@@ -457,7 +457,8 @@ const NM = (() => {
     const body = { device_id: cur.d.id, port: cur.p.port, ...v, mode: clear ? cur.p.mode : $('pp-mode').value, vlan: clear ? cur.p.vlan : $('pp-vlan').value.trim(), grp: clear ? '' : $('pp-grp').value.trim(),
       patch: clear ? cur.p.patch : $('pp-patch').value.trim(), note: clear ? cur.p.note : $('pp-note').value.trim() };
     if (body.peer_host && !body.peer_port && byHost.has(body.peer_host)) { showToast('Choose the port of ' + body.peer_host, 'error'); return; }
-    try { await apiPut('/api/netmap/port', body); closePort(); showToast(clear ? 'Disconnected' : 'Port saved'); await load(D.site); select(cur.d.id); }
+    try { await apiPut('/api/netmap/port', body); closePort(); showToast(clear ? 'Disconnected' : 'Port saved'); await load(D.site); select(cur.d.id);
+      if (self.NMPlans && NMPlans.refresh) NMPlans.refresh(); }
     catch (e) { showToast(errText(e, 'Could not save'), 'error'); }
   }
   async function movePort() {
@@ -625,7 +626,7 @@ const NM = (() => {
     load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
   }
   document.addEventListener('DOMContentLoaded', init);
-  return { data: () => D, known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
+  return { data: () => D, endItems, isAccess: (d) => /access switch/i.test((d && d.role) || ''), known, portTip, icon, links, selected: () => sel, redraw: (f) => { renderTopo(f); }, setMode: (m) => { mode = m; renderTopo(true); }, tier: (r) => TIER[r] ?? 6, select, openPort, closePort, savePort: () => savePort(false), disconnect: () => savePort(true), movePort, addPort, editDevice, saveDevice, deleteDevice, showLog,
     filter: (f) => { portFilter = f; renderDevice(); }, isNet,
     outlet: (o) => { const pp = (D.patches || []).find(x => String(x.outlet).toUpperCase() === String(o).toUpperCase()); if (pp && self.NMFaces) NMFaces.panel(pp.panel); else showToast('Outlet ' + o + ' is not in the patch-panel list', 'error'); },
     depth: (n) => { depth = n; renderTopo(); fit(); }, group: setGroup, groupShown: () => grp, groupOf, gcol, tab: (v) => tab(v),

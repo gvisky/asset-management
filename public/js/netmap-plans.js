@@ -141,6 +141,26 @@ const NMPlans = self.NMPlans = (() => {
   }
   // ── Popup on the plan (click a pin): AP → device, switch port, cabinet; cabinet → rack contents and its APs ──
   function show(i) { focusI = i; render(); info(i); }
+  // The switches of a cabinet (by their location / rack items) and everything plugged into them — click a device to edit its port.
+  function cabSwitches(p) {
+    const c = cabNo(p); if (!c) return [];
+    const kind = c.kind || 'IT';
+    const re = kind === 'HARICI' ? new RegExp(`HARICI\\s*-?\\s*KABIN\\s*-?0?${c.n}\\b`) : kind === 'CCTV' ? new RegExp(`CCTV\\s*-?\\s*KABIN\\s*-?0?${c.n}\\b`) : new RegExp(`(^|[^A-Z])IT\\s*-?\\s*KABIN\\s*-?0?${c.n}\\b`);
+    const name = U(p.ref || p.label).replace(/\s+/g, '-'), rk = racks && racks.racks.find(r => U(r.name) === name);
+    const inRack = new Set(rk ? racks.items.filter(x => x.rack_id === rk.id && x.device_id).map(x => x.device_id) : []);
+    return D().devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired' && !d.ot_context && (inRack.has(d.id) || re.test(U(d.location))));
+  }
+  function plugged(p) {
+    const sws = cabSwitches(p);
+    if (!sws.length) return '';
+    const can = D().can.edit || D().can.port;
+    return sws.map(sw => { const its = NM.endItems(sw);
+      return `<div class="pl-i-h">Plugged into ${esc(sw.hostname)} (${its.length})</div>
+        ${its.length ? `<div class="pl-i-ends">${its.map(e => `<a href="#" class="pl-i-end${e.ot ? ' ot' : ''}" title="${can ? 'Open / edit port ' : 'Port '}${esc(e.port)}${e.rec ? ' · Server Inventory #' + e.rec : ''}" onclick="NM.openPort(${sw.id}, ${jsArg(e.port)});return false"><b>${esc(e.pn)}</b> ${e.icon} ${esc(e.name)}</a>`).join('')}</div>`
+          : '<p class="text-muted text-sm" style="margin:2px 0">Nothing plugged in yet.</p>'}
+        <div class="pl-i-b" style="margin-top:4px"><button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${sw.id})">🔷 All ports of ${esc(sw.hostname)}</button></div>`; }).join('')
+      + (can ? '<p class="text-muted text-sm" style="margin:6px 0 0">Click a device to change its port (name, VLAN, note …) right here.</p>' : '');
+  }
   const row = (k, v) => (v ? `<div class="pl-i-r"><span>${k}</span><b>${esc(v)}</b></div>` : '');
   function info(i) {
     const box = document.getElementById('pl-info'); if (!box) return;
@@ -159,6 +179,7 @@ const NMPlans = self.NMPlans = (() => {
         ${fibHtml}
         ${me === 'SERVER-ROOM' ? `<p class="text-sm" style="margin:8px 0 0">Main racks <b>MR-01 … MR-04</b> (office building) — all fibre starts here.</p>` : items.length ? `<div class="pl-i-h">In the cabinet</div>${items.map(x => { const d = x.device_id && D().devices.find(z => z.id === x.device_id);
           return `<div class="pl-i-it">${d ? `<a href="#" onclick="NMPlans.dev(${d.id});return false">${esc(d.hostname)}</a> <span class="text-muted">${esc(d.mgmt_ip || '')}</span>` : esc(x.label || x.kind)} <span class="text-muted">U${x.u}${x.height > 1 ? '–' + (x.u + x.height - 1) : ''}</span></div>`; }).join('')}` : `<p class="text-muted text-sm">${racks ? 'This cabinet is not in the Racks list.' : 'Loading the rack…'}</p>`}
+        ${plugged(p)}
         ${aps.length ? `<div class="pl-i-h">Access points cabled here (${aps.length})</div><div class="pl-i-chips">${aps.map(a => `<a href="#" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>`).join('')}</div>` : ''}
         <div class="pl-i-b"><button class="btn btn-ghost btn-sm" onclick="NMPlans.rack(${i})">🗄 Open in Racks</button></div>`;
     } else {
@@ -215,5 +236,5 @@ const NMPlans = self.NMPlans = (() => {
   }
   return { open, close, save, pin: show, unfocus: () => { focusI = null; info(null); render(); },
     dev: (id) => { close(); NM.select(id, true); }, rack: (i) => go(pins[i]), edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); render(); },
-    goto: (id, ref) => open(id, null, ref) };
+    goto: (id, ref) => open(id, null, ref), refresh: () => { if (focusI != null && !document.getElementById('pl-ov').hidden) info(focusI); } };
 })();

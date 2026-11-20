@@ -1513,3 +1513,9 @@ html.is-ot .si-tabs [data-t="vm"], html.is-ot-viewer #view-edit-btn, html.is-ot-
 .nm-end-i { font-size: 16px; text-anchor: middle; } .nm-end-p { font-size: 10px; font-weight: 700; fill: #0e7490; text-anchor: middle; } .nm-end.ot .nm-end-p { fill: #c2410c; }
 .nm-end-n { font-size: 10px; fill: #334155; text-anchor: middle; } .nm-end-ot { font-size: 8px; font-weight: 700; fill: #c2410c; }
 .nm-endl.bus { fill: none; stroke: #0891b2; stroke-width: 2; }
+/* Plan popup: devices plugged into the cabinet's switches */
+.pl-i-ends { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
+.pl-i-end { display: block; font-size: 12.5px; color: #0f172a; text-decoration: none; padding: 2px 6px; border-radius: 5px; border-left: 3px solid #0891b2; background: #f0fdfa; }
+.pl-i-end.ot { border-left-color: #ea580c; background: #fff7ed; }
+.pl-i-end:hover { background: #e0f2fe; } .pl-i-end b { display: inline-block; min-width: 22px; color: #0e7490; }
+#nm-port-ov, #nm-dev-ov { z-index: 2600; }
