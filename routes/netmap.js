@@ -60,6 +60,12 @@ const FIELDS = ['peer_host', 'peer_port', 'cable', 'mode', 'vlan', 'grp', 'patch
 const portSort = (p) => { const n = String(p).match(/(\d+)(?:\/(\d+))?(?:\/(\d+))?\s*$/); if (!n) return 0; return (Number(n[1]) || 0) * 1e6 + (Number(n[2]) || 0) * 1e3 + (Number(n[3]) || 0) + (/^(T|TE|XE|E 1\/4[89])/i.test(p) ? 5e8 : 1e3); };
 const desc = (p) => (p && (p.peer_host || p.peer_port || p.patch) ? `${p.peer_host || ''} ${p.peer_port || ''}${p.patch ? ' [' + p.patch + ']' : ''}${p.vlan ? ' vlan ' + p.vlan : ''}${p.mode ? ' ' + p.mode : ''}`.trim() : '(free)');
 
+// Server Inventory records that know their switch port ("Connected to"), shown on that port. OT: only OT records;
+// users without Asset Inventory access (other than OT) get none.
+async function records(req, otOnly) {
+  if (req.user.asset_access === 0 && !isOT(req)) return [];
+  return all(`SELECT id, hostname, category, switch_port, it_ot FROM servers WHERE deleted_at IS NULL AND COALESCE(switch_port, '') <> ''${otOnly || isOT(req) ? " AND it_ot = 'OT'" : ''}`);
+}
 router.get('/', wrap(async (req, res) => {
   const sites = (await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY site')).map(r => ({ site: r.site, devices: r.n }));
   const site = req.query.site != null ? str(req.query.site, 80) : (sites[0] ? sites[0].site : '');
@@ -75,11 +81,12 @@ router.get('/', wrap(async (req, res) => {
     const otSites = [];
     for (const s2 of sites) { const n = s2.site === site ? sl.devices.filter(d => !d.ot_context).length
       : (await all('SELECT * FROM net_devices WHERE site = ?', [s2.site])).filter(d => d.state !== 'retired' && otOn(d)).length; if (n) otSites.push({ site: s2.site, devices: n }); }
-    return res.json({ site, sites: otSites, devices: sl.devices, ports: sl.ports, net_hosts: sl.netHosts, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
+    const otRecords = await records(req, true);
+    return res.json({ site, sites: otSites, records: otRecords, devices: sl.devices, ports: sl.ports, net_hosts: sl.netHosts, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
       can: { edit: false, admin: false, port: otPortEdit(req) }, team });
   }
   devices = devices.map(d => ({ ...d, ot_on: otOn(d) ? 1 : 0, ot_auto: otAuto(d) ? 1 : 0 }));
-  res.json({ site, sites, devices, ports, vlans, patches, view: 'it', can: { edit: canEdit(req), admin: isAdmin(req) }, team });
+  res.json({ site, sites, devices, ports, vlans, patches, records: await records(req, false), view: 'it', can: { edit: canEdit(req), admin: isAdmin(req) }, team });
 }));
 
 router.post('/import', wrap(async (req, res) => {

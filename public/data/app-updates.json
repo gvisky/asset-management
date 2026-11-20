@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-11-20",
+    "title": "Server Inventory: 🔌 every device linked to its access-switch port; OT editors can add OT devices",
+    "items": [
+      "New 🔌 Switch ports (IT admins) on Server Inventory: for every IT and OT device it finds the access-switch port it is cabled to on the network map — the map's device on that port (access points, card-reader switches …), its MAC or IP written on the port, or the same name — and writes it to \"Connected to\" (preview, tick what to apply). Devices behind a hub / Moxa keep the port the OT device list gave them.",
+      "It also lists what is on an access-switch port but has no Server Inventory record yet (printers, TVs, kiosks, Matrix readers, Moxa routers, gateways …) with a suggested name, IT / OT and category to add in one go — IP phones, PXE / spare ports and people's desk points are left out — and the records it could not find on any port (spares, or missing name / MAC / IP).",
+      "Network map: each switch port shows 📦 the Server Inventory devices connected to it (click to open the record); OT logins see the OT ones.",
+      "OT editors can now add OT devices too (+ Add Server → Add OT device): always saved as OT."
+    ]
+  },
+  {
     "date": "2026-11-19",
     "title": "Server Inventory: OT editors can edit OT devices",
     "items": [

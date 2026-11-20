@@ -237,7 +237,7 @@ async function onRepairStatus(id, status) {
 }
 
 // ── Add / Edit ──────────────────────────────────────────────────────────────────
-function onAdd() { sFillForm(null); applyFieldLock(null); sOpenModal('Add Server'); }
+function onAdd() { sFillForm(null); applyFieldLock(null); const ot = (window.CURRENT_USER || {}).team === 'OT'; if (ot) { const c = document.getElementById('f-it_ot'); if (c) c.value = 'OT'; } sOpenModal(ot ? 'Add OT device' : 'Add Server'); }
 async function onEdit(id) {
   try { const s = await apiGet(`${SAPI}/${id}`); sFillForm(s); applyFieldLock(s); sOpenModal('Edit Server'); }
   catch (e) { showToast('Failed to load server', 'error'); }
@@ -361,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Update from the network map (implementation document) — admins ──
 // The button shows for admins once the page knows who you are.
 document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin') document.getElementById('btn-netsync').style.display = '';
-  if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') document.getElementById('btn-otimport').style.display = '';
+  if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; }
   // OT team: read-only list of the OT devices.
   if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-t=phys]'); if (s) s.textContent = '🏭 OT devices'; }
   const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v); }, 150); });
