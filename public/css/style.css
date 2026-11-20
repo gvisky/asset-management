@@ -1591,3 +1591,4 @@ tr.oac-done td { opacity: .55; }
 .pl-cst { font-size: 12px; margin-left: 6px; white-space: nowrap; } .pl-cst i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 3px 0 7px; vertical-align: -1px; }
 .pl-cst i.port { background: #16a34a; } .pl-cst i.sw { background: #f59e0b; } .pl-cst i.none { background: #94a3b8; }
 .pl-pin.bad .pl-lbl { background: #dc2626 !important; }
+.pl-camchip.port { border-color: #16a34a !important; } .pl-camchip.sw { border-color: #f59e0b !important; } .pl-camchip.none { border-color: #94a3b8 !important; }
