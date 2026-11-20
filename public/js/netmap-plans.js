@@ -97,7 +97,17 @@ const NMPlans = self.NMPlans = (() => {
     const port = (D().ports || []).find(x => x.peer_host === d.hostname && x.device_id !== d.id); if (!port) return null;
     const dev = D().devices.find(x => x.id === port.device_id); return dev ? { dev, port } : null;
   }
-  function links() { const out = []; pins.forEach((p, i) => { if (p.kind !== 'ap') return; const j = cabinetOf(p); if (j != null) out.push({ a: i, c: j }); }); return out; }
+  // Camera "Kn-m" = camera m of CCTV KABIN n, "HKn-m" = HARICI KABIN n; K11 is in IT KABIN 11 (IT + CCTV), K1 = office (server room).
+  function camCabinet(p) {
+    const m = U(p.ref || p.label).replace(/\s+/g, '').match(/^(HK|K)0*(\d+)-\d/); if (!m) return null;
+    const n = String(Number(m[2])), cabs = pins.map((c, j) => ({ c, j })).filter(x => x.c.kind === 'cabinet');
+    const pick = (kind) => cabs.find(x => { const c = cabNo(x.c); return c && c.n === n && (c.kind || 'IT') === kind; });
+    if (m[1] === 'K' && n === '1') { const sr = cabs.find(x => U(x.c.ref) === 'SERVER-ROOM'); return sr ? sr.j : null; }
+    const hit = m[1] === 'HK' ? pick('HARICI') : pick('CCTV') || pick('IT');
+    return hit ? hit.j : null;
+  }
+  function links() { const out = []; pins.forEach((p, i) => { if (p.kind === 'camera') { const j = camCabinet(p); if (j != null) out.push({ a: i, c: j, cam: true }); return; }
+    if (p.kind !== 'ap') return; const j = cabinetOf(p); if (j != null) out.push({ a: i, c: j }); }); return out; }
   const colOf = (j) => PAL[(Number((cabNo(pins[j]) || {}).n) || j) % PAL.length];
   // Fibre between cabinets (drawing links): outdoor ring orange, IT (48C) blue, CCTV (24C) purple.
   const pinByRef = (r) => pins.findIndex(p => U(p.ref || p.label) === U(r));
@@ -113,7 +123,7 @@ const NMPlans = self.NMPlans = (() => {
     const fHot = fib.filter(l => fref && (U(l.a) === fref || U(l.b) === fref));
     if (focusI != null) { on.add(focusI); for (const l of L) if (l.a === focusI || l.c === focusI) { on.add(l.a); on.add(l.c); }
       for (const l of fHot) [l.a, l.b].forEach(r => { const j = pinByRef(r); if (j >= 0) on.add(j); }); }
-    document.getElementById('pl-lines').innerHTML = cables ? L.map(l => { const a = pins[l.a], c = pins[l.c], hot = focusI != null && (l.a === focusI || l.c === focusI);
+    document.getElementById('pl-lines').innerHTML = cables ? L.filter(l => !l.cam || (focusI != null && (l.a === focusI || l.c === focusI))).map(l => { const a = pins[l.a], c = pins[l.c], hot = focusI != null && (l.a === focusI || l.c === focusI);
       return `<path d="M${a.x} ${a.y} H${c.x} V${c.y}" class="pl-cable${hot ? ' hot' : focusI != null ? ' dim' : ''}" style="stroke:${colOf(l.c)}"/>`; }).join('')
       + fib.map(l => { const hot = fHot.includes(l); return `<polyline points="${l.path.map(p => p.join(',')).join(' ')}" class="pl-fib${hot ? ' hot' : focusI != null ? ' dim' : ''}" style="stroke:${fibCol(l)}"/>`; }).join('') : '';
     // Labels never cover each other: place them one by one (top to bottom); a label that would overlap one already
@@ -201,7 +211,7 @@ const NMPlans = self.NMPlans = (() => {
       const name = U(p.ref || p.label).replace(/\s+/g, '-');
       const rk = racks && racks.racks.find(r => U(r.name) === name);
       const items = rk ? racks.items.filter(x => x.rack_id === rk.id).sort((a, b) => b.u - a.u) : [];
-      const aps = L.filter(l => l.c === i).map(l => l.a);
+      const aps = L.filter(l => l.c === i && !l.cam).map(l => l.a), cams = L.filter(l => l.c === i && l.cam).map(l => l.a);
       const me = U(p.ref || p.label), mine = fib.filter(l => U(l.a) === me || U(l.b) === me);
       const fibHtml = mine.length ? `<div class="pl-i-h">Fibre cables (${mine.length})</div>${mine.map(l => { const o = U(l.a) === me ? l.b : l.a, j = pinByRef(o);
         return `<div class="pl-i-fib"><span class="pl-i-sw" style="background:${fibCol(l)}"></span>${j >= 0 ? `<a href="#" onclick="NMPlans.pin(${j});return false">${esc(pins[j].label)}</a>` : esc(o)} <span class="text-muted">${esc(fibText(l))}</span></div>`; }).join('')}` : '';
@@ -211,11 +221,18 @@ const NMPlans = self.NMPlans = (() => {
           return `<div class="pl-i-it">${d ? `<a href="#" onclick="NMPlans.dev(${d.id});return false">${esc(d.hostname)}</a> <span class="text-muted">${esc(d.mgmt_ip || '')}</span>` : esc(x.label || x.kind)} <span class="text-muted">U${x.u}${x.height > 1 ? '–' + (x.u + x.height - 1) : ''}</span></div>`; }).join('')}` : `<p class="text-muted text-sm">${racks ? 'This cabinet is not in the Racks list.' : 'Loading the rack…'}</p>`}
         ${plugged(p)}
         ${aps.length ? `<div class="pl-i-h">Access points cabled here (${aps.length})</div><div class="pl-i-chips">${aps.map(a => `<a href="#" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>`).join('')}</div>` : ''}
+        ${cams.length ? `<div class="pl-i-h">Cameras of this cabinet (${cams.length}) <span class="text-muted" style="font-weight:400;text-transform:none">· by name</span></div><div class="pl-i-chips">${cams.sort((a, b) => String(pins[a].label).localeCompare(pins[b].label, undefined, { numeric: true })).map(a => `<a href="#" class="pl-camchip ${camPort(pins[a]).st}" title="${esc(camPort(pins[a]).tip)}" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>`).join('')}</div>` : ''}
         <div class="pl-i-b"><button class="btn btn-ghost btn-sm" onclick="NMPlans.rack(${i})">🗄 Open in Racks</button></div>`;
     } else if (p.kind === 'camera') {
       // A camera of the CCTV drawing → its Server Inventory record (picture, IP, switch port), filled in below.
-      const rec = camRec(p), why = camCheck().bad.get(i);
-      body = (why ? camFix(i, why) : '') + (rec ? `<div id="pl-cam" data-id="${rec.id}"><p class="text-muted text-sm">Loading…</p></div>` : '');
+      const rec = camRec(p), why = camCheck().bad.get(i), cj = camCabinet(p);
+      // The name says the cabinet; its switch should be in that cabinet.
+      const sp = String((rec && rec.switch_port) || '').split(/\s+/)[0], swd = D().devices.find(d => d.hostname === sp), cb = cj != null ? cabNo(pins[cj]) : null;
+      const swCab = swd ? (U(swd.location).match(/(HARICI|IT|CCTV)?[\s-]*KABIN[\s-]*0*(\d+)/) || []) : [];
+      const off = cb && swd && swCab[2] && (swCab[2] !== cb.n || (swCab[1] || 'IT') !== (cb.kind || 'IT')) ? `The name says ${pins[cj].label}, but its switch ${swd.alias || swd.hostname} is in ${swd.location}.` : '';
+      body = (why ? camFix(i, why) : '') + (off ? `<div class="pl-i-warn">⚠ ${esc(off)}</div>` : '')
+        + (cj != null ? `<div class="pl-i-b" style="margin:0 0 6px"><span class="text-muted text-sm">Cabinet</span> <a href="#" class="btn btn-ghost btn-sm" onclick="NMPlans.pin(${cj});return false" style="border-color:${colOf(cj)}">🗄 ${esc(pins[cj].label)}</a></div>` : '')
+        + (rec ? `<div id="pl-cam" data-id="${rec.id}"><p class="text-muted text-sm">Loading…</p></div>` : '');
       if (rec) setTimeout(() => camFill(rec), 0);
     } else {
       const d = deviceOf(p), sw = switchPort(p), cj = L.find(l => l.a === i);

@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Camera drawing: cameras connected to their cabinet by name",
+    "items": [
+      "Camera name rule: Kn-m = camera m of CCTV KABIN n (K5-12 → CCTV KABIN 5), HKn-m = HARICI KABIN n, K11 = IT KABIN 11 (IT + CCTV), K1 = office building.",
+      "Click a cabinet: its cameras light up with a line to the cabinet, and the popup lists \"Cameras of this cabinet\" (green = port known, amber = switch only). Click a camera: its cabinet, and ⚠ when its switch is in another cabinet than the name says.",
+      "Lines to cameras are drawn only for the chosen cabinet / camera, so the plan stays readable."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Camera drawing: switch port on every camera pin",
     "items": [
       "Under each camera's name on the drawing: its switch (OT name) and port, e.g. K7_CCTV_01 · GE 1/0/5, or \"port ?\" when only the switch is known. Hover a camera for the full switch host name.",
