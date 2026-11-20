@@ -31,6 +31,31 @@ const otView = (req) => isOT(req) || req.query.view === 'ot';
 // OT editors may change the ports of their switches that go to end devices (cameras, access control, PCs …) or are free —
 // never a port cabled to a network device, and never cable one to a network device.
 const otPortEdit = (req) => isOT(req) && req.user.role === 'editor';
+// IT end devices on a port — OT may not change them: an access point / printer / phone / PC by its name, or a Server Inventory
+// record that is not OT (by "Connected to", name or MAC on the port).
+const IT_NAME = /(^|[^A-Z0-9])(K\d+|HK\d+|DA)-?AP\d|ACCESS\s*POINT|\bAP\d+\b|PRINTER|\bPRINT\b|PHONE|\bSEP[0-9A-F]{6,}|LAPTOP|DESKTOP|\bPC\b|\bTV\b|WLC/i;
+async function itPortCheck(site) {
+  const recs = await all("SELECT hostname, mac, switch_port, it_ot FROM servers WHERE deleted_at IS NULL");
+  const itRecs = recs.filter(r => r.it_ot !== 'OT'), otRecs = recs.filter(r => r.it_ot === 'OT');
+  const hx = (v) => String(v || '').replace(/[^0-9a-f]/gi, '').toUpperCase();
+  const k = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const itName = new Set(itRecs.map(r => k(r.hostname)).filter(x => x.length >= 4)), otName = new Set(otRecs.map(r => k(r.hostname)).filter(x => x.length >= 3));
+  const itMac = itRecs.map(r => hx(r.mac)).filter(m => m.length === 12), itSp = new Set(itRecs.map(r => String(r.switch_port || '').trim()).filter(Boolean));
+  // Returns why the port / name is IT's, or ''.
+  return {
+    port: (devHost, p) => {
+      if (!p) return '';
+      const peer = String(p.peer_host || ''), text = `${peer} ${p.peer_port || ''} ${p.note || ''}`;
+      if (peer && otName.has(k(peer))) return '';
+      if (itSp.has(`${devHost} ${p.port}`)) return 'an IT device of the Server Inventory is connected here';
+      if (peer && itName.has(k(peer))) return `${peer} is an IT device in the Server Inventory`;
+      if (itMac.some(m => hx(text).includes(m))) return 'the MAC on this port is an IT device';
+      if (IT_NAME.test(`${peer} ${p.peer_port || ''}`)) return `${peer || p.peer_port} is an IT device (access point / printer / phone / PC)`;
+      return '';
+    },
+    name: (n) => (!n ? '' : otName.has(k(n)) ? '' : itName.has(k(n)) ? `${n} is an IT device in the Server Inventory` : IT_NAME.test(n) ? `${n} looks like an IT device (access point / printer / phone / PC)` : ''),
+  };
+}
 const otAuto = (d) => /switch/i.test(d.role || '') && (/KABIN/i.test(d.location || '') || /CCTV|CAMERA|CARD.?READER|ACCESS.?CONTROL|SECURITY/i.test(`${d.hostname} ${d.alias || ''}`));
 const otOn = (d) => (d.ot === 1 ? true : d.ot === 0 ? false : otAuto(d));
 // Only the OT team's part of a site: OT switches with all their ports, plus the core / distribution switches they uplink to
@@ -82,7 +107,9 @@ router.get('/', wrap(async (req, res) => {
     for (const s2 of sites) { const n = s2.site === site ? sl.devices.filter(d => !d.ot_context).length
       : (await all('SELECT * FROM net_devices WHERE site = ?', [s2.site])).filter(d => d.state !== 'retired' && otOn(d)).length; if (n) otSites.push({ site: s2.site, devices: n }); }
     const otRecords = await records(req, true);
-    return res.json({ site, sites: otSites, records: otRecords, devices: sl.devices, ports: sl.ports, net_hosts: sl.netHosts, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
+    const itc = await itPortCheck(site), hostOf = new Map(sl.devices.map(d => [d.id, d.hostname]));
+    const itPorts = sl.ports.map(p => ({ id: p.id, why: itc.port(hostOf.get(p.device_id), p) })).filter(x => x.why);
+    return res.json({ site, sites: otSites, records: otRecords, it_ports: itPorts, devices: sl.devices, ports: sl.ports, net_hosts: sl.netHosts, vlans: vlans.filter(v => used.has(String(v.vlan))), patches: [], view: 'ot',
       can: { edit: false, admin: false, port: otPortEdit(req) }, team });
   }
   devices = devices.map(d => ({ ...d, ot_on: otOn(d) ? 1 : 0, ot_auto: otAuto(d) ? 1 : 0 }));
@@ -249,6 +276,10 @@ router.put('/port', wrap(async (req, res) => {
     const cur = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
     if (cur && cur.peer_host && hosts.has(cur.peer_host)) return res.status(403).json({ error: `${port} is cabled to the network device ${cur.peer_host} — only IT can change it.` });
     if (hosts.has(str(req.body.peer_host, 80))) return res.status(403).json({ error: 'Connecting a network device is for IT — use a camera / access-control / end-device name.' });
+    const it = await itPortCheck(dev.site), why = it.port(dev.hostname, cur);
+    if (why) return res.status(403).json({ error: `${port}: ${why} — only IT can change it.` });
+    const whyNew = it.name(str(req.body.peer_host, 80));
+    if (whyNew) return res.status(403).json({ error: `${whyNew} — only IT can connect it.` });
     req.body.grp = cur ? cur.grp : '';
   }
   if (req.body.peer_host === dev.hostname && req.body.peer_port === port) return res.status(400).json({ error: 'A port cannot connect to itself' });

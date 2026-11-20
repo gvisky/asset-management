@@ -1521,3 +1521,8 @@ html.is-ot .si-tabs [data-t="vm"], html.is-ot-viewer #view-edit-btn, html.is-ot-
 #nm-port-ov, #nm-dev-ov { z-index: 2600; }
 .nm-rec-img, .si-photo { display: block; max-width: 100%; width: 320px; border-radius: 8px; margin: 0 0 12px; border: 1px solid var(--border); }
 .ci-th { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; display: block; }
+/* OT Needs Attention */
+.ota-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.ota-card { display: flex; flex-direction: column; min-width: 150px; max-width: 220px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: inherit; text-decoration: none; }
+.ota-card b { font-size: 22px; } .ota-card small { color: #64748b; font-size: 12px; } .ota-card.device { border-left: 4px solid #ea580c; } .ota-card.record { border-left: 4px solid #1a56db; }
+.ota-g { margin-top: 12px; } .ota-h { cursor: pointer; gap: 8px; } .ota-w { margin-left: auto; font-size: 12px; color: #64748b; }

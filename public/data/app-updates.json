@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-20",
+    "title": "OT: IT devices locked on the switch ports; new ⚠️ OT Needs Attention page",
+    "items": [
+      "Fix: OT editors could change a switch port of an IT device that is not a device of the map (e.g. GE 1/0/43 → K10-AP4-OUTDOOR). Now a port is IT's (locked for OT, on the map, the site plan and the server) when its device is an access point / printer / phone / PC by name, or an IT record of the Server Inventory (by Connected to, name or MAC); OT can't connect such a device to a port either. OT devices and free ports stay editable for OT editors.",
+      "New page ⚠️ OT Needs Attention (OT team and IT): duplicate names / IPs / MACs, old firmware (1.x), web page on HTTP without HTTPS, network settings different from the others, factory DNS (168.126.63.x), status not OK, missing IP / MAC / serial and unknown switch port — each with how to fix it (on the device, or ✏️ Fix in the record).",
+      "The camera list import now also keeps each camera's mask, gateway, DNS and HTTP / HTTPS settings (upload the list again once to fill them)."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "📷 CCTV cameras: camera list import with pictures, on their CCTV switch",
     "items": [
       "New 📷 CCTV camera list button (IT admins) on Server Inventory: upload the NVR camera export (.xlsx with a snapshot in each row). Camera names give the cabinet — K5-12 = CCTV KABIN 5, HK8-1R = HARICI KABIN 8, K11 = IT KABIN 11, K1 = office building (MR-01) — and each group is put on that cabinet's CCTV switch (you can change it). The preview shows every camera with its picture, plus checks of the list (duplicate names, old firmware, HTTP without HTTPS, different subnet / gateway settings). Apply adds the cameras (model, IP, MAC, serial, firmware, CCTV switch, location; OT by default) and saves their snapshots; existing cameras only get empty fields filled. Uploading again changes nothing but the pictures.",
