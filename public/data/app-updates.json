@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Edit cameras right on the drawing",
+    "items": [
+      "Camera drawing: in a cabinet's popup each camera has ✏️ — edit it in a window on the same page (picture, name, IP, MAC, serial, firmware, status, area, switch + port with the free ports to pick from, location, mask / gateway / DNS, HTTP / HTTPS, note). A camera's own popup has ✏️ Edit camera. No need to open Server Inventory.",
+      "OT editors / OT admins edit the cameras (OT devices) only; IT editors and admins too; viewers see the details read-only. Saved changes show on the drawing at once and are in 🕓 OT Activity (restorable)."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Camera drawing: cameras connected to their cabinet by name",
     "items": [
       "Camera name rule: Kn-m = camera m of CCTV KABIN n (K5-12 → CCTV KABIN 5), HKn-m = HARICI KABIN n, K11 = IT KABIN 11 (IT + CCTV), K1 = office building.",
