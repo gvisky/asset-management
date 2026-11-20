@@ -458,7 +458,10 @@ router.post('/cctv-switches', wrap(async (req, res) => {
   // CCTV access switches added from the racks before (other port layout / model).
   const ports = await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]);
   for (const d of devs.filter(x => x.source === 'racks' && /CCTV-ASW/i.test(x.hostname))) {
-    const fam = /3560/.test(d.model) ? '3560' : '9200', model = CCTV_MODEL[fam], want = cctvPorts(model);
+    // A real model (from the OT CCTV report, or typed: C9200L-24P-4X-E, C1000-16P …) is kept with its own port layout;
+    // only the rack-label guesses ("CISCO C9200", "CISCO 3560CX") are set to the default model.
+    const real = require('../lib/cctv-report').portsOf(d.model);
+    const fam = /3560/.test(d.model) ? '3560' : '9200', model = real && /-/.test(d.model) ? d.model : CCTV_MODEL[fam], want = real && /-/.test(d.model) ? real : cctvPorts(model);
     const mine = ports.filter(p => p.device_id === d.id), names = new Set(mine.map(p => p.port));
     let add = want.filter(p => !names.has(p));
     const extra = mine.filter(p => !want.includes(p.port));
@@ -494,6 +497,53 @@ router.post('/cctv-switches', wrap(async (req, res) => {
   const added = plan.filter(p => p.action === 'add').length, fixed = plan.filter(p => p.action === 'fix').length;
   await audit(req.user, 'NETMAP', null, `Network map "${site}": ${added} CCTV switch(es) added from the rack layout, ${fixed} corrected`);
   res.json({ ok: true, added, fixed });
+}));
+// ── CCTV switches not in a rack yet (added from the OT CCTV report: K2_CCTV_02, HKn_CCTV_02, CB36-BP05 …) → their cabinet, in a
+// free U next to the cabinet's CCTV switch (below first, then above; U1 = PDU and the top ODF are kept). POST { site, dry } (admins).
+function rackOfLocation(loc) {
+  const L = String(loc || '').toUpperCase();
+  let m = L.match(/MAIN RACK\s*-?\s*0?(\d+)/); if (m) return `MR-0${m[1]}`;
+  m = L.match(/CCTV\s*-?\s*KABIN\s*0*(\d+)/); if (m) return `CCTV-KABIN${Number(m[1])}`;
+  m = L.match(/HARICI\s*-?\s*KABIN\s*0*(\d+)/); if (m) return `HARICI-KABIN${Number(m[1])}`;
+  m = L.match(/IT\s*-?\s*KABIN\s*0*(\d+)/); if (m) return `IT-KABIN${Number(m[1])}`;
+  if (/K1\b|OFFICE BUILDING/.test(L)) return 'MR-01';   // CCTV core of the office building, next to the MR-01 CCTV switches
+  return '';
+}
+router.post('/racks/place-cctv', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  const site = str(req.body.site, 80);
+  const devs = await all(`SELECT d.* FROM net_devices d WHERE d.site = ? AND d.role LIKE '%switch%' AND (d.hostname LIKE '%CCTV%' OR d.alias LIKE '%CCTV%')
+    AND COALESCE(d.state, '') <> 'retired' AND NOT EXISTS (SELECT 1 FROM net_rack_items i WHERE i.device_id = d.id)`, [site]);
+  const racks = new Map((await all('SELECT * FROM net_racks WHERE site = ?', [site])).map(r => [r.name.toUpperCase(), r]));
+  const items = await all('SELECT i.*, d.hostname, d.alias FROM net_rack_items i JOIN net_racks r ON r.id = i.rack_id LEFT JOIN net_devices d ON d.id = i.device_id WHERE r.site = ?', [site]);
+  const rows = [], taken = new Map();
+  for (const d of devs.sort((a, b) => a.hostname.localeCompare(b.hostname))) {
+    const rn = rackOfLocation(d.location), r = rn && racks.get(rn.toUpperCase());
+    if (!r) { rows.push({ device_id: d.id, hostname: d.hostname, location: d.location, rack: rn || '', u: null, why: rn ? `no rack ${rn} in the Racks list` : 'location does not name a rack' }); continue; }
+    const mine = items.filter(i => i.rack_id === r.id);
+    if (!taken.has(r.id)) { const occ = new Set(); mine.forEach(i => { for (let u = i.u; u < i.u + i.height; u++) occ.add(u); }); taken.set(r.id, occ); }
+    const occ = taken.get(r.id), h = 1;
+    // Next to the cabinet's CCTV switch: below it first, then above (never U1 or the top U, where the PDU / ODF are).
+    const anchor = mine.filter(i => i.device_id && /CCTV/i.test(`${i.hostname} ${i.alias} ${i.label}`)).sort((a, b) => b.u - a.u)[0];
+    const start = anchor ? anchor.u : Math.ceil(r.units / 2), order = [];
+    for (let k = 1; k < r.units; k++) { if (start - k >= 2) order.push(start - k); if (start + k <= r.units - 1) order.push(start + k); }
+    const u = order.find(x => !occ.has(x));
+    if (!u) { rows.push({ device_id: d.id, hostname: d.hostname, location: d.location, rack: r.name, u: null, why: `${r.name} is full` }); continue; }
+    occ.add(u);
+    const mr = r.name.match(/^MR-0?(\d+)$/i);
+    rows.push({ device_id: d.id, hostname: d.hostname, rack_id: r.id, rack: r.name, u, next: anchor ? (anchor.hostname || anchor.label) : '',
+      location: `${mr ? `MAIN RACK - 0${mr[1]}` : r.name.replace(/^HARICI-/i, 'HARICI ')} (U${u})` });
+  }
+  if (req.body.dry) return res.json({ site, rows });
+  const stmts = [];
+  for (const x of rows.filter(x => x.u)) {
+    stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, device_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, ?, 1, 0)', args: [x.rack_id, x.device_id, 'device', x.hostname, x.u] });
+    stmts.push({ sql: "UPDATE net_devices SET location = ?, updated_at = datetime('now') WHERE id = ?", args: [x.location, x.device_id] });
+    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, x.hostname, '', '', `placed in ${x.rack} U${x.u}`, req.user.username] });
+  }
+  if (stmts.length) await batch(stmts);
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": ${rows.filter(x => x.u).length} CCTV switch(es) placed in their racks`);
+  res.json({ ok: true, placed: rows.filter(x => x.u).length, rows });
 }));
 router.post('/racks/build', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });

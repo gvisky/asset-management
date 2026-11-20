@@ -72,6 +72,7 @@ const NMRacks = (() => {
     const rackDraw = drawings.filter(d => /rack/i.test(d.category + ' ' + d.name));
     box.innerHTML = `<div class="rk-bar">${D().can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.addItem()">+ Item (patch panel, PDU …)</button><button class="btn btn-ghost btn-sm" onclick="NMRacks.addRack()">+ Rack / cabinet</button>` : ''}
         ${D().can.admin ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.build(false)" title="Place devices that are not in a rack yet">⚙ Place new devices</button>` : ''}
+        ${D().can.admin && cctvUnplaced() ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.placeCctv()" title="CCTV switches on the map but not in a rack (added from the OT CCTV report): put them in their cabinet next to its CCTV switch">🗄 Place ${cctvUnplaced()} CCTV switch${cctvUnplaced() > 1 ? 'es' : ''} in the racks</button>` : ''}
         ${D().can.admin && cctvCount() ? `<button class="btn btn-ghost btn-sm" onclick="NMRacks.addCctv()" title="The CCTV switches are only labels in the racks: add them to the map as devices with ports, linked to their rack slot">📹 ${cctvFix() && cctvCount() === cctvFix() ? `Correct ${cctvFix()} CCTV switch${cctvFix() > 1 ? 'es' : ''} (ports / model)` : `Add ${cctvCount() - cctvFix()} CCTV switch${cctvCount() - cctvFix() > 1 ? 'es' : ''} to the map${cctvFix() ? ` · correct ${cctvFix()}` : ''}`}</button>` : ''}
         ${rackDraw.length ? `<label class="text-sm"><input type="checkbox" ${showDrawing ? 'checked' : ''} onchange="NMRacks.toggleDrawing(this.checked)"> 📄 Show the document's rack drawing</label>` : ''}
         <span class="text-muted text-sm">Click a device to see its ports${D().can.edit ? ' · click a patch panel / PDU to edit it' : ''}</span><span id="rk-where" class="rk-where"></span>
@@ -169,9 +170,23 @@ const NMRacks = (() => {
   }
   // Rack items that are CCTV switches but not devices of the map yet.
   const CCTV = /^\s*[A-Z]{2}-\d+\/CCTV-(ASW|DSW)-\d+\s*(\(\w+\))?\s*$/i;
-  const want = (d) => (/9200/.test(d.model) ? 52 : /3560/.test(d.model) ? 14 : null);
-  const cctvFix = () => D().devices.filter(d => d.source === 'racks' && /CCTV-ASW/i.test(d.hostname) && (!/C9200L-48P|3560CX-12PD/.test(d.model) || D().ports.filter(p => p.device_id === d.id).length !== want(d))).length;
+  // Port count of a real model (same as lib/cctv-report.js portsOf); null = not a full model name (a rack-label guess).
+  const want = (d) => { const m = String(d.model || '').toUpperCase(); if (!/-/.test(m)) return null;
+    return /9[23]00L?-48|3850-48/.test(m) ? 52 : /9[23]00L?-24/.test(m) ? 28 : /3560CX-12/.test(m) ? 14 : /3560CX-8|C1[03]00-8/.test(m) ? 10 : /C1[03]00-16/.test(m) ? 18 : /C1[03]00-24|CBS2[25]0-24/.test(m) ? 28 : /3850-24XS/.test(m) ? 24 : null; };
+  const cctvFix = () => D().devices.filter(d => d.source === 'racks' && /CCTV-ASW/i.test(d.hostname) && (want(d) == null || D().ports.filter(p => p.device_id === d.id).length !== want(d))).length;
   const cctvCount = () => R.items.filter(i => !i.device_id && CCTV.test(i.label || '')).length + cctvFix();
+  const cctvUnplaced = () => D().devices.filter(d => /switch/i.test(d.role || '') && /CCTV/i.test(`${d.hostname} ${d.alias || ''}`) && d.state !== 'retired' && !R.items.some(i => i.device_id === d.id)).length;
+  async function placeCctv() {
+    try {
+      const r = await apiPost('/api/netmap/racks/place-cctv', { site: D().site, dry: true });
+      const ok = r.rows.filter(x => x.u), no = r.rows.filter(x => !x.u);
+      if (!ok.length) return showToast(no.length ? `${no.length} CCTV switch(es) cannot be placed: ${no.map(x => x.hostname + ' — ' + x.why).join('; ')}` : 'Nothing to place', 'error');
+      if (!confirm(`Place ${ok.length} CCTV switch${ok.length > 1 ? 'es' : ''} in the racks?\n\n${ok.map(x => `${x.hostname} → ${x.rack} U${x.u}${x.next ? ' (next to ' + x.next + ')' : ''}`).join('\n')}${no.length ? `\n\nNot placed: ${no.map(x => x.hostname + ' — ' + x.why).join('; ')}` : ''}\n\nYou can move one later in its item form (rack / U).`)) return;
+      const a = await apiPost('/api/netmap/racks/place-cctv', { site: D().site });
+      showToast(`${a.placed} CCTV switch${a.placed === 1 ? '' : 'es'} placed in the racks`);
+      await NM.reload(); await load(); render();
+    } catch (e) { showToast(errText(e, 'Could not place'), 'error'); }
+  }
   async function addCctv() {
     try {
       const r = await apiPost('/api/netmap/cctv-switches', { site: D().site, dry: true });
@@ -188,6 +203,6 @@ const NMRacks = (() => {
   function openDrawing(id) { if (window.NMPlans && NMPlans.open(id, drawings)) return; window.open('/api/netmap/drawing/' + id, '_blank'); }
   async function delDrawing(id) { if (!confirm('Delete this picture?')) return; await apiDelete('/api/netmap/drawing/' + id); await load(); renderDrawings(); }
 
-  return { async show(v) { await load(); v === 'draw' ? renderDrawings() : render(); }, build, addItem, saveItem, delItem, addRack, openDrawing, delDrawing, addCctv,
+  return { async show(v) { await load(); v === 'draw' ? renderDrawings() : render(); }, build, addItem, saveItem, delItem, addRack, openDrawing, delDrawing, addCctv, placeCctv,
     toggleDrawing: (on) => { showDrawing = on; render(); }, mark: () => mark(true), racksFor: (deviceId) => R.items.find(i => i.device_id === deviceId), drawings: () => drawings, reload: load };
 })();
