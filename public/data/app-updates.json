@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-20",
+    "title": "📷 CCTV import reads the OT CCTV report: real CCTV switches, recording servers, camera areas",
+    "items": [
+      "The 📷 CCTV camera list button also takes the OT team's CCTV report (camera export + CAMERA LIST + SWITCH LIST + SERVER DETAIL). Cameras: the area of each camera (e.g. \"HALL 1 - WETWIPE - SAMPLE\") goes to Role / Purpose; new cameras are added; cameras in the inventory but no longer in the list are shown and can be set to Stock.",
+      "CCTV switches: the first switch of each cabinet updates the map's switch from the racks — its real name (e.g. K2_CCTV_01), model, IP, MAC / serial — and its ports follow the real model (C9200L-24P = 24 + 4, 3560CX-12PD = 14, C1000 / C1300-16 = 18 …; ports with data are kept). The other switches (second switches HKn_CCTV_02, K2_CCTV_02, CB36-BP05, K3-03 …, the CCTV core / distribution switches) are added in their cabinet. Each gets an OT Switch record in the Server Inventory.",
+      "Recording servers (MR04-CCTV-SVR-1 … 4): added to the Server Inventory as OT \"CCTV recording server\" with IP, model, channels, cameras and recording days.",
+      "Login details written in the report's remarks are removed and never stored."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "OT: IT devices locked on the switch ports; new ⚠️ OT Needs Attention page",
     "items": [
       "Fix: OT editors could change a switch port of an IT device that is not a device of the map (e.g. GE 1/0/43 → K10-AP4-OUTDOOR). Now a port is IT's (locked for OT, on the map, the site plan and the server) when its device is an access point / printer / phone / PC by name, or an IT record of the Server Inventory (by Connected to, name or MAC); OT can't connect such a device to a port either. OT devices and free ports stay editable for OT editors.",

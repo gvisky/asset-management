@@ -276,6 +276,7 @@ router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
 // body { aoa, overrides: { "<group K5 / HK8 …>": CCTV switch id | 0 }, it_ot: 'OT' | 'IT', dry } → plan; without dry: adds the
 // cameras / fills empty fields of existing ones, returns { ids: { "<mac or name>": server id } } for the pictures. IT admins.
 const CctvImport = require('../lib/cctv-import');
+const CctvReport = require('../lib/cctv-report');
 router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
   const b = req.body || {};
   const aoa = Array.isArray(b.aoa) ? b.aoa.slice(0, 3000).map(r => (Array.isArray(r) ? r.slice(0, 60).map(c => String(c == null ? '' : c).slice(0, 300)) : [])) : [];
@@ -285,7 +286,13 @@ router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
   const site = String(b.site || (sites[0] && sites[0].site) || '').slice(0, 80);
   const devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
   const servers = await all('SELECT * FROM servers WHERE deleted_at IS NULL');
-  const p = CctvImport.plan(rows, { devices, servers }, b.overrides && typeof b.overrides === 'object' ? b.overrides : {});
+  // The OT report's other sheets (CAMERA LIST areas, SWITCH LIST, SERVER DETAIL) — lib/cctv-report.js.
+  const sheet = (x) => (Array.isArray(x) ? x.slice(0, 1000).map(r => (Array.isArray(r) ? r.slice(0, 30).map(c => String(c == null ? '' : c).slice(0, 400)) : [])) : []);
+  const rep = b.report && typeof b.report === 'object' ? { switches: sheet(b.report.switches), servers: sheet(b.report.servers), cameras: sheet(b.report.cameras) } : null;
+  const ports = rep ? await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]) : [];
+  const R = rep ? CctvReport.plan(rep, { devices, ports }) : null;
+  const p = CctvImport.plan(rows, { devices, servers }, b.overrides && typeof b.overrides === 'object' ? b.overrides : {}, R ? R.areas : {});
+  if (R) { p.report = { switches: R.switches, servers: R.servers }; p.issues = [...R.issues, ...p.issues]; }
   const itot = b.it_ot === 'IT' ? '' : 'OT';
   if (b.dry) return res.json({ site, switches: devices.filter(d => /switch/i.test(d.role || '') && d.state !== 'retired').map(d => ({ id: d.id, hostname: d.hostname, location: d.location }))
     .sort((x, y) => (/CCTV/.test(y.hostname) - /CCTV/.test(x.hostname)) || x.hostname.localeCompare(y.hostname)), ...p });
@@ -307,8 +314,65 @@ router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
       }
     }
   }
-  await audit(req.user, 'CREATE', null, `CCTV camera list: ${added} camera(s) added, ${updated} filled in Server Inventory`);
-  res.json({ ok: true, added, updated, ids });
+  // Cameras no longer in the list → Stock (only those ticked).
+  const goneIds = new Set((Array.isArray(b.gone) ? b.gone : []).map(Number));
+  let goneDone = 0;
+  for (const g of p.gone.filter(x => goneIds.has(x.id))) {
+    const line = `${ts}: not in the CCTV camera list any more → Stock by ${req.user.username}`;
+    await run(`UPDATE servers SET status = 'Stock', history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END WHERE id = ?`, [line, line, g.id]); goneDone++;
+  }
+  // OT report: CCTV switches (map + Server Inventory) and recording servers.
+  const done = { switchesUpdated: 0, switchesAdded: 0, nvr: 0 };
+  if (p.report && b.apply && b.apply.switches) {
+    const NM = require('./netmap'), sort = NM.util.portSort;
+    for (const sw of p.report.switches) {
+      if (sw.action === 'same') continue;
+      const notes = `${sw.hostname}${sw.status ? ' · ' + sw.status : ''}${sw.remark ? ' · ' + sw.remark : ''} (OT CCTV report)`.slice(0, 500);
+      let devId = sw.device_id;
+      if (sw.action === 'update') {
+        await run(`UPDATE net_devices SET alias = ?, model = COALESCE(NULLIF(?, ''), model), mgmt_ip = COALESCE(NULLIF(?, ''), mgmt_ip), mac = COALESCE(NULLIF(?, ''), mac),
+            serial = COALESCE(NULLIF(?, ''), serial), notes = ?, updated_at = datetime('now') WHERE id = ?`, [sw.hostname, sw.model, sw.ip, sw.mac, sw.serial, notes, devId]);
+        for (const pt of sw.add) await run('INSERT OR IGNORE INTO net_ports (device_id, port, sort) VALUES (?, ?, ?)', [devId, pt, sort(pt)]);
+        for (const id of sw.remove) await run("DELETE FROM net_ports WHERE id = ? AND COALESCE(peer_host, '') = '' AND COALESCE(note, '') = ''", [id]);
+        await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [site, sw.map, '', '', `OT CCTV report: ${sw.changes.join('; ')}`, req.user.username]);
+        done.switchesUpdated++;
+      } else {
+        if (await get('SELECT id FROM net_devices WHERE site = ? AND hostname = ?', [site, sw.hostname])) continue;
+        const r = await run(`INSERT INTO net_devices (site, hostname, alias, role, model, mgmt_ip, mac, serial, location, notes, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'cctv report')`,
+          [site, sw.hostname, 'CCTV switch', sw.role, sw.model, sw.ip, sw.mac, sw.serial, sw.location, notes]);
+        devId = Number(r.lastInsertRowid);
+        for (const pt of sw.ports) await run('INSERT OR IGNORE INTO net_ports (device_id, port, sort) VALUES (?, ?, ?)', [devId, pt, sort(pt)]);
+        await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [site, sw.hostname, '', '', 'device added (OT CCTV report)', req.user.username]);
+        done.switchesAdded++;
+      }
+      // Its Server Inventory record (OT), found by serial / MAC / name, else added; linked to the map device.
+      const hx = (v) => String(v || '').replace(/[^0-9a-f]/gi, '').toUpperCase();
+      const recs = await all("SELECT id, hostname, serial_no, mac FROM servers WHERE deleted_at IS NULL AND (category = 'Switch' OR it_ot = 'OT')");
+      const rec = recs.find(x => sw.serial && hx(x.serial_no) === hx(sw.serial)) || recs.find(x => sw.mac && hx(x.mac) === hx(sw.mac)) || recs.find(x => String(x.hostname || '').toUpperCase() === sw.hostname);
+      const loc = (await get('SELECT location FROM net_devices WHERE id = ?', [devId]) || {}).location || '';
+      let sid = rec && rec.id;
+      if (rec) await run(`UPDATE servers SET hostname = COALESCE(NULLIF(hostname, ''), ?), brand_model = ?, producer = 'Cisco', category = 'Switch', ip_address = COALESCE(NULLIF(?, ''), ip_address),
+          mac = COALESCE(NULLIF(?, ''), mac), serial_no = COALESCE(NULLIF(serial_no, ''), ?), it_ot = 'OT', location = COALESCE(NULLIF(location, ''), ?) WHERE id = ?`,
+        [sw.hostname, 'Cisco ' + sw.model, sw.ip, sw.mac, sw.serial, loc, rec.id]);
+      else { const r = await run(`INSERT INTO servers (country, hostname, brand_model, producer, category, ip_address, mac, serial_no, location, status, it_ot, remark, history_usage)
+          VALUES (?, ?, ?, 'Cisco', 'Switch', ?, ?, ?, ?, 'Active', 'OT', ?, ?)`, [country, sw.hostname, 'Cisco ' + sw.model, sw.ip, sw.mac, sw.serial, loc, 'CCTV switch (OT CCTV report)', `${ts}: added from the OT CCTV report by ${req.user.username}`]);
+        sid = Number(r.lastInsertRowid); }
+      await run('UPDATE net_devices SET server_id = ? WHERE id = ? AND server_id IS NULL', [sid, devId]);
+    }
+  }
+  if (p.report && b.apply && b.apply.servers) {
+    for (const s of p.report.servers) {
+      const role = `NVR · ${s.channels} channels (${s.active} active, ${s.spare} spare) · ${s.cameras} cameras · recording ${s.record}`.slice(0, 200);
+      const model = /R540/i.test(s.model) ? 'Dell PowerEdge R540' : s.model;
+      const ex = await get('SELECT id FROM servers WHERE deleted_at IS NULL AND UPPER(hostname) = ?', [s.name]);
+      if (ex) await run(`UPDATE servers SET ip_address = ?, role = ?, brand_model = COALESCE(NULLIF(brand_model, ''), ?), category = COALESCE(NULLIF(category, ''), 'CCTV recording server'), it_ot = 'OT' WHERE id = ?`, [s.ip, role, model, ex.id]);
+      else await run(`INSERT INTO servers (country, hostname, brand_model, producer, category, ip_address, role, location, status, it_ot, remark, history_usage) VALUES (?, ?, ?, 'Dell', 'CCTV recording server', ?, ?, ?, 'Active', 'OT', ?, ?)`,
+        [country, s.name, model, s.ip, role, /^MR0?4/i.test(s.name) ? 'MAIN RACK - 04' : '', [s.camStatus, s.note].filter(Boolean).join(' · '), `${ts}: added from the OT CCTV report by ${req.user.username}`]);
+      done.nvr++;
+    }
+  }
+  await audit(req.user, 'CREATE', null, `CCTV camera list: ${added} camera(s) added, ${updated} filled, ${goneDone} set to Stock${p.report ? `; OT report: ${done.switchesUpdated} switch(es) updated, ${done.switchesAdded} added, ${done.nvr} recording server(s)` : ''}`);
+  res.json({ ok: true, added, updated, ids, gone: goneDone, ...done });
 }));
 
 // ── Pictures of devices: POST /api/servers/photos { items: [{ server_id, mime, b64 }], source } (IT admins; ≤ 300 KB each,
