@@ -366,7 +366,8 @@ document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() =
   // OT team: read-only list of the OT devices.
   if (window.CURRENT_USER.team === 'OT' && window.CURRENT_USER.role === 'editor') document.getElementById('btn-portlinks').style.display = '';
   if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-t=phys]'); if (s) s.textContent = '🏭 OT devices'; }
-  const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v); }, 150); });
+  const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v);
+  const ed = Number(new URLSearchParams(location.search).get('edit')); if (ed) onEdit(ed); /* from ⚠️ OT Needs Attention */ }, 150); });
 let nsChoose = {};
 async function openNetSync(keepSite) {
   let sites = [];

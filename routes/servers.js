@@ -164,6 +164,45 @@ router.get('/needs-info', wrap(async (req, res) => {
 }));
 
 // ── GET /api/servers/:id ─────────────────────────────────────────────────────
+// ── GET /api/servers/ot-attention — Needs Attention for the OT devices (OT team, IT): what to check and fix ────────────────────
+// Each group: { key, title, fix, where: 'record' | 'device', rows: [{ id, hostname, detail }] }. "device" = fixed on the device
+// itself (firmware, HTTPS, DNS, network settings) — then upload the camera list again to refresh.
+router.get('/ot-attention', wrap(async (req, res) => {
+  if (!(isOT(req) || req.user.team === 'IT')) return res.status(403).json({ error: 'OT team and IT only' });
+  const cf = countryFilter(req);
+  const rows = await all(`SELECT id, hostname, category, ip_address, mac, serial_no, os, status, switch_port, extra, location FROM servers
+    WHERE deleted_at IS NULL AND it_ot = 'OT'${cf.clause ? ' AND ' + cf.clause : ''} ORDER BY hostname`, cf.params);
+  const ex = (r) => { try { return JSON.parse(r.extra || '{}') || {}; } catch { return {}; } };
+  const name = (r) => r.hostname || `#${r.id}`;
+  const groups = [];
+  const add = (key, title, fix, where, list) => { if (list.length) groups.push({ key, title, fix, where, rows: list }); };
+  const dupBy = (f) => { const m = new Map(); rows.forEach(r => { const v = String(f(r) || '').trim().toUpperCase(); if (v) m.set(v, [...(m.get(v) || []), r]); }); return [...m.values()].filter(l => l.length > 1); };
+  add('dup_name', 'Same name on two or more devices', 'Rename one of them (on the NVR / device and here).', 'record',
+    dupBy(r => r.hostname).flatMap(l => l.map(r => ({ id: r.id, hostname: name(r), detail: `${l.length}× "${r.hostname}" · ${r.ip_address || 'no IP'}` }))));
+  add('dup_ip', 'Same IP address on two or more devices', 'One of them has a wrong IP — correct the device or the record.', 'record',
+    dupBy(r => r.ip_address).flatMap(l => l.map(r => ({ id: r.id, hostname: name(r), detail: `${r.ip_address} (${l.length}×)` }))));
+  add('dup_mac', 'Same MAC address on two or more records', 'Usually the same device recorded twice — keep one.', 'record',
+    dupBy(r => String(r.mac || '').replace(/[^0-9a-f]/gi, '')).flatMap(l => l.map(r => ({ id: r.id, hostname: name(r), detail: `${r.mac} (${l.length}×)` }))));
+  add('old_fw', 'Old firmware (1.x, 2019–2020)', 'Update the firmware on the device (Wisenet Device Manager / web page), then upload the camera list again.', 'device',
+    rows.filter(r => /^FW\s*1\./i.test(r.os || '')).map(r => ({ id: r.id, hostname: name(r), detail: r.os })));
+  add('http', 'Web page on HTTP without HTTPS', 'Turn on HTTPS (and turn off plain HTTP) on the device.', 'device',
+    rows.filter(r => { const e = ex(r); return /enable/i.test(e.http || '') && /disable/i.test(e.https || ''); }).map(r => ({ id: r.id, hostname: name(r), detail: `${r.ip_address} · HTTP on, HTTPS off` })));
+  const cams = rows.filter(r => ex(r).mask || ex(r).gw), key = (r) => `${ex(r).mask} / ${ex(r).gw}`;
+  const cnt = new Map(); cams.forEach(r => cnt.set(key(r), (cnt.get(key(r)) || 0) + 1));
+  const top = [...cnt].sort((a, b) => b[1] - a[1])[0];
+  if (cnt.size > 1) add('net', `Network settings differ (most use mask / gateway ${top[0]})`, 'Set the same subnet mask and gateway on all cameras of the CCTV network.', 'device',
+    cams.filter(r => key(r) !== top[0]).map(r => ({ id: r.id, hostname: name(r), detail: `${r.ip_address} · mask / gateway ${key(r)}` })));
+  add('dns', 'Factory DNS (168.126.63.x, Korea Telecom)', 'Set your own DNS server on the device (or none if it needs no DNS).', 'device',
+    rows.filter(r => (ex(r).dns || []).some(d => /^168\.126\.63\./.test(d))).map(r => ({ id: r.id, hostname: name(r), detail: (ex(r).dns || []).join(' / ') })));
+  add('broken', 'Status not OK', 'Check the device; set it back to Active when it works.', 'record',
+    rows.filter(r => r.status && r.status !== 'Active' && r.status !== 'Stock').map(r => ({ id: r.id, hostname: name(r), detail: r.status })));
+  add('missing', 'Missing IP, MAC or serial', 'Fill in what is missing (✏️).', 'record',
+    rows.filter(r => !r.ip_address || !r.mac || !r.serial_no).map(r => ({ id: r.id, hostname: name(r), detail: ['IP', 'MAC', 'serial'].filter((_, i) => ![r.ip_address, r.mac, r.serial_no][i]).join(', ') + ' missing' })));
+  add('port', 'Switch port not known', 'Set the port it is plugged into: in "Connected to" (✏️) or on the switch port in the Network map.', 'record',
+    rows.filter(r => !/\S+\s+\S*\d+\/\d+/.test(r.switch_port || '')).map(r => ({ id: r.id, hostname: name(r), detail: r.switch_port ? `on ${r.switch_port}, port unknown` : 'not connected to a switch' })));
+  res.json({ total: rows.length, groups, canEdit: (isOT(req) && req.user.role === 'editor') || (req.user.team === 'IT' && ['admin', 'editor'].includes(req.user.role)) });
+}));
+
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);
   if (!row || (isOT(req) && row.it_ot !== 'OT')) return res.status(404).json({ error: 'Server not found' });

@@ -31,7 +31,8 @@ const NM = (() => {
   // A network device — on the map, or (OT view) one OT does not see such as an AP or another switch.
   const isNet = (h) => byHost.has(h) || !!(h && D && D.net_hosts && D.net_hosts.includes(h));
   // OT editor: may change a port that is free or goes to an end device.
-  const otPortOk = (p) => !!(D.can.port && !isNet(p.peer_host));
+  const itWhy = (p) => ((D.it_ports || []).find(x => x.id === p.id) || {}).why || '';
+  const otPortOk = (p) => !!(D.can.port && !isNet(p.peer_host) && !itWhy(p));
 
   // ── Data ──────────────────────────────────────────────────────────────────
   // OT view (Operation Technology): only the Kabin switches and what is cabled to them, read-only. The OT team always
@@ -448,7 +449,7 @@ const NM = (() => {
         <div class="form-group"><label class="form-label">Note</label><input class="form-control" id="pp-note" value="${esc(p.note)}" ${ro}></div>
       </div>
       <div id="pp-warn" class="text-sm"></div>
-      ${D.can.port && !canSave ? `<p class="text-sm" style="color:#9a3412;margin:6px 0 0">🔒 ${isNet(p.peer_host) ? `Cabled to the network device <b>${esc(p.peer_host)}</b> — only IT can change this port.` : 'Only IT can change this port.'}</p>` : ''}
+      ${D.can.port && !canSave ? `<p class="text-sm" style="color:#9a3412;margin:6px 0 0">🔒 ${isNet(p.peer_host) ? `Cabled to the network device <b>${esc(p.peer_host)}</b> — only IT can change this port.` : itWhy(p) ? `${esc(itWhy(p))} — only IT can change this port.` : 'Only IT can change this port.'}</p>` : ''}
       ${ot ? '<p class="text-muted text-sm" style="margin:6px 0 0">You can set the end device on this port (camera, access control, PC …), its VLAN, patch point and note. Ports to network devices are for IT.</p>' : ''}
       ${self.NMFaces ? `<details class="nm-trace-box" open><summary>🔎 Cable path</summary>${NMFaces.trace(d, p)}</details>` : ''}
       ${D.can.edit ? `<div class="nm-move"><label class="form-label">⇄ Move this cable to another port of ${esc(d.hostname)} (the two ports swap)</label>

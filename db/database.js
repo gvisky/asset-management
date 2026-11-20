@@ -1307,7 +1307,7 @@ async function migrate() {
   if (!svcols.includes('net_info')) await backend.run("ALTER TABLE servers ADD COLUMN net_info TEXT DEFAULT ''");
   // IT / OT split of the Server Inventory (OT = Operation Technology: access control, PLCs, gateways, kiosks …) and the OT
   // device list's network details: MAC, VLAN, OT system (ACS / PMS / OEE / MMS) and the switch port it hangs off.
-  for (const col of ['it_ot', 'mac', 'vlan', 'ot_system', 'switch_port']) if (!svcols.includes(col)) await backend.run(`ALTER TABLE servers ADD COLUMN ${col} TEXT DEFAULT ''`);
+  for (const col of ['it_ot', 'mac', 'vlan', 'ot_system', 'switch_port', 'extra']) if (!svcols.includes(col)) await backend.run(`ALTER TABLE servers ADD COLUMN ${col} TEXT DEFAULT ''`);
   // Picture of a Server Inventory device (CCTV camera snapshot from the camera list, …): one per device, replaced on re-import.
   await backend.script(`CREATE TABLE IF NOT EXISTS server_photos (
       server_id INTEGER PRIMARY KEY, mime TEXT DEFAULT 'image/jpeg', data_b64 TEXT DEFAULT '', size INTEGER DEFAULT 0,
