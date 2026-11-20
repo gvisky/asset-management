@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-20",
+    "title": "Site plan: click a Kabin to see and edit everything plugged into it",
+    "items": [
+      "Drawings → Site — outdoor cabinets & fibre routes (and the other plans): click a cabinet (IT KABIN, HARICI KABIN …) and its popup now lists, per switch in that cabinet, every device plugged into it — port number, icon, name, OT devices in orange. Click a device to open its port right on top of the plan and edit it (name, VLAN, patch, note …); the popup refreshes after saving. IT editors can edit any port, OT editors the end-device ports of their switches (ports to network devices stay IT's).",
+      "The plugged-in devices also show on the Topology in the OT view when an OT user clicks an access switch."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Topology: every device plugged into an access switch; OT editors get 🔌 Switch ports",
     "items": [
       "Network map → Topology: click an access switch (focus view) and everything plugged into it is drawn below it on a bus — the Server Inventory devices of each port, else the name on the port — with the port number, an icon (camera, printer, access control, kiosk, TV, PLC, Moxa, gateway, sensor …) and OT devices in orange. Click one to open its port. Other switches show only the network devices as before.",
