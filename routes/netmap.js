@@ -500,15 +500,7 @@ router.post('/cctv-switches', wrap(async (req, res) => {
 }));
 // ── CCTV switches not in a rack yet (added from the OT CCTV report: K2_CCTV_02, HKn_CCTV_02, CB36-BP05 …) → their cabinet, in a
 // free U next to the cabinet's CCTV switch (below first, then above; U1 = PDU and the top ODF are kept). POST { site, dry } (admins).
-function rackOfLocation(loc) {
-  const L = String(loc || '').toUpperCase();
-  let m = L.match(/MAIN RACK\s*-?\s*0?(\d+)/); if (m) return `MR-0${m[1]}`;
-  m = L.match(/CCTV\s*-?\s*KABIN\s*0*(\d+)/); if (m) return `CCTV-KABIN${Number(m[1])}`;
-  m = L.match(/HARICI\s*-?\s*KABIN\s*0*(\d+)/); if (m) return `HARICI-KABIN${Number(m[1])}`;
-  m = L.match(/IT\s*-?\s*KABIN\s*0*(\d+)/); if (m) return `IT-KABIN${Number(m[1])}`;
-  if (/K1\b|OFFICE BUILDING/.test(L)) return 'MR-01';   // CCTV core of the office building, next to the MR-01 CCTV switches
-  return '';
-}
+const { rackOfLocation, plan: cctvLinkPlan } = require('../lib/cctv-links');
 router.post('/racks/place-cctv', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const site = str(req.body.site, 80);
@@ -544,6 +536,27 @@ router.post('/racks/place-cctv', wrap(async (req, res) => {
   if (stmts.length) await batch(stmts);
   await audit(req.user, 'NETMAP', null, `Network map "${site}": ${rows.filter(x => x.u).length} CCTV switch(es) placed in their racks`);
   res.json({ ok: true, placed: rows.filter(x => x.u).length, rows });
+}));
+// ── CCTV uplinks: every CCTV switch linked to the one above it (cabinet's first switch → CCTV distribution → CCTV core, more
+// switches of a cabinet → its first one) so the CCTV network is one tree on the topology. POST { site, dry } (admins).
+router.post('/cctv-links', wrap(async (req, res) => {
+  if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+  const site = str(req.body.site, 80);
+  const devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  const ports = await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]);
+  const fibre = (await all("SELECT links FROM net_drawings WHERE site = ? AND COALESCE(links, '') <> ''", [site]))
+    .flatMap(r => { try { const l = JSON.parse(r.links); return Array.isArray(l) ? l : []; } catch { return []; } });
+  const rows = cctvLinkPlan(devices, ports, fibre);
+  if (req.body.dry) return res.json({ site, rows });
+  const ok = rows.filter(r => r.port_id), stmts = [];
+  for (const r of ok) {
+    stmts.push({ sql: "UPDATE net_ports SET peer_host = ?, peer_port = '', cable = 'SFP', mode = 'trunk', note = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ? AND COALESCE(peer_host, '') = ''",
+      args: [r.peer, r.note.slice(0, 300), req.user.username, r.port_id] });
+    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, r.hostname, r.port, '(free)', `${r.peer} trunk (CCTV uplink)`, req.user.username] });
+  }
+  if (stmts.length) await batch(stmts);
+  await audit(req.user, 'NETMAP', null, `Network map "${site}": ${ok.length} CCTV uplink(s) linked`);
+  res.json({ ok: true, linked: ok.length, rows });
 }));
 router.post('/racks/build', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });

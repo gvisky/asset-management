@@ -49,6 +49,7 @@ const NM = (() => {
     $('nm-import').style.display = D.can.admin ? '' : 'none';
     $('nm-import-x').style.display = D.can.admin ? '' : 'none';
     $('nm-add').style.display = D.can.edit && D.site ? '' : 'none';
+    const nC = cctvLoose(); $('nm-cctvlink').style.display = D.can.admin && D.view !== 'ot' && nC ? '' : 'none'; $('nm-cctvlink').textContent = `🔗 Connect ${nC} CCTV switch${nC > 1 ? 'es' : ''}`;
     $('nm-sub').textContent = D.devices.length ? `${D.view === 'ot' ? '· OT view ' : ''}· ${D.devices.length} devices · ${D.ports.length} ports · ${links().length} links` : '· ports & links';
     if (sel && !byId.has(sel)) sel = null;
     autoPlace(false); renderList(); renderTopo(); renderDevice();
@@ -77,6 +78,25 @@ const NM = (() => {
       out.push({ a, ap: p.port, b: p.peer_host, bp: p.peer_port, cable: p.cable, grp: p.grp });
     }
     return out;
+  }
+
+  // CCTV switches with no line to another switch (added from the OT CCTV report / rack labels): 🔗 links them up.
+  const isCctvSw = (d) => /switch/i.test(d.role || '') && live(d) && /CCTV/i.test(`${d.hostname} ${d.alias || ''}`);
+  function cctvLoose() {
+    const sw = new Set(D.devices.filter(d => /switch/i.test(d.role || '')).map(d => d.hostname)), on = new Set();
+    for (const l of links()) if (sw.has(l.a) && sw.has(l.b)) { on.add(l.a); on.add(l.b); }
+    return D.devices.filter(d => isCctvSw(d) && !on.has(d.hostname)).length;
+  }
+  async function linkCctv() {
+    try {
+      const r = await apiPost('/api/netmap/cctv-links', { site: D.site, dry: true });
+      const ok = r.rows.filter(x => x.port), no = r.rows.filter(x => !x.port);
+      if (!ok.length) return showToast(no.length ? `Cannot link: ${no.map(x => x.name + ' — ' + x.error).join('; ')}` : 'All CCTV switches are linked already', no.length ? 'error' : undefined);
+      if (!confirm(`Link ${ok.length} CCTV uplink${ok.length > 1 ? 's' : ''}?\n\n${ok.map(x => `${x.name} ${x.port} → ${x.peer_name}`).join('\n')}${no.length ? `\n\nNot linked: ${no.map(x => x.name + ' — ' + x.error).join('; ')}` : ''}\n\nThe OT report has no port-to-port list: each link is set on the switch's first free SFP uplink, with a note to check the port on the other side. Cabinets go to CCTV_DIST_01 — change a port to DIST_02 where it is cabled there.`)) return;
+      const a = await apiPost('/api/netmap/cctv-links', { site: D.site });
+      showToast(`${a.linked} CCTV uplink${a.linked === 1 ? '' : 's'} linked`);
+      await load(D.site); fit();
+    } catch (e) { showToast(errText(e, 'Could not link'), 'error'); }
   }
 
   // ── Device list (left) ────────────────────────────────────────────────────
@@ -639,6 +659,7 @@ const NM = (() => {
     $('nm-xfile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importWorkbook(f); };
     $('nm-export').onclick = exportCsv;
     $('nm-add').onclick = () => editDevice(0);
+    $('nm-cctvlink').onclick = linkCctv;
     document.querySelectorAll('.nm-tools .nm-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.v); });
     const want = new URLSearchParams(location.search).get('host');
     load().then(() => { const d = want && byHost.get(want.toUpperCase()); if (d) select(d.id); else fit(); }).catch(() => { $('nm-svg').innerHTML = '<text x="800" y="420" text-anchor="middle" fill="#b91c1c">Could not load</text>'; });
