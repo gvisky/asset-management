@@ -117,7 +117,8 @@ const desc = (p) => (p && (p.peer_host || p.peer_port || p.patch) ? `${p.peer_ho
 // users without Asset Inventory access (other than OT) get none.
 async function records(req, otOnly) {
   if (req.user.asset_access === 0 && !isOT(req)) return [];
-  return all(`SELECT id, hostname, category, switch_port, it_ot FROM servers WHERE deleted_at IS NULL AND COALESCE(switch_port, '') <> ''${otOnly || isOT(req) ? " AND it_ot = 'OT'" : ''}`);
+  // Records cabled to a switch (end devices on the map) + every camera, also without a switch yet (camera pins on drawings).
+  return all(`SELECT id, hostname, category, switch_port, it_ot FROM servers WHERE deleted_at IS NULL AND (COALESCE(switch_port, '') <> '' OR category LIKE '%camera%')${otOnly || isOT(req) ? " AND it_ot = 'OT'" : ''}`);
 }
 router.get('/', wrap(async (req, res) => {
   const sites = (await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY site')).map(r => ({ site: r.site, devices: r.n }));
