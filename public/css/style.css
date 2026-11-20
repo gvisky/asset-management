@@ -1499,8 +1499,10 @@ tr.lc-rest td { opacity: .55; }
 
 /* Server Inventory — IT / OT */
 .si-ot { display: inline-block; font-size: 10.5px; font-weight: 700; color: #9a3412; background: #ffedd5; border-radius: 4px; padding: 0 5px; vertical-align: 1px; }
-html.is-ot .si-ed, html.is-ot #btn-add, html.is-ot #btn-missing, html.is-ot #btn-netsync, html.is-ot #btn-otimport, html.is-ot .si-itot,
+html.is-ot .si-ed, html.is-ot-viewer #btn-add, html.is-ot #btn-missing, html.is-ot #btn-netsync, html.is-ot #btn-otimport, html.is-ot .si-itot,
 html.is-ot .si-tabs [data-t="vm"], html.is-ot-viewer #view-edit-btn, html.is-ot-viewer .si-ed-e, html.is-ot #f-it_ot, html.is-ot .form-group:has(#f-it_ot), html.is-ot .si-maint, html.is-ot #summary-grid, html.is-ot .topbar button[onclick*="ServerUsage"] { display: none !important; }
 .oi-t td { vertical-align: top; } .oi-t select { padding: 3px 6px; font-size: 12.5px; }
 .oi-k { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 9px; padding: 0 7px; background: #e2e8f0; color: #334155; white-space: nowrap; }
 .oi-k.add { background: #dcfce7; color: #166534; } .oi-k.diff { background: #fef3c7; color: #92400e; } .oi-k.map { background: #dbeafe; color: #1e40af; }
+.nm-rec { font-size: 11.5px; color: #1e40af; background: #dbeafe; border-radius: 4px; padding: 0 5px; text-decoration: none; white-space: nowrap; }
+.nm-rec.ot { color: #9a3412; background: #ffedd5; }

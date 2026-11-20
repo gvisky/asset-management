@@ -337,6 +337,9 @@ const NM = (() => {
       return `<div class="fp-row"><span class="fp-lbl">${esc(k.trim())}</span><div class="fp-grid"><div>${top.map(btn).join('')}</div><div>${bot.map(btn).join('')}</div></div></div>`;
     }).join('');
   }
+  // Server Inventory records whose "Connected to" is this port (📦 opens the record).
+  const recLinks = (d, p) => { const k = `${d.hostname} ${p.port}`; const rs = (D.records || []).filter(r => r.switch_port === k || String(r.switch_port).startsWith(k + ' '));
+    return rs.map(r => ` <a class="nm-rec${r.it_ot === 'OT' ? ' ot' : ''}" href="/server-inventory.html?view=${r.id}" onclick="event.stopPropagation()" title="Server Inventory #${r.id}${r.category ? ' · ' + esc(r.category) : ''}${r.it_ot === 'OT' ? ' · OT' : ''}">📦 ${esc(r.hostname || '#' + r.id)}</a>`).join(''); };
   const ipList = (d) => { let l = []; try { l = JSON.parse(d.ips || '[]'); } catch {} return l.length || d.services ? `<div class="nm-ips">${l.map(x => `<span><i>${esc(x.name)}</i> ${esc(x.ip)}</span>`).join('')}${d.services ? `<span><i>services</i> ${esc(d.services)}</span>` : ''}</div>` : ''; };
   function renderDevice(linkKey) {
     const box = $('nm-dev');
@@ -360,7 +363,7 @@ const NM = (() => {
         ${D.can.edit ? `<button class="btn btn-ghost btn-sm" onclick="NM.addPort(${d.id})">+ Port</button>` : ''}</div>
       <div class="table-wrap nm-ptbl"><table><thead><tr><th>Port</th><th>Connected to</th><th>Far port</th><th>Cable</th><th>Mode</th><th>VLAN</th><th>Po</th><th>Patch</th><th>Note</th></tr></thead><tbody>
         ${shown.map(p => `<tr class="${hl.has(p.port) ? 'hl' : ''}" onclick="NM.openPort(${d.id}, ${jsArg(p.port)})"><td><span class="dot ${portClass(p)}"></span><b>${esc(p.port)}</b></td>
-          <td>${known(p.peer_host) ? `<a href="#" onclick="event.stopPropagation();NM.select(${byHost.get(p.peer_host).id}, true);return false">${esc(p.peer_host)}</a>` : esc(p.peer_host)}</td><td>${esc(p.peer_port)}</td>
+          <td>${known(p.peer_host) ? `<a href="#" onclick="event.stopPropagation();NM.select(${byHost.get(p.peer_host).id}, true);return false">${esc(p.peer_host)}</a>` : esc(p.peer_host)}${recLinks(d, p)}</td><td>${esc(p.peer_port)}</td>
           <td>${esc(p.cable)}</td><td>${esc(p.mode)}</td><td>${esc(p.vlan)}</td><td>${esc(p.grp)}</td><td>${p.patch && /^[DT]\d+$/i.test(p.patch) ? `<a href="#" onclick="event.stopPropagation();NM.outlet(${jsArg(p.patch)});return false">${esc(p.patch)}</a>` : esc(p.patch)}</td><td class="text-sm">${esc(p.note)}</td></tr>`).join('') || '<tr><td colspan="9" class="empty-state">No ports here.</td></tr>'}
       </tbody></table></div>`;
   }

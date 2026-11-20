@@ -19,8 +19,8 @@ const isOT = (req) => !!req.user && req.user.team === 'OT';
 router.use((req, res, next) => {
   if (isOT(req)) {
     if (req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path)) return next();
-    if (req.method === 'PUT' && /^\/\d+$/.test(req.path) && req.user.role === 'editor') return next();
-    return res.status(403).json({ error: 'OT: the OT devices only (editors can edit them)' });
+    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && req.path === '/'))) return next();
+    return res.status(403).json({ error: 'OT: the OT devices only (editors can add and edit them)' });
   }
   if (req.user && req.user.asset_access === 0) {
     return res.status(403).json({ error: 'No access to Asset Inventory' });
@@ -233,13 +233,57 @@ router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
   res.json({ ok: true, ...done });
 }));
 
+// ── POST /api/servers/port-links — which access-switch port each device is on (lib/port-links.js) ──────────────────
+// body { site, dry } → plan; { site, link: [server ids], add: [{ port_id, name, it_ot, category }] } → apply (IT admins):
+// writes "Connected to" (switch_port, + location when empty) and adds the devices cabled to an access switch that have no record.
+const PortLinks = require('../lib/port-links');
+router.post('/port-links', requireITAdmin, wrap(async (req, res) => {
+  const b = req.body || {};
+  const sites = await all('SELECT site, COUNT(*) AS n FROM net_devices GROUP BY site ORDER BY n DESC');
+  const site = String(b.site || (sites[0] && sites[0].site) || '').slice(0, 80);
+  const devices = await all('SELECT * FROM net_devices WHERE site = ?', [site]);
+  const ports = await all('SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ?', [site]);
+  const cf = countryFilter(req);
+  const servers = await all(`SELECT * FROM servers WHERE deleted_at IS NULL${cf.clause ? ' AND ' + cf.clause : ''}`, cf.params);
+  const p = PortLinks.plan({ devices, ports, servers });
+  if (b.dry) return res.json({ site, sites: sites.map(x => x.site), ...p });
+  const ts = new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const HIST = `history_usage = CASE WHEN history_usage IS NULL OR history_usage = '' THEN ? ELSE history_usage || char(10) || ? END`;
+  const want = new Set((Array.isArray(b.link) ? b.link : []).map(Number));
+  const stmts = []; let linked = 0, added = 0;
+  for (const l of p.links) {
+    if (!want.has(l.server_id) || !l.change) continue;
+    const line = `${ts}: Connected to "${l.from || '∅'}"→"${l.to}" (network map: ${l.how}) by ${req.user.username}`;
+    stmts.push({ sql: `UPDATE servers SET switch_port = ?, location = CASE WHEN COALESCE(location, '') = '' THEN ? ELSE location END, ${HIST} WHERE id = ?`, args: [l.to, l.location, line, line, l.server_id] });
+    linked++;
+  }
+  const byPort = new Map(p.missing.map(m => [m.port_id, m]));
+  const country = /thai/i.test(site) ? 'Thailand' : /malay/i.test(site) ? 'Malaysia' : 'Vietnam';
+  for (const a of (Array.isArray(b.add) ? b.add : []).slice(0, 500)) {
+    const m = byPort.get(Number(a.port_id)); if (!m) continue;
+    const name = String(a.name || m.name).trim().slice(0, 80) || m.name;
+    const itot = a.it_ot === 'OT' ? 'OT' : '';
+    stmts.push({ sql: `INSERT INTO servers (country, location, hostname, category, ip_address, mac, vlan, switch_port, it_ot, status, remark, history_usage)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?)`,
+      args: [country, m.location, name, String(a.category || m.category).slice(0, 60), m.ip, m.mac, m.vlan, `${m.switch} ${m.port}`, itot,
+        `From the network map (${m.switch} ${m.port})${m.note ? ': ' + m.note : ''}`.slice(0, 500), `${ts}: added from the network map (access-switch port) by ${req.user.username}`] });
+    added++;
+  }
+  if (stmts.length) await batch(stmts);
+  await audit(req.user, 'UPDATE', null, `Switch ports: ${linked} device(s) linked to their access-switch port, ${added} device(s) added from the network map "${site}"`);
+  res.json({ ok: true, linked, added });
+}));
+
+
 // ── POST /api/servers — create (admin/editor) ─────────────────────────────────
 router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const v = {};
   FIELDS.forEach(f => v[f] = req.body[f] != null ? req.body[f] : '');
+  if (isOT(req)) v.it_ot = 'OT';   // a device added by the OT team is an OT device
   if (!v.status) v.status = 'Active';
   const finalCountry = resolveCountry(req, req.body.country);
-  const history_usage = req.body.history_usage || '';
+  const ts0 = new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const history_usage = req.body.history_usage || `${ts0} UTC: created by ${req.user.username}${isOT(req) ? ' (OT team)' : ''}`;
 
   const cols = ['country', ...FIELDS, 'history_usage'];
   const vals = [finalCountry, ...FIELDS.map(f => v[f]), history_usage];
