@@ -48,7 +48,7 @@ router.post('/', wrap(async (req, res) => {
 
   const result = await run(
     'INSERT INTO users (username, full_name, password_hash, role, country, team, asset_access) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [username.trim(), full_name.trim(), hashPassword(password), normTeam(team) === 'OT' && role === 'admin' ? 'editor' : role, normCountry(country), normTeam(team), normTeam(team) === 'OT' ? 0 : normAccess(asset_access)]
+    [username.trim(), full_name.trim(), hashPassword(password), role, normCountry(country), normTeam(team), normTeam(team) === 'OT' ? 0 : normAccess(asset_access)]
   );
   await audit(req.user, 'USER', null, `Created login "${username.trim()}" — ${role}${normTeam(team) ? `, team ${normTeam(team)}` : ''}, ${normCountry(country) || 'all countries'}`);
   res.status(201).json(await get('SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [result.lastInsertRowid]));
@@ -65,8 +65,8 @@ router.put('/:id', wrap(async (req, res) => {
   }
 
   const teamNext = ('team' in req.body) ? normTeam(req.body.team) : (user.team || null);
-  // OT members are viewers or editors (editors may edit their end-device ports) — never admins.
-  const newRole = teamNext === 'OT' && (role || user.role) === 'admin' ? 'editor' : (role || user.role);
+  // OT members: viewer, editor or OT admin (role admin + team OT = OT editor + activity log / restore; never an IT admin).
+  const newRole = role || user.role;
   const newCountry = (country !== undefined) ? normCountry(country) : (user.country || null);
   const wasGlobalAdmin = user.role === 'admin' && !user.country;
   const willBeGlobalAdmin = newRole === 'admin' && !newCountry;

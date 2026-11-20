@@ -1337,6 +1337,12 @@ async function migrate() {
   if (!ndcols2.includes('mac')) await backend.run("ALTER TABLE net_devices ADD COLUMN mac TEXT DEFAULT ''");
   // OT view of the Network map: NULL = automatic (Kabin / CCTV / card-reader switches), 1 = always shown to OT, 0 = never.
   if (!ndcols2.includes('ot')) await backend.run('ALTER TABLE net_devices ADD COLUMN ot INTEGER DEFAULT NULL');
+  // OT activity log: every change to an OT device (Server Inventory, it_ot = 'OT') or a port of an OT switch, with the row
+  // before / after (JSON) so an OT admin / IT admin can restore it (lib/ot-activity.js, /ot-activity.html).
+  await backend.run(`CREATE TABLE IF NOT EXISTS ot_activity (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT DEFAULT (datetime('now')), by_user TEXT DEFAULT '', by_team TEXT DEFAULT '',
+      kind TEXT DEFAULT '', ref_type TEXT DEFAULT '', ref_id INTEGER, label TEXT DEFAULT '', summary TEXT DEFAULT '', site TEXT DEFAULT '',
+      before TEXT DEFAULT '', after TEXT DEFAULT '', restored_at TEXT DEFAULT NULL, restored_by TEXT DEFAULT '', restore_of INTEGER DEFAULT NULL)`);
   // Switch port owner: NULL = automatic (OT device / OT switch → OT, else IT), 1 = OT, 0 = IT (set by the IT team).
   const npcols = (await backend.all('PRAGMA table_info(net_ports)')).map(c => c.name);
   if (!npcols.includes('ot')) await backend.run('ALTER TABLE net_ports ADD COLUMN ot INTEGER DEFAULT NULL');
