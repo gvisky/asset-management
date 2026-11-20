@@ -550,9 +550,10 @@ router.post('/cctv-links', wrap(async (req, res) => {
   if (req.body.dry) return res.json({ site, rows });
   const ok = rows.filter(r => r.port_id), stmts = [];
   for (const r of ok) {
-    stmts.push({ sql: "UPDATE net_ports SET peer_host = ?, peer_port = '', cable = 'SFP', mode = 'trunk', note = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ? AND COALESCE(peer_host, '') = ''",
-      args: [r.peer, r.note.slice(0, 300), req.user.username, r.port_id] });
-    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, r.hostname, r.port, '(free)', `${r.peer} trunk (CCTV uplink)`, req.user.username] });
+    // A new link goes on a free port; a moved one (HK chain) only if the port still points where it did.
+    stmts.push({ sql: `UPDATE net_ports SET peer_host = ?, peer_port = '', cable = 'SFP', mode = 'trunk', note = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ? AND COALESCE(peer_host, '') = ?`,
+      args: [r.peer, r.note.slice(0, 300), req.user.username, r.port_id, r.from || ''] });
+    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, r.hostname, r.port, r.from ? `${r.from} trunk` : '(free)', `${r.peer} trunk (CCTV uplink)`, req.user.username] });
   }
   if (stmts.length) await batch(stmts);
   await audit(req.user, 'NETMAP', null, `Network map "${site}": ${ok.length} CCTV uplink(s) linked`);

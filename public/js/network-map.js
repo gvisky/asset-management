@@ -49,7 +49,7 @@ const NM = (() => {
     $('nm-import').style.display = D.can.admin ? '' : 'none';
     $('nm-import-x').style.display = D.can.admin ? '' : 'none';
     $('nm-add').style.display = D.can.edit && D.site ? '' : 'none';
-    const nC = cctvLoose(); $('nm-cctvlink').style.display = D.can.admin && D.view !== 'ot' && nC ? '' : 'none'; $('nm-cctvlink').textContent = `🔗 Connect ${nC} CCTV switch${nC > 1 ? 'es' : ''}`;
+    cctvCheck();
     $('nm-sub').textContent = D.devices.length ? `${D.view === 'ot' ? '· OT view ' : ''}· ${D.devices.length} devices · ${D.ports.length} ports · ${links().length} links` : '· ports & links';
     if (sel && !byId.has(sel)) sel = null;
     autoPlace(false); renderList(); renderTopo(); renderDevice();
@@ -81,18 +81,19 @@ const NM = (() => {
   }
 
   // CCTV switches with no line to another switch (added from the OT CCTV report / rack labels): 🔗 links them up.
-  const isCctvSw = (d) => /switch/i.test(d.role || '') && live(d) && /CCTV/i.test(`${d.hostname} ${d.alias || ''}`);
-  function cctvLoose() {
-    const sw = new Set(D.devices.filter(d => /switch/i.test(d.role || '')).map(d => d.hostname)), on = new Set();
-    for (const l of links()) if (sw.has(l.a) && sw.has(l.b)) { on.add(l.a); on.add(l.b); }
-    return D.devices.filter(d => isCctvSw(d) && !on.has(d.hostname)).length;
+  // CCTV uplinks still to link or to move (HK cabinets chained along the fibre route) — asked from the server (dry run).
+  async function cctvCheck() {
+    const b = $('nm-cctvlink'); b.style.display = 'none';
+    if (!D.can.admin || D.view === 'ot' || !D.devices.some(d => /switch/i.test(d.role || '') && /CCTV/i.test(`${d.hostname} ${d.alias || ''}`))) return;
+    try { const r = await apiPost('/api/netmap/cctv-links', { site: D.site, dry: true }); const n = r.rows.filter(x => x.port).length, mv = r.rows.filter(x => x.port && x.from).length;
+      if (n) { b.style.display = ''; b.textContent = mv === n ? `🔗 Chain ${n} HK CCTV switch${n > 1 ? 'es' : ''}` : `🔗 Connect ${n} CCTV switch${n > 1 ? 'es' : ''}`; } } catch { /* button stays hidden */ }
   }
   async function linkCctv() {
     try {
       const r = await apiPost('/api/netmap/cctv-links', { site: D.site, dry: true });
       const ok = r.rows.filter(x => x.port), no = r.rows.filter(x => !x.port);
       if (!ok.length) return showToast(no.length ? `Cannot link: ${no.map(x => x.name + ' — ' + x.error).join('; ')}` : 'All CCTV switches are linked already', no.length ? 'error' : undefined);
-      if (!confirm(`Link ${ok.length} CCTV uplink${ok.length > 1 ? 's' : ''}?\n\n${ok.map(x => `${x.name} ${x.port} → ${x.peer_name}`).join('\n')}${no.length ? `\n\nNot linked: ${no.map(x => x.name + ' — ' + x.error).join('; ')}` : ''}\n\nThe OT report has no port-to-port list: each link is set on the switch's first free SFP uplink, with a note to check the port on the other side. Cabinets go to CCTV_DIST_01 — change a port to DIST_02 where it is cabled there.`)) return;
+      if (!confirm(`Link ${ok.length} CCTV uplink${ok.length > 1 ? 's' : ''}?\n\n${ok.map(x => `${x.name} ${x.port} → ${x.peer_name}${x.from ? '  (moved, was the distribution)' : ''}`).join('\n')}${no.length ? `\n\nNot linked: ${no.map(x => x.name + ' — ' + x.error).join('; ')}` : ''}\n\nThe OT report has no port-to-port list: each link is set on the switch's first free SFP uplink, with a note to check the port on the other side. Cabinets fed from the server room go to CCTV_DIST_01 (change a port to DIST_02 where it is cabled there); outdoor HK cabinets are chained switch to switch along their fibre route.`)) return;
       const a = await apiPost('/api/netmap/cctv-links', { site: D.site });
       showToast(`${a.linked} CCTV uplink${a.linked === 1 ? '' : 's'} linked`);
       await load(D.site); fit();

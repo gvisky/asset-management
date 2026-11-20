@@ -505,6 +505,21 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     }
   }
 
+  // Network settings of a camera / OT device (from the camera list): mask, gateway, DNS, HTTP / HTTPS — merged into extra.
+  let newExtra = existing.extra;
+  if (req.body.extra && typeof req.body.extra === 'object' && !Array.isArray(req.body.extra)) {
+    let ex = {}; try { ex = JSON.parse(existing.extra || '{}') || {}; } catch { ex = {}; }
+    const NET = { mask: 'Mask', gw: 'Gateway', dns: 'DNS', http: 'HTTP', https: 'HTTPS' };
+    for (const [k, lbl] of Object.entries(NET)) {
+      if (req.body.extra[k] === undefined) continue;
+      let v = req.body.extra[k];
+      v = k === 'dns' ? (Array.isArray(v) ? v : String(v || '').split(/[\s,;/]+/)).map(x => String(x).trim().slice(0, 40)).filter(Boolean).slice(0, 4) : String(v == null ? '' : v).trim().slice(0, 40);
+      const before = Array.isArray(ex[k]) ? ex[k].join(' / ') : norm(ex[k]), after = Array.isArray(v) ? v.join(' / ') : v;
+      if (before !== after) { changes.push(`${lbl}: "${before || '∅'}"→"${after || '∅'}"`); if (after) ex[k] = v; else delete ex[k]; }
+    }
+    newExtra = JSON.stringify(ex);
+  }
+
   const canEditHistory = req.user.username === HISTORY_OWNER;
   let newHistory = (canEditHistory && req.body.history_usage !== undefined) ? req.body.history_usage : existing.history_usage;
   if (changes.length) {
@@ -522,8 +537,8 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     newHistory = newHistory ? `${newHistory}\n${lockLine}` : lockLine;
   }
 
-  const setFields = ['country', ...FIELDS, 'history_usage', 'fields_locked'];
-  const setVals = [finalCountry, ...FIELDS.map(f => (req.body[f] !== undefined ? req.body[f] : existing[f])), newHistory, lockNow];
+  const setFields = ['country', ...FIELDS, 'history_usage', 'fields_locked', 'extra'];
+  const setVals = [finalCountry, ...FIELDS.map(f => (req.body[f] !== undefined ? req.body[f] : existing[f])), newHistory, lockNow, newExtra];
   await run(
     `UPDATE servers SET ${setFields.map(c => c + ' = ?').join(', ')} WHERE id = ? AND deleted_at IS NULL`,
     [...setVals, req.params.id]);

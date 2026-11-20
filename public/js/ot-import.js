@@ -74,7 +74,7 @@ const OTDeviceImport = (() => {
       const r = await apiPost('/api/servers/ot-import', { aoa, overrides, site: P.site, apply: { servers: sv, ports: pt } });
       showToast(`${r.added} OT device${r.added === 1 ? '' : 's'} added, ${r.updated} filled · ${r.ports} switch port${r.ports === 1 ? '' : 's'} filled`);
       $('oi-ov').classList.remove('open');
-      const f = $('filter-itot'); if (f) f.value = 'OT';
+      if (typeof setIoTab === 'function') setIoTab('OT');
       if (typeof loadFilters === 'function') await loadFilters(); if (typeof loadServers === 'function') loadServers(1);
     } catch (e) { showToast(e.message || 'Could not apply', 'error'); $('oi-go').disabled = false; }
   }

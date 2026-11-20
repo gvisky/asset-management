@@ -156,14 +156,16 @@
     ov.classList.add('open');
   }
 
-  function tab(t) {
-    document.querySelectorAll('.si-tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+  // Servers tabs: OT / IT / All (data-io, server-inventory.js) and Virtual servers.
+  function tab(t, btn) {
+    const io = document.getElementById('filter-itot') ? document.getElementById('filter-itot').value : '';
+    document.querySelectorAll('.si-tabs button').forEach(b => b.classList.toggle('on', btn ? b === btn : b.dataset.t === t && (t === 'vm' || (b.dataset.io || '') === io)));
     $('si-vm').hidden = t !== 'vm'; $('si-phys').hidden = t === 'vm';
     if (t === 'vm' && !loaded) load().catch(() => { $('si-vm').innerHTML = '<div class="card"><div class="card-body text-muted">Could not load the virtual servers.</div></div>'; });
     const u = new URL(location.href); if (t === 'vm') u.searchParams.set('tab', 'vm'); else u.searchParams.delete('tab'); history.replaceState(null, '', u);
   }
   document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.si-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.t); });
+    document.querySelectorAll('.si-tabs button').forEach(b => { b.onclick = () => tab(b.dataset.t, b); });
     const up = new URLSearchParams(location.search);
     if (up.get('tab') === 'vm') { if (up.get('search')) q = up.get('search'); tab('vm'); }
     // Count of virtual servers on the tab — once the user is known (the OT team has no virtual servers).
