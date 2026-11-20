@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-20",
+    "title": "📊 OT Reports · switch ports blue for OT, green for IT · IT sets a port's owner",
+    "items": [
+      "New page 📊 OT Reports (OT team and IT): OT devices, CCTV cameras, OT switch ports, OT needs attention and port changes of the last 90 days — key numbers, tables and the data on the page, ⬇ Excel (dashboard with charts + data sheets) or PDF.",
+      "Network map: every switch port is coloured by its owner — OT blue, IT green, free grey — in the front panel, the port list (filters All / IT / OT / Free) and the counts. Automatic: a network device or an IT device of the Server Inventory → IT; an OT device of the Server Inventory → OT; other end devices follow the switch (OT switch → OT). Hover a port's dot to see why.",
+      "IT team: in a port's form, Owner = Automatic / OT (blue) / IT (green). The OT team may change OT ports only, never one IT has set to IT; every owner change is in Port changes."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "HK cabinets chained on the topology · fix OT devices on the Needs Attention page · OT / IT tabs in Server Inventory",
     "items": [
       "Network map: the outdoor (HARICI) cabinets are chained switch to switch along their fibre route — HK1 → HK2 → HK3, HK4 → HK5 → HK6, HK7 → HK8 → HK9, HK11 → HK10; HK1, HK4, HK7, HK11 and HK12 go to the CCTV distribution. Links already made straight to the distribution are moved with 🔗 Chain n HK CCTV switches (preview first).",

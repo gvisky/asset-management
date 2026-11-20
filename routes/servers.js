@@ -169,6 +169,9 @@ router.get('/needs-info', wrap(async (req, res) => {
 // itself (firmware, HTTPS, DNS, network settings) — then upload the camera list again to refresh.
 router.get('/ot-attention', wrap(async (req, res) => {
   if (!(isOT(req) || req.user.team === 'IT')) return res.status(403).json({ error: 'OT team and IT only' });
+  res.json(await otAttention(req));
+}));
+async function otAttention(req) {
   const cf = countryFilter(req);
   const rows = await all(`SELECT id, hostname, category, ip_address, mac, serial_no, os, status, switch_port, extra, location FROM servers
     WHERE deleted_at IS NULL AND it_ot = 'OT'${cf.clause ? ' AND ' + cf.clause : ''} ORDER BY hostname`, cf.params);
@@ -200,8 +203,8 @@ router.get('/ot-attention', wrap(async (req, res) => {
     rows.filter(r => !r.ip_address || !r.mac || !r.serial_no).map(r => ({ id: r.id, hostname: name(r), detail: ['IP', 'MAC', 'serial'].filter((_, i) => ![r.ip_address, r.mac, r.serial_no][i]).join(', ') + ' missing' })));
   add('port', 'Switch port not known', 'Set the port it is plugged into: in "Connected to" (✏️) or on the switch port in the Network map.', 'record',
     rows.filter(r => !/\S+\s+\S*\d+\/\d+/.test(r.switch_port || '')).map(r => ({ id: r.id, hostname: name(r), detail: r.switch_port ? `on ${r.switch_port}, port unknown` : 'not connected to a switch' })));
-  res.json({ total: rows.length, groups, canEdit: (isOT(req) && req.user.role === 'editor') || (req.user.team === 'IT' && ['admin', 'editor'].includes(req.user.role)) });
-}));
+  return { total: rows.length, groups, canEdit: (isOT(req) && req.user.role === 'editor') || (req.user.team === 'IT' && ['admin', 'editor'].includes(req.user.role)) };
+}
 
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);
@@ -576,4 +579,5 @@ router.post('/:id/unlock', requireITAdmin, wrap(async (req, res) => {
   res.json({ message: 'unlocked', fields_locked: 0 });
 }));
 
+router.otAttention = otAttention;   // OT reports (routes/ot-reports.js)
 module.exports = router;
