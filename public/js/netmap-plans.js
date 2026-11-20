@@ -9,6 +9,7 @@ const NMPlans = self.NMPlans = (() => {
   let cur = null, pins = [], fib = [], dirty = false, zoom = 1, editing = false, cables = localStorage.getItem('pl-cables') !== '0', focusI = null, racks = null;
   const PAL = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5', '#0d9488', '#be123c', '#7c3aed'];
   const D = () => NM.data();
+  const errText = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
 
   function ui() {
     if (document.getElementById('pl-ov')) return;
@@ -120,10 +121,14 @@ const NMPlans = self.NMPlans = (() => {
       for (let k = 0; k < 10; k++) { const r = [px - w / 2, py - 16 + dy, px + w / 2, py + dy]; if (!hit(r)) { placed.push(r); break; } dy += 17; if (k === 9) placed.push(r); }
       off[i].dy = dy;
     });
+    const camBad = camCheck().bad;
     box.innerHTML = pins.map((p, i) => { const k = KIND[p.kind] || KIND.note;
-      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
+      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}${camBad.has(i) ? ' bad' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
     const cnt = Object.keys(KIND).map(k => [k, pins.filter(p => p.kind === k).length]).filter(([, n]) => n);
     document.getElementById('pl-sum').textContent = cnt.length ? ' · ' + cnt.map(([k, n]) => `${n} ${KIND[k][2].toLowerCase()}${n > 1 ? 's' : ''}`).join(' · ') : ' · no pins yet';
+    // Cameras: pins whose name is not in the camera list (or twice on the drawing) are red; cameras of the list not on it.
+    const cc = camCheck();
+    if (cc.n) document.getElementById('pl-sum').insertAdjacentHTML('beforeend', `${cc.bad.size ? ` <button class="pl-cbad" onclick="NMPlans.nextBad()" title="Camera pins whose name is not in the camera list (Excel / NVR) or is on the drawing twice — click to go through them">⚠ ${cc.bad.size} camera pin${cc.bad.size > 1 ? 's' : ''} to check</button>` : ''}${cc.missing.length ? ` <button class="pl-cmiss" onclick="NMPlans.missing()" title="Cameras of the camera list that have no pin on this drawing">📷 ${cc.missing.length} not on the drawing</button>` : ''}`);
     // Length labels on the cables of the chosen cabinet (in the pin layer, so the text is not stretched).
     if (cables) box.insertAdjacentHTML('beforeend', fHot.filter(l => l.path.length > 1).map(l => { const m = mid(l.path); return `<div class="pl-flab" style="left:${m[0]}%;top:${m[1]}%;--c:${fibCol(l)}">${esc(fibText(l) || 'fibre')}</div>`; }).join(''));
     box.querySelectorAll('.pl-pin').forEach(el => bindPin(el));
@@ -196,9 +201,8 @@ const NMPlans = self.NMPlans = (() => {
         <div class="pl-i-b"><button class="btn btn-ghost btn-sm" onclick="NMPlans.rack(${i})">🗄 Open in Racks</button></div>`;
     } else if (p.kind === 'camera') {
       // A camera of the CCTV drawing → its Server Inventory record (picture, IP, switch port), filled in below.
-      const rec = camRec(p);
-      body = rec ? `<div id="pl-cam" data-id="${rec.id}"><p class="text-muted text-sm">Loading…</p></div>`
-        : `<p class="text-muted text-sm">${esc(p.ref || p.label)} is not in the Server Inventory (not in the camera list) — check the name on the drawing and on the NVR.</p>`;
+      const rec = camRec(p), why = camCheck().bad.get(i);
+      body = (why ? camFix(i, why) : '') + (rec ? `<div id="pl-cam" data-id="${rec.id}"><p class="text-muted text-sm">Loading…</p></div>` : '');
       if (rec) setTimeout(() => camFill(rec), 0);
     } else {
       const d = deviceOf(p), sw = switchPort(p), cj = L.find(l => l.a === i);
@@ -220,6 +224,47 @@ const NMPlans = self.NMPlans = (() => {
   // Camera pins: K1-01 on the drawing = K1-1 in the camera list.
   const camKey = (n) => U(n).replace(/\s+/g, '').replace(/-0+(\d)/, '-$1');
   const camRec = (p) => (D().records || []).find(r => camKey(r.hostname) === camKey(p.ref || p.label));
+  // Camera pins to check: no camera of that name in the list, or the same camera twice on the drawing.
+  function camCheck() {
+    const cams = pins.map((p, i) => [p, i]).filter(([p]) => p.kind === 'camera');
+    const bad = new Map(), seen = new Map();
+    const noName = (p) => !p.ref && /^NO NAME$/i.test(p.label || '');
+    for (const [p, i] of cams) { if (noName(p)) { bad.set(i, 'noname'); continue; } const k = camKey(p.ref || p.label); if (seen.has(k)) { bad.set(i, 'twice'); bad.set(seen.get(k), 'twice'); } else seen.set(k, i); }
+    for (const [p, i] of cams) if (!bad.has(i) && !camRec(p)) bad.set(i, 'unknown');
+    const camList = (D().records || []).filter(r => /camera/i.test(r.category || ''));
+    const missing = cams.length ? camList.filter(r => !seen.has(camKey(r.hostname))).sort((a, b) => String(a.hostname).localeCompare(b.hostname, undefined, { numeric: true })) : [];
+    return { n: cams.length, bad, missing };
+  }
+  const canFixCam = () => !!(D().can.edit || D().can.port);
+  // The fix form in a red pin's popup: choose the camera it really is (cameras without a pin first).
+  function camFix(i, why) {
+    const p = pins[i], cc = camCheck(), name = p.ref || p.label;
+    const msg = why === 'noname' ? 'This camera has no name on the drawing.' : why === 'twice' ? `<b>${esc(name)}</b> is on this drawing twice — one of them is another camera.` : `<b>${esc(name)}</b> is not in the camera list (Excel / NVR).`;
+    return `<div class="pl-i-warn">⚠ ${msg} The drawing (CAD) and the camera list are not always updated together — ${canFixCam() ? 'choose the camera it really is:' : 'ask an editor to correct it.'}</div>
+      ${canFixCam() ? `<div style="display:flex;gap:6px;margin:6px 0"><input class="form-control" id="pl-cfix" list="pl-cfix-l" placeholder="camera name, e.g. ${esc(cc.missing[0] ? cc.missing[0].hostname : 'K2-23')}">
+        <datalist id="pl-cfix-l">${[...cc.missing, ...(D().records || []).filter(r => /camera/i.test(r.category || '') && !cc.missing.includes(r))].map(r => `<option value="${esc(r.hostname)}">${cc.missing.includes(r) ? 'not on the drawing' : ''}</option>`).join('')}</datalist>
+        <button class="btn btn-primary btn-sm" onclick="NMPlans.fixCam(${i})">Save</button></div>
+        ${cc.missing.length ? `<div class="text-muted text-sm">Not on the drawing yet: ${cc.missing.slice(0, 12).map(r => `<a href="#" onclick="document.getElementById('pl-cfix').value=${esc(jsArg(r.hostname))};return false">${esc(r.hostname)}</a>`).join(', ')}${cc.missing.length > 12 ? ' …' : ''}</div>` : ''}
+        <p class="text-muted text-sm" style="margin:6px 0 0">If the drawing is right, correct the name in the camera list / on the NVR instead (the pin turns normal by itself).</p>` : ''}`;
+  }
+  async function fixCam(i) {
+    const v = (document.getElementById('pl-cfix').value || '').trim(); if (!v) return showToast('Choose the camera', 'error');
+    const rec = (D().records || []).find(r => camKey(r.hostname) === camKey(v));
+    if (!rec && !confirm(`${v} is not in the camera list either. Save the pin as ${v} anyway?`)) return;
+    try { const r = await apiPut(`/api/netmap/drawing/${cur.id}/camera-pin`, { i, old: pins[i].ref || pins[i].label, label: rec ? rec.hostname : v.toUpperCase(), ref: rec ? rec.hostname : v.toUpperCase() });
+      pins[i] = r.pin; cur.pins = JSON.stringify(pins); showToast(`Pin saved as ${r.pin.label}`); render(); show(i); }
+    catch (e) { showToast(errText(e, 'Could not save'), 'error'); }
+  }
+  let badAt = -1;
+  function nextBad() { const l = [...camCheck().bad.keys()].sort((a, b) => a - b); if (!l.length) return; badAt = l.find(x => x > badAt) ?? l[0];
+    show(badAt); setTimeout(() => { const el = document.querySelector(`.pl-pin[data-i="${badAt}"]`); if (el) el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' }); }, 30); }
+  function missing() {
+    const l = camCheck().missing, box = document.getElementById('pl-info'); focusI = null; render();
+    box.innerHTML = `<div class="pl-i-t"><span>📷</span><b>${l.length} camera${l.length > 1 ? 's' : ''} not on this drawing</b><span style="flex:1"></span><button class="modal-close" aria-label="Close" onclick="NMPlans.unfocus()">✕</button></div>
+      <p class="text-muted text-sm" style="margin:4px 0 8px">In the camera list but no pin here: new cameras not drawn yet, or a red pin with the wrong name — open a red pin to correct it.</p>
+      <div class="pl-i-chips">${l.map(r => `<a href="#" onclick="NM.openRec(${r.id});return false">${esc(r.hostname)}</a>`).join('')}</div>`;
+    box.hidden = false;
+  }
   async function camFill(rec) {
     const el = document.getElementById('pl-cam'); if (!el || Number(el.dataset.id) !== rec.id) return;
     let s; try { s = await apiGet('/api/servers/' + rec.id); } catch { el.innerHTML = '<p class="text-muted text-sm">Not available.</p>'; return; }
@@ -266,7 +311,7 @@ const NMPlans = self.NMPlans = (() => {
     if (dirty && !confirm('Pins changed but not saved. Close anyway?')) return;
     document.getElementById('pl-ov').hidden = true; dirty = false;
   }
-  return { open, close, save, pin: show, unfocus: () => { focusI = null; info(null); render(); },
+  return { open, close, save, pin: show, fixCam, nextBad, missing, unfocus: () => { focusI = null; info(null); render(); },
     dev: (id) => { close(); NM.select(id, true); }, rack: (i) => go(pins[i]), edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); render(); },
     goto: (id, ref) => open(id, null, ref), refresh: () => { if (focusI != null && !document.getElementById('pl-ov').hidden) info(focusI); } };
 })();

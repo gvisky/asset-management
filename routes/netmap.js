@@ -376,7 +376,7 @@ router.get('/log', wrap(async (req, res) => {
   res.json(await all(`SELECT * FROM net_port_log WHERE site = ?${dev ? ' AND device = ?' : ''} ORDER BY id DESC LIMIT 300`, dev ? [site, dev] : [site]));
 }));
 // Everything below (Server Inventory sync, racks, drawing uploads) is not part of the OT view — except looking at the drawings.
-router.use((req, res, next) => (isOT(req) && !(req.method === 'GET' && /^\/(drawings?|racks)(\/|$)/.test(req.path)) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
+router.use((req, res, next) => (isOT(req) && !(req.method === 'GET' && /^\/(drawings?|racks)(\/|$)/.test(req.path)) && !(req.method === 'PUT' && /^\/drawing\/\d+\/camera-pin$/.test(req.path)) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
 // OT view: only the factory cabinets (IT / CCTV / HARICI KABIN), never the server-room racks or their pictures.
 const otRack = (r) => r.kind === 'cabinet' || /KABIN/i.test(r.name || '');
 const otDrawing = (d) => !/server\s*room|system\s*room|main\s*rack/i.test(`${d.name || ''} ${d.category || ''}`);
@@ -751,6 +751,23 @@ router.put('/drawing/:id', wrap(async (req, res) => {
   if ('links' in b) await run('UPDATE net_drawings SET links = ? WHERE id = ?', [cleanLinks(b.links), Number(req.params.id)]);
   if ('name' in b) await run('UPDATE net_drawings SET name = ?, category = ? WHERE id = ?', [str(b.name, 100), str(b.category, 40), Number(req.params.id)]);
   res.json({ ok: true });
+}));
+// Correct the camera a camera pin stands for (the CAD name and the camera list are not always updated together).
+// PUT { i, old, label, ref } — IT editors and OT editors (camera pins only, on drawings OT sees).
+router.put('/drawing/:id/camera-pin', wrap(async (req, res) => {
+  if (!canEdit(req) && !otPortEdit(req)) return res.status(403).json({ error: 'Editors only' });
+  const d = await get('SELECT id, name, category, pins FROM net_drawings WHERE id = ?', [Number(req.params.id)]);
+  if (!d || (isOT(req) && !otDrawing(d))) return res.status(404).json({ error: 'Drawing not found' });
+  let pins = []; try { pins = JSON.parse(d.pins || '[]'); } catch { pins = []; }
+  const i = Number(req.body.i), p = pins[i];
+  if (!p || p.kind !== 'camera') return res.status(400).json({ error: 'Not a camera pin' });
+  if (str(req.body.old, 60) !== String(p.ref || p.label)) return res.status(409).json({ error: 'The pin was changed meanwhile — reload the drawing' });
+  const label = str(req.body.label, 60).toUpperCase(), ref = str(req.body.ref, 80) || label;
+  if (!label) return res.status(400).json({ error: 'Camera name required' });
+  const before = p.ref || p.label; pins[i] = { ...p, label, ref };
+  await run('UPDATE net_drawings SET pins = ? WHERE id = ?', [cleanPins(pins), d.id]);
+  await audit(req.user, 'NETMAP', null, `Drawing "${d.name}": camera pin ${before} → ${ref}`);
+  res.json({ ok: true, pin: pins[i] });
 }));
 router.delete('/drawing/:id', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
