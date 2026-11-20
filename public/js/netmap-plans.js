@@ -221,7 +221,8 @@ const NMPlans = self.NMPlans = (() => {
           return `<div class="pl-i-it">${d ? `<a href="#" onclick="NMPlans.dev(${d.id});return false">${esc(d.hostname)}</a> <span class="text-muted">${esc(d.mgmt_ip || '')}</span>` : esc(x.label || x.kind)} <span class="text-muted">U${x.u}${x.height > 1 ? '–' + (x.u + x.height - 1) : ''}</span></div>`; }).join('')}` : `<p class="text-muted text-sm">${racks ? 'This cabinet is not in the Racks list.' : 'Loading the rack…'}</p>`}
         ${plugged(p)}
         ${aps.length ? `<div class="pl-i-h">Access points cabled here (${aps.length})</div><div class="pl-i-chips">${aps.map(a => `<a href="#" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>`).join('')}</div>` : ''}
-        ${cams.length ? `<div class="pl-i-h">Cameras of this cabinet (${cams.length}) <span class="text-muted" style="font-weight:400;text-transform:none">· by name</span></div><div class="pl-i-chips">${cams.sort((a, b) => String(pins[a].label).localeCompare(pins[b].label, undefined, { numeric: true })).map(a => `<a href="#" class="pl-camchip ${camPort(pins[a]).st}" title="${esc(camPort(pins[a]).tip)}" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>`).join('')}</div>` : ''}
+        ${cams.length ? `<div class="pl-i-h">Cameras of this cabinet (${cams.length}) <span class="text-muted" style="font-weight:400;text-transform:none">· by name</span></div><div class="pl-i-chips">${cams.sort((a, b) => String(pins[a].label).localeCompare(pins[b].label, undefined, { numeric: true })).map(a => { const r = camRec(pins[a]); return `<span class="pl-camchip-w"><a href="#" class="pl-camchip ${camPort(pins[a]).st}" title="${esc(camPort(pins[a]).tip || 'Show on the drawing')}" onclick="NMPlans.pin(${a});return false">${esc(pins[a].label)}</a>${r ? `<button class="pl-camed" title="${canCam() ? 'Edit' : 'Details of'} ${esc(r.hostname)}" onclick="NMPlans.editCam(${r.id})">${canCam() ? '✏️' : 'ⓘ'}</button>` : ''}</span>`; }).join('')}</div>
+          ${canCam() ? '<p class="text-muted text-sm" style="margin:4px 0 0">✏️ edits the camera right here (name, IP, MAC, switch port, area …).</p>' : ''}` : ''}
         <div class="pl-i-b"><button class="btn btn-ghost btn-sm" onclick="NMPlans.rack(${i})">🗄 Open in Racks</button></div>`;
     } else if (p.kind === 'camera') {
       // A camera of the CCTV drawing → its Server Inventory record (picture, IP, switch port), filled in below.
@@ -304,6 +305,11 @@ const NMPlans = self.NMPlans = (() => {
     return port ? { st: 'port', sub: `${name} · ${port}`, tip: `Switch port: ${host}${name !== host ? ' (' + name + ')' : ''} ${port}` }
       : { st: 'sw', sub: `${name} · port ?`, tip: `Switch: ${host}${name !== host ? ' (' + name + ')' : ''} — port not known yet` };
   }
+  // Editors (IT) and OT editors may edit cameras (OT devices) from the popups.
+  const canCam = () => { const u = window.CURRENT_USER || {}; return (u.team === 'IT' && ['admin', 'editor'].includes(u.role)) || (u.team === 'OT' && u.role === 'editor'); };
+  function editCam(id) {
+    DeviceEdit.open(id, { onSaved: async () => { await NM.reload(); render(); if (focusI != null) info(focusI); } });
+  }
   async function camFill(rec) {
     const el = document.getElementById('pl-cam'); if (!el || Number(el.dataset.id) !== rec.id) return;
     let s; try { s = await apiGet('/api/servers/' + rec.id); } catch { el.innerHTML = '<p class="text-muted text-sm">Not available.</p>'; return; }
@@ -313,7 +319,7 @@ const NMPlans = self.NMPlans = (() => {
       ${row('Name', s.hostname)}${row('Area', s.role)}${row('Model', s.brand_model)}${row('IP', s.ip_address)}${row('MAC', s.mac)}${row('Status', s.status)}${row('Firmware', s.os)}
       <div class="pl-i-h">Connected to</div>${sw ? row('Switch', `${sw.hostname}${sw.alias ? ' · ' + sw.alias : ''}`) : ''}${row('Port', m ? m[2] : sp ? 'not known yet' : '')}${!sp ? '<p class="text-muted text-sm">No switch yet.</p>' : ''}
       <div class="pl-i-b" style="margin-top:6px;flex-wrap:wrap">${sw && m ? `<button class="btn btn-ghost btn-sm" onclick="NM.openPort(${sw.id}, ${jsArg(m[2])})">🔌 ${can ? 'Edit' : 'Open'} port</button>` : ''}
-        ${sw ? `<button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${sw.id})">🔷 Switch</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="NM.openRec(${s.id})">📦 Record</button></div>`;
+        ${sw ? `<button class="btn btn-ghost btn-sm" onclick="NMPlans.dev(${sw.id})">🔷 Switch</button>` : ''}<button class="btn btn-${DeviceEdit.canEdit(s) ? 'primary' : 'ghost'} btn-sm" onclick="NMPlans.editCam(${s.id})">${DeviceEdit.canEdit(s) ? '✏️ Edit camera' : '📦 Details'}</button></div>`;
   }
   // Leave the plan for the map / racks only when asked (buttons in the popup).
   function go(p) {
@@ -350,7 +356,7 @@ const NMPlans = self.NMPlans = (() => {
     if (dirty && !confirm('Pins changed but not saved. Close anyway?')) return;
     document.getElementById('pl-ov').hidden = true; dirty = false;
   }
-  return { open, close, save, pin: show, fixCam, nextBad, missing, unfocus: () => { focusI = null; info(null); render(); },
+  return { open, close, save, pin: show, fixCam, nextBad, missing, editCam, unfocus: () => { focusI = null; info(null); render(); },
     dev: (id) => { close(); NM.select(id, true); }, rack: (i) => go(pins[i]), edit: (on) => { editing = on; tools(); document.getElementById('pl-stage').classList.toggle('editing', on); }, zoomBy: (f) => { zoom = Math.max(0.15, Math.min(4, zoom * f)); applyZoom(); render(); },
     goto: (id, ref) => open(id, null, ref), refresh: () => { if (focusI != null && !document.getElementById('pl-ov').hidden) info(focusI); } };
 })();
