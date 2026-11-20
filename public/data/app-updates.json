@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-20",
+    "title": "📷 CCTV camera drawing with camera pins",
+    "items": [
+      "Drawings: new pin kind 📷 Camera. Click one: the camera's snapshot, area, model, IP, MAC, status, firmware and the switch / port it is on, with 🔌 Edit port, 🔷 Switch and 📦 Record.",
+      "Camera pins whose name is not in the camera list, is on the drawing twice, or has no name are red with ⚠. Their popup asks for the right camera (cameras without a pin first) and saves it — IT editors and OT editors. The title shows ⚠ n camera pins to check (click to go through them) and 📷 n not on the drawing.",
+      "Many cameras: names show when zoomed in (+), on hover and on red pins, so the whole site stays readable.",
+      "The CCTV drawing (CAD 16.1, 246 cameras, 22 cabinets) is loaded with ⬆ Upload pictures on the Drawings tab (drawing package .json)."
+    ]
+  },
+  {
+    "date": "2026-11-20",
     "title": "Shorter menu for IT: the OT pages moved into their pages",
     "items": [
       "IT team: OT Needs Attention, OT Reports and OT Activity are no longer in the menu. ⚠️ Needs Attention has an 🏭 OT Needs Attention box (counts per check, click one to open it), Reports has the 🏭 OT Reports (open, Excel, PDF), Users & Audit has 🕓 OT Activity (latest changes, open to restore).",

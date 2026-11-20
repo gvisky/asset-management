@@ -1576,3 +1576,5 @@ tr.oac-done td { opacity: .55; }
 .pl-pin.bad .pl-lbl::before { content: '⚠ '; }
 .pl-cbad, .pl-cmiss { border: 0; border-radius: 10px; padding: 1px 8px; font-size: 12px; cursor: pointer; margin-left: 4px; }
 .pl-cbad { background: #dc2626; color: #fff; } .pl-cmiss { background: #fff7ed; color: #9a3412; }
+.pl-pin.quiet .pl-lbl { display: none; } .pl-pin.quiet:hover .pl-lbl, .pl-pin.quiet.bad .pl-lbl { display: block; position: absolute; top: 100%; white-space: nowrap; z-index: 3; }
+.pl-pin.quiet .pl-dot { transform: scale(.8); }
