@@ -9,6 +9,13 @@ const NMPlans = self.NMPlans = (() => {
   let cur = null, pins = [], fib = [], dirty = false, zoom = 1, editing = false, cables = localStorage.getItem('pl-cables') !== '0', focusI = null, racks = null;
   const PAL = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5', '#0d9488', '#be123c', '#7c3aed'];
   const D = () => NM.data();
+  // CCTV bullet camera on its wall bracket (pins and popups of camera pins).
+  const CAM_SVG = `<svg class="pl-cam-ico" viewBox="0 0 40 32" width="26" height="21" aria-hidden="true"><g stroke="#475569" stroke-width="1.2" stroke-linejoin="round">
+    <circle cx="33" cy="24" r="5.5" fill="#f1f5f9"/><path d="M24 15.5l3 0 6.5 7-2.4 2.4-7.3-6.4z" fill="#e2e8f0"/>
+    <path d="M7 6.5l23-3.2 2 1.4v9.2l-1.6 1.6-22.6 2.6z" fill="#fff"/><path d="M5.5 5.6l26-3.6 1.4 1.8-26 3.8z" fill="#e2e8f0"/>
+    <ellipse cx="7.6" cy="12" rx="3.4" ry="5.4" fill="#1e293b"/></g>
+    <circle cx="7.8" cy="12" r="2.3" fill="#334155" stroke="#94a3b8" stroke-width=".8"/><circle cx="7.3" cy="11.2" r=".7" fill="#e2e8f0"/></svg>`;
+  const icoOf = (kind, k) => (kind === 'camera' ? CAM_SVG : k[0]);
   const errText = (e, f) => { try { return JSON.parse(e.message).error || f; } catch { return f; } };
 
   function ui() {
@@ -126,7 +133,7 @@ const NMPlans = self.NMPlans = (() => {
     });
     const camBad = camCheck().bad;
     box.innerHTML = pins.map((p, i) => { const k = KIND[p.kind] || KIND.note;
-      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}${camBad.has(i) ? ' bad' : ''}${quiet(i) ? ' quiet' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${k[0]}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
+      return `<div class="pl-pin${focusI != null ? (on.has(i) ? ' on' : ' dim') : ''}${off[i].dy ? ' fan' : ''}${camBad.has(i) ? ' bad' : ''}${quiet(i) ? ' quiet' : ''}" data-i="${i}" style="left:${p.x}%;top:${p.y}%;--dy:${off[i].dy}px;--c:${p.kind === 'cabinet' && cables ? colOf(i) : k[1]}" title="${esc(k[2] + ': ' + p.label + (p.ref ? ' → ' + p.ref : '') + (p.kind === 'cabinet' ? swTip(p) : ''))}"><span class="pl-dot">${icoOf(p.kind, k)}</span><span class="pl-lbl">${esc(p.label)}</span></div>`; }).join('');
     const cnt = Object.keys(KIND).map(k => [k, pins.filter(p => p.kind === k).length]).filter(([, n]) => n);
     document.getElementById('pl-sum').textContent = cnt.length ? ' · ' + cnt.map(([k, n]) => `${n} ${KIND[k][2].toLowerCase()}${n > 1 ? 's' : ''}`).join(' · ') : ' · no pins yet';
     // Cameras: pins whose name is not in the camera list (or twice on the drawing) are red; cameras of the list not on it.
@@ -221,7 +228,7 @@ const NMPlans = self.NMPlans = (() => {
     }
     const also = elsewhere(p);
     if (also.length) body += `<div class="pl-i-h">Also on</div><div class="pl-i-b" style="margin-top:2px;flex-wrap:wrap">${also.map(x => `<button class="btn btn-ghost btn-sm" onclick="NMPlans.goto(${x.id}, ${jsArg(p.ref || p.label)})">📄 ${esc(short(x.name))}</button>`).join('')}</div>`;
-    box.innerHTML = `<div class="pl-i-t"><span>${k[0]}</span><b>${esc(p.label)}</b><span class="text-muted text-sm">${esc(k[2])}</span><span style="flex:1"></span><button class="modal-close" aria-label="Close" onclick="NMPlans.unfocus()">✕</button></div>${body}`;
+    box.innerHTML = `<div class="pl-i-t"><span>${icoOf(p.kind, k)}</span><b>${esc(p.label)}</b><span class="text-muted text-sm">${esc(k[2])}</span><span style="flex:1"></span><button class="modal-close" aria-label="Close" onclick="NMPlans.unfocus()">✕</button></div>${body}`;
     box.hidden = false;
   }
   // Camera pins: K1-01 on the drawing = K1-1 in the camera list.
