@@ -426,6 +426,10 @@ const NM = (() => {
     else if (center && mode === 'map') { const P = pos(byId.get(id)); view.x = P.x - view.w / 2; view.y = P.y - view.h / 2; apply(); }
     if (typeof NMRacks !== 'undefined' && !$('nm-view-rack').hidden) NMRacks.mark(true);
     // The page does not scroll: the topology stays where it is (the device panel is below it).
+    // Phone: jump to the device's ports (they are far below the map on a narrow screen).
+    if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches && prev !== id) {
+      const dv = $('nm-dev'); if (dv) setTimeout(() => dv.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
   }
   // Port colour by owner (server: p.owner): OT blue, IT green, free grey. An owner set by IT colours a free port too.
   const portUsed = (p) => !!(p && (p.peer_host || p.patch || p.vlan || p.mode || p.note));

@@ -1656,13 +1656,68 @@ body.nm-full .nm-svg { height: calc(100vh - 78px); } body.nm-full .nm-scroll { m
   .si-tabs::-webkit-scrollbar { display: none; }
   .si-tabs button { flex: none; white-space: nowrap; font-size: 13px; padding: 8px 10px; }
   .si-tabs [data-io] + [data-t="vm"] { margin-left: 0; }
+  .si-tabs .tl-long { display: none; }   /* phone: 🏭 OT · 🖥 IT · All · ☁ Virtual on one line */
 
-  /* Server Inventory phone cards: key fields only (full record via Edit / View) */
-  #servers-tbody td[data-label="#"],
-  #servers-tbody td[data-label="Producer"],
-  #servers-tbody td[data-label="Category"],
-  #servers-tbody td[data-label="Serial #"],
-  #servers-tbody td[data-label="Country"] { display: none; }
-  #servers-tbody td[data-label="Hostname"] { background: #f9fafb; font-size: 14px; }
+  /* Server Inventory on a phone: one compact row per device (≈7 per screen).
+       line 1  hostname (OT tag)                 status
+       line 2  brand / model                     👁 ✏️ 🗑
+       line 3  IP · location
+     Asset code, serial, producer, category, country → device view (tap the row). */
+  #servers-tbody tr:not(.sg-grp) { display: grid !important; grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "host host st" "model model act" "ip loc act"; gap: 2px 10px; align-items: center;
+    margin: 0 !important; border: 0 !important; border-bottom: 1px solid var(--border) !important; border-radius: 0 !important; padding: 9px 12px; cursor: pointer; }
+  #servers-tbody tr:not(.sg-grp):active { background: #eef4ff; }
+  #servers-tbody tr:not(.sg-grp) > td { display: block !important; padding: 0 !important; border: 0 !important; text-align: left !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important; }
+  #servers-tbody tr:not(.sg-grp) > td::before { display: none !important; }
+  #servers-tbody tr > td:nth-child(1), #servers-tbody tr > td:nth-child(2), #servers-tbody tr > td:nth-child(5),
+  #servers-tbody tr > td:nth-child(6), #servers-tbody tr > td:nth-child(8), #servers-tbody tr > td:nth-child(9) { display: none !important; }
+  #servers-tbody tr > td:nth-child(3) { grid-area: host; font-size: 15px; }
+  #servers-tbody tr > td:nth-child(4) { grid-area: model; font-size: 13px; color: #334155; }
+  #servers-tbody tr > td:nth-child(4) .ds-btn, #servers-tbody tr > td:nth-child(4) button { display: none; }
+  #servers-tbody tr > td:nth-child(7) { grid-area: ip; font-size: 12.5px; }
+  #servers-tbody tr > td:nth-child(10) { grid-area: loc; font-size: 12.5px; }
+  #servers-tbody tr > td:nth-child(10)::before { content: '· ' !important; display: inline !important; text-transform: none; letter-spacing: 0; font-weight: 400; font-size: inherit; }
+  #servers-tbody tr > td:nth-child(11) { grid-area: st; justify-self: end; }
+  #servers-tbody tr > td:nth-child(12) { grid-area: act; justify-self: end; overflow: visible; }
+  #servers-tbody tr > td:nth-child(12) .btn { padding: 6px 9px; }
   #servers-tbody tr.sg-grp td { display: block; text-align: left; }
+  /* the list reads as one card: no gaps between the device rows */
+  #servers-tbody { background: #fff; }
+
+  /* ── Edit forms as a bottom sheet (field work on the phone) ───────────────
+     Every modal (port, device, server, asset …): nearly full height, the form
+     scrolls inside while the title and the Save / Cancel buttons stay pinned. */
+  .modal-overlay { align-items: flex-end; }
+  .modal-overlay .modal { width: 100% !important; max-width: none !important; max-height: calc(100dvh - 24px - env(safe-area-inset-top));
+    border-radius: 16px 16px 0 0; display: flex; flex-direction: column; transform: translateY(24px); }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal > .modal-header { flex-shrink: 0; position: sticky; top: 0; background: #fff; z-index: 2; padding-top: 14px; padding-bottom: 14px; }
+  .modal > .modal-header .modal-close { width: 40px; height: 40px; align-items: center; justify-content: center; font-size: 18px; }
+  .modal > .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .modal > .modal-footer { flex-shrink: 0; position: sticky; bottom: 0; background: #fff; z-index: 2; flex-wrap: wrap; gap: 8px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom)); box-shadow: 0 -6px 16px rgba(15,23,42,.06); }
+  .modal > .modal-footer .btn { flex: 1 1 auto; min-height: 44px; font-size: 15px; justify-content: center; margin-right: 0 !important; }
+  .modal .form-group { margin-bottom: 12px; }
+  .modal .form-control { min-height: 44px; }
+  .modal .qe-grid, .modal .form-grid { grid-template-columns: 1fr; }
+
+  /* ── Network map: ports as 2-line cards; tap = edit ─────────────────────── */
+  .nm-ptbl table, .nm-ptbl tbody { display: block; width: 100%; }
+  .nm-ptbl thead { display: none; }
+  .nm-ptbl tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .nm-ptbl tr:active { background: #eef4ff; }
+  .nm-ptbl td { display: block; border: 0 !important; padding: 0 !important; white-space: normal !important; font-size: 13px; }
+  .nm-ptbl td:nth-child(1) { flex: 0 0 31%; font-size: 14px; }
+  .nm-ptbl td:nth-child(2) { flex: 1 1 40%; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+  .nm-ptbl td:nth-child(3) { flex: 0 0 auto; color: #475569; }
+  .nm-ptbl td:nth-child(n+4) { color: #64748b; font-size: 12px; }
+  .nm-ptbl td:nth-child(4) { margin-left: 31%; }
+  .nm-ptbl td:nth-child(n+4):empty { display: none; }
+  .nm-ptbl td:nth-child(6):not(:empty)::before { content: 'VLAN '; }
+  .nm-ptbl td:nth-child(7):not(:empty)::before { content: 'Po'; }
+  .nm-ptbl td:nth-child(8):not(:empty)::before { content: 'Patch '; }
+  .nm-ptbl td[colspan] { flex: 1 1 100%; margin: 0; text-align: center; }
+  #nm-dev { scroll-margin-top: calc(var(--header-h) + env(safe-area-inset-top) + 8px); }
+  /* Front-panel ports: bigger touch targets */
+  .fp .pt, .fp .pt-chip { min-width: 34px; min-height: 30px; }
 }
