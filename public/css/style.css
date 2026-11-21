@@ -742,7 +742,7 @@ select.filter-select {
 /* ── Small phone (single column only on truly narrow devices; the
       iPhone 12 Pro Max at 428px keeps the comfortable 2-up grid) ─────── */
 @media (max-width: 380px) {
-  .stat-grid { grid-template-columns: 1fr; }
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topbar-title { font-size: 14px; }
 }
 
@@ -1436,6 +1436,11 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .gs-btn span { flex: 1; text-align: left; }
 .gs-btn kbd, .gs-box kbd { font: 11px/1 system-ui, sans-serif; border: 1px solid #cbd5e1; border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; background: #fff; color: #475569; }
 .gs-btn + #user-chrome { margin-left: 12px !important; }
+/* Account menu: desktop shows name + buttons inline; phones show a round avatar (see ≤768px) */
+.uc-menu { display: flex; align-items: center; gap: 12px; }
+.uc-avatar { display: none; }
+/* Phone "⋯" topbar menu (created by initTopbarOverflow in app.js) */
+.tb-more { position: relative; display: none; }
 .gs-ov { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 3000; display: none; align-items: flex-start; justify-content: center; padding-top: 9vh; }
 .gs-ov.open { display: flex; }
 .gs-box { width: min(720px, 94vw); background: #fff; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,.3); overflow: hidden; }
@@ -1606,3 +1611,58 @@ body.nm-full .sidebar, body.nm-full .topbar, body.nm-full .nm-side { display: no
 body.nm-full .main-wrap { margin-left: 0 !important; } body.nm-full .content.nm-main { padding: 8px 10px; }
 body.nm-full .nm-wrap { display: block; } body.nm-full .nm-center { width: 100%; }
 body.nm-full .nm-svg { height: calc(100vh - 78px); } body.nm-full .nm-scroll { max-height: calc(100vh - 78px); }
+
+/* ── Phone topbar, account menu, compact summaries ───────────────────────
+   Page buttons move into the "⋯" menu (app.js initTopbarOverflow), the account
+   becomes a round avatar, so nothing runs off the right edge of the screen. */
+@media (max-width: 768px) {
+  .topbar { min-width: 0; }
+  .topbar-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar > span.text-sm, .topbar > span.text-muted { display: none; }   /* "150 server(s)" etc. — shown in the summary below */
+  .tb-more { display: inline-block; flex-shrink: 0; }
+  .tb-more[hidden] { display: none; }
+  .tb-more-b { position: relative; width: 38px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: 20px; line-height: 1; color: #334155; cursor: pointer; }
+  .tb-more-dot { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #dc2626; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 18px; text-align: center; }
+  .tb-more-m { display: none; position: fixed; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right));
+    top: calc(var(--header-h) + env(safe-area-inset-top) + 4px); z-index: 1600; background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15,23,42,.2); padding: 6px; max-height: calc(100vh - var(--header-h) - 40px); overflow-y: auto; }
+  .tb-more.open .tb-more-m { display: flex; flex-direction: column; gap: 2px; }
+  .tb-more-m > .btn, .tb-more-m > button, .tb-more-m > a { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; padding: 10px 12px; font-size: 14px; }
+  .tb-more-m > .btn-primary { justify-content: center; margin-bottom: 4px; }
+  .tb-more-m .tb-dd { width: 100%; }
+  .tb-more-m .tb-dd > .tb-dd-b { width: 100%; justify-content: flex-start; padding: 10px 12px; font-size: 14px; }
+  .tb-more-m .tb-dd-m { position: static; box-shadow: none; border: 0; border-left: 2px solid var(--border); border-radius: 0; margin: 2px 0 4px 12px; padding: 0 0 0 6px; min-width: 0; }
+  .tb-more-m .tb-dd-m > button, .tb-more-m .tb-dd-m > a { white-space: normal; font-size: 13.5px; }
+  .tb-more-m select { width: 100%; }
+
+  #user-chrome { position: relative; margin-left: 0 !important; gap: 0 !important; flex-shrink: 0; }
+  .gs-btn { margin-left: auto; flex-shrink: 0; }
+  .uc-avatar { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--brand); color: #fff; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+  .uc-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 1600; background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15,23,42,.2); padding: 10px; flex-direction: column; align-items: stretch; gap: 6px; min-width: 200px; }
+  #user-chrome.open .uc-menu { display: flex; }
+  .uc-menu .uc-who { text-align: left !important; padding: 2px 4px 8px; border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+  .uc-menu .btn { justify-content: flex-start; padding: 10px 12px; font-size: 14px; }
+
+  /* Summary tiles: compact 3-up, no icon — the whole summary fits on one screen */
+  .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
+  .stat-card { padding: 10px 12px !important; gap: 0; border-radius: 10px; }
+  .stat-card .stat-icon { display: none; }
+  .stat-label { font-size: 11px; margin-bottom: 2px; line-height: 1.25; }
+  .stat-card .stat-value { font-size: 19px !important; }
+
+  /* Tab rows (Server Inventory …): one swipeable line instead of tall wrapped blocks */
+  .si-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .si-tabs::-webkit-scrollbar { display: none; }
+  .si-tabs button { flex: none; white-space: nowrap; font-size: 13px; padding: 8px 10px; }
+  .si-tabs [data-io] + [data-t="vm"] { margin-left: 0; }
+
+  /* Server Inventory phone cards: key fields only (full record via Edit / View) */
+  #servers-tbody td[data-label="#"],
+  #servers-tbody td[data-label="Producer"],
+  #servers-tbody td[data-label="Category"],
+  #servers-tbody td[data-label="Serial #"],
+  #servers-tbody td[data-label="Country"] { display: none; }
+  #servers-tbody td[data-label="Hostname"] { background: #f9fafb; font-size: 14px; }
+  #servers-tbody tr.sg-grp td { display: block; text-align: left; }
+}

@@ -1,5 +1,15 @@
 [
   {
+    "date": "2026-11-21",
+    "title": "Phone view: everything fits the screen",
+    "items": [
+      "On phones the page buttons (Add, Import & sync, Needs Attention, Used / stock …) are in a ⋯ menu at the top — a red badge shows the Needs Attention count. Nothing runs off the right edge any more.",
+      "Your name, Change password and Logout are behind the round avatar (your initials) at the top right.",
+      "Phone summary: the summary tiles are compact (3 per row), tab rows (e.g. Server Inventory OT / IT / All / Virtual) are one swipeable line, and Server Inventory device cards show only the key fields — open a device for the full record.",
+      "Laptop / desktop view is unchanged."
+    ]
+  },
+  {
     "date": "2026-11-20",
     "title": "Office K1 cameras on the K1 drawing, topology full screen",
     "items": [

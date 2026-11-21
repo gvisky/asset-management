@@ -88,18 +88,26 @@ function renderUserChrome() {
     const wrap = document.createElement('div');
     wrap.id = 'user-chrome';
     wrap.style.cssText = 'display:flex;align-items:center;gap:12px;margin-left:auto';
+    const nm = String(u.full_name || u.username || '?');
+    const initials = nm.split(/\s+/).filter(Boolean).map(w => w[0]).slice(-2).join('').toUpperCase() || '?';
+    // On phones only the round avatar shows; tapping it opens the name + buttons (CSS .uc-menu).
     wrap.innerHTML = `
-      <div style="text-align:right;line-height:1.2">
-        <div style="font-size:13px;font-weight:600">${u.full_name || u.username}</div>
-        <div style="font-size:11px;color:var(--muted)">${roleLabel(u)}</div>
+      <button type="button" class="uc-avatar" id="uc-avatar" aria-label="Account" title="${nm}">${initials}</button>
+      <div class="uc-menu">
+        <div class="uc-who" style="text-align:right;line-height:1.2">
+          <div style="font-size:13px;font-weight:600">${u.full_name || u.username}</div>
+          <div style="font-size:11px;color:var(--muted)">${roleLabel(u)}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="changepw-btn" title="Change your password">Change password</button>
+        <button class="btn btn-ghost btn-sm" id="logout-btn" title="Sign out">Logout</button>
       </div>
-      <button class="btn btn-ghost btn-sm" id="changepw-btn" title="Change your password">Change password</button>
-      <button class="btn btn-ghost btn-sm" id="logout-btn" title="Sign out">Logout</button>
     `;
     // Insert before any existing "Add Asset" button if present, else append
     topbar.appendChild(wrap);
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('changepw-btn').addEventListener('click', changePassword);
+    document.getElementById('uc-avatar').addEventListener('click', (e) => { e.stopPropagation(); wrap.classList.toggle('open'); });
+    document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) wrap.classList.remove('open'); });
   }
 
   // Quick Actions: drop "Add Asset"; add "Needs Attention" (alerts) for asset users.
