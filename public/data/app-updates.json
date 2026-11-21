@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-21",
+    "title": "Phone: easier checking and editing in the field",
+    "items": [
+      "Every edit form on a phone (port, device, server, asset …) opens as a full-height sheet: the form scrolls, the title and the Save / Cancel buttons stay at the bottom of the screen, with big touch-size fields and buttons.",
+      "Network map on a phone: tapping a switch (list or map) jumps straight to its ports; each port is a 2-line card (port · connected to · far port, then cable / mode / VLAN / patch / note) — tap it to edit.",
+      "Front-panel port buttons are bigger for fingers. Laptop / desktop view is unchanged."
+    ]
+  },
+  {
+    "date": "2026-11-21",
     "title": "Phone view: everything fits the screen",
     "items": [
       "On phones the page buttons (Add, Import & sync, Needs Attention, Used / stock …) are in a ⋯ menu at the top — a red badge shows the Needs Attention count. Nothing runs off the right edge any more.",
