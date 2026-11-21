@@ -78,7 +78,6 @@ async function loadServers(page = 1) {
 }
 
 // Categories with more than 4 devices (Switch, Access Point …) are grouped (closed until clicked).
-const sOpenGroups = new Set();
 function rowHtml(s, inGroup) {
   return `
     <tr class="${s.fields_locked ? 'row-locked' : ''}${inGroup ? ' sg-in' : ''}">
@@ -123,20 +122,77 @@ function renderTable(rows) {
   for (const [cat, all] of groups) {
     const list = all.filter(s => modelCount.get(s.brand_model || '—') > 4), single = all.filter(s => modelCount.get(s.brand_model || '—') <= 4);
     if (list.length) {
-      const open = sOpenGroups.has(cat);
+      // First load: a category that spans several cabinets opens straight to its Kabin rows; a tap overrides.
+      sGroupDefault.set(cat, spansCabinets(list));
+      const open = sGroupState.has(cat) ? sGroupState.get(cat) : sGroupDefault.get(cat);
       const models = [...list.reduce((m, s) => m.set(s.brand_model || '—', (m.get(s.brand_model || '—') || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
       const st = list.reduce((m, s) => { m[s.status] = (m[s.status] || 0) + 1; return m; }, {});
       html += `<tr class="sg-grp" onclick="toggleSGroup(${jsArg(cat)})"><td colspan="12">
         <span class="lg-caret">${open ? '▾' : '▸'}</span> <b>${sEsc(cat)}</b> <span class="sg-cnt">${list.length}</span>
         <span class="sg-models">${models.map(([m, n]) => `<span class="sg-model">${sEsc(m)} <b>×${n}</b> ${DeviceSpecs.btn(m, cat)}</span>`).join('')}</span>
         <span class="sg-st">${Object.entries(st).map(([k, n]) => `${statusBadge(k)} ${n}`).join(' ')}</span></td></tr>`;
-      if (open) html += list.map(s => rowHtml(s, true)).join('');
+      if (open) html += cabinetRows(cat, list);
     }
     html += single.map(s => rowHtml(s, false)).join('');
   }
   tbody.innerHTML = html;
 }
-function toggleSGroup(cat) { sOpenGroups.has(cat) ? sOpenGroups.delete(cat) : sOpenGroups.add(cat); renderTable(sRows); }
+// ── Cabinet (Kabin) sub-groups inside an open category ──────────────────────
+// Same switch, same area: the cabinet comes from the location ("HARICI KABIN3 (U5)",
+// "CCTV KABIN 5", "IT KABIN 7"), else the switch it is cabled to ("HK3_CCTV_01 Gi1/0/5"),
+// else the device name (HK3-5 → HARICI KABIN 3, K5-12 → CCTV KABIN 5, K7-A5 → IT KABIN 7,
+// K11 → IT KABIN 11, K1 → office MR-01) — the same rules as the camera list import.
+const sOpenCabs = new Set();
+const sFold = (v) => String(v || '').toUpperCase().replace(/İ/g, 'I').replace(/Ş/g, 'S').replace(/Ğ/g, 'G').replace(/Ü/g, 'U').replace(/Ö/g, 'O').replace(/Ç/g, 'C');
+function cabinetOf(s) {
+  const L = sFold(s.location), sw = sFold(String(s.switch_port || '').split(/\s+/)[0]), h = sFold(s.hostname);
+  let m;
+  for (const t of [L, sw]) {
+    if ((m = t.match(/HARICI\s*-?\s*KAB[Iİ]N\s*0*(\d+)/))) return 'HARICI KABIN ' + +m[1];
+    if ((m = t.match(/CCTV\s*-?\s*KAB[Iİ]N\s*0*(\d+)/))) return 'CCTV KABIN ' + +m[1];
+    if ((m = t.match(/IT\s*-?\s*KAB[Iİ]N\s*0*(\d+)/))) return 'IT KABIN ' + +m[1];
+    if ((m = t.match(/\bKAB[Iİ]N\s*0*(\d+)/))) return 'KABIN ' + +m[1];
+  }
+  if ((m = sw.match(/^HK0*(\d+)[_-]/))) return 'HARICI KABIN ' + +m[1];
+  if ((m = sw.match(/^K0*(\d+)[_-]CCTV/))) return 'CCTV KABIN ' + +m[1];
+  if ((m = h.match(/^HK0*(\d+)(?:\b|[-_])/))) return 'HARICI KABIN ' + +m[1];
+  if ((m = h.match(/^K0*(\d+)[-_](A?)/))) {
+    const n = +m[1];
+    if (n === 1) return 'Office (MR-01)';
+    if (n === 11 || m[2]) return 'IT KABIN ' + n;
+    return 'CCTV KABIN ' + n;
+  }
+  if ((m = sw.match(/^(MR-\d+)/))) return 'Office (' + m[1] + ')';
+  const loc = String(s.location || '').trim();
+  return loc || '(no cabinet)';
+}
+const cabRank = (c) => /^CCTV KABIN/.test(c) ? 0 : /^HARICI KABIN/.test(c) ? 1 : /^IT KABIN/.test(c) ? 2 : /^KABIN/.test(c) ? 3 : /^Office/.test(c) ? 4 : c === '(no cabinet)' ? 9 : 5;
+const natCmp = (a, b) => String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+function cabinetRows(cat, list) {
+  const by = new Map();
+  list.forEach(s => { const c = cabinetOf(s); if (!by.has(c)) by.set(c, []); by.get(c).push(s); });
+  const sortDev = (a, b) => natCmp(a.hostname, b.hostname) || natCmp(a.ip_address, b.ip_address);
+  if (by.size < 2) return list.slice().sort(sortDev).map(s => rowHtml(s, true)).join('');
+  const cabs = [...by.keys()].sort((a, b) => cabRank(a) - cabRank(b) || natCmp(a, b));
+  return cabs.map(c => {
+    const devs = by.get(c).sort(sortDev), key = cat + '|' + c, open = sOpenCabs.has(key);
+    const sws = [...devs.reduce((m, s) => { const w = String(s.switch_port || '').split(/\s+/)[0]; if (w) m.set(w, (m.get(w) || 0) + 1); return m; }, new Map())].sort((a, b) => b[1] - a[1]).map(x => x[0]);
+    const st = devs.reduce((m, s) => { m[s.status] = (m[s.status] || 0) + 1; return m; }, {});
+    return `<tr class="sg-grp sg-cab" onclick="toggleSCab(${jsArg(key)})"><td colspan="12">
+        <span class="lg-caret">${open ? '▾' : '▸'}</span> <b>${sEsc(c)}</b> <span class="sg-cnt sg-cnt-cab">${devs.length}</span>
+        ${sws.length ? `<span class="sg-sw" title="Switch">🔌 ${sws.slice(0, 2).map(sEsc).join(', ')}${sws.length > 2 ? ' …' : ''}</span>` : ''}
+        <span class="sg-st">${Object.entries(st).map(([k, n]) => `${statusBadge(k)} ${n}`).join(' ')}</span></td></tr>`
+      + (open ? devs.map(s => rowHtml(s, true)).join('') : '');
+  }).join('');
+}
+function toggleSCab(key) { sOpenCabs.has(key) ? sOpenCabs.delete(key) : sOpenCabs.add(key); renderTable(sRows); }
+const sGroupState = new Map();   // category → open (true/false) once the user has tapped it
+const sGroupDefault = new Map(); // category → opens by itself (spans several cabinets)
+function spansCabinets(list) { const c = new Set(list.map(cabinetOf)); c.delete('(no cabinet)'); return c.size >= 2; }
+function toggleSGroup(cat) {
+  const cur = sGroupState.has(cat) ? sGroupState.get(cat) : !!sGroupDefault.get(cat);
+  sGroupState.set(cat, !cur); renderTable(sRows);
+}
 
 function renderPagination(total, page, limit) {
   const totalPages = Math.ceil(total / limit);

@@ -1,6 +1,16 @@
 [
   {
     "date": "2026-11-21",
+    "title": "Server Inventory: devices grouped by cabinet (Kabin)",
+    "items": [
+      "Open a category (e.g. CCTV camera) to see it split by cabinet — CCTV KABIN 1…, HARICI KABIN 1…, IT KABIN …, Office (MR-01) — each with its device count, switch and status. Tap a cabinet to see its devices in name order: same switch, same area, easy to check on site.",
+      "First load opens straight to the Kabin rows for categories spread over several cabinets (e.g. CCTV camera); other categories stay closed. Tap a category or cabinet to open / close it.",
+      "The cabinet comes from the location (\"HARICI KABIN3 (U5)\"), else the switch the device is on (HK3_CCTV_01), else the device name (HK3-5, K5-12, K7-A5, K1 = office).",
+      "Fix: on a phone the category rows (e.g. CCTV camera 240) were hidden and could not be opened."
+    ]
+  },
+  {
+    "date": "2026-11-21",
     "title": "Phone: easier checking and editing in the field",
     "items": [
       "Every edit form on a phone (port, device, server, asset …) opens as a full-height sheet: the form scrolls, the title and the Save / Cancel buttons stay at the bottom of the screen, with big touch-size fields and buttons.",
