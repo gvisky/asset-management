@@ -221,6 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnAdd) btnAdd.addEventListener('click', handleAdd);
 
   initMobileNav();
+  initTopbarOverflow();
   initResponsiveTables();
   populateDeptOptions();
   wireDeptSelect();
@@ -378,6 +379,56 @@ function initMobileNav() {
     link.addEventListener('click', close));
   // Reset state if the viewport grows back to desktop
   window.addEventListener('resize', () => { if (window.innerWidth > 768) close(); });
+}
+
+// ── Phone topbar: page actions go into a "⋯" menu ───────────────────────────
+// On ≤768px the page buttons (Add, Import, Needs Attention …) are moved into a
+// dropdown so the topbar never runs off-screen; on wider screens they go back.
+// Buttons keep their ids and handlers, so page scripts that show/hide them by id
+// keep working. A MutationObserver picks up buttons added later.
+function initTopbarOverflow() {
+  const bar = document.querySelector('.topbar');
+  if (!bar || document.getElementById('tb-more')) return;
+  const mq = window.matchMedia('(max-width: 768px)');
+  const wrap = document.createElement('div');
+  wrap.className = 'tb-more'; wrap.id = 'tb-more';
+  wrap.innerHTML = '<button type="button" class="tb-more-b" aria-label="More actions" title="More actions">⋯<span class="tb-more-dot" hidden></span></button><div class="tb-more-m"></div>';
+  const menu = wrap.querySelector('.tb-more-m');
+  const KEEP = (el) => el === wrap || el.classList.contains('menu-toggle') || el.classList.contains('topbar-title')
+    || el.id === 'user-chrome' || el.id === 'gs-btn' || el.tagName === 'SCRIPT';
+  const isAction = (el) => !KEEP(el) && (el.matches('button, a.btn, .tb-dd, .btn, select, label, .tb-act') || el.querySelector('button, .btn'));
+  let moving = false;
+  const visible = (el) => getComputedStyle(el).display !== 'none' && el.style.display !== 'none';
+  const refresh = () => {
+    const items = [...menu.children];
+    wrap.hidden = !items.some(visible);
+    // red dot when a moved button carries a non-zero counter (e.g. Needs Attention)
+    const n = items.reduce((t, el) => t + [...el.querySelectorAll('.na-cnt, .badge-count')].reduce((x, c) => x + (parseInt(c.textContent, 10) || 0), 0), 0);
+    const dot = wrap.querySelector('.tb-more-dot'); dot.hidden = !n; dot.textContent = n > 99 ? '99+' : (n || '');
+  };
+  const apply = () => {
+    moving = true;
+    if (mq.matches) {
+      if (!wrap.parentNode) { const uc = document.getElementById('user-chrome'); const gs = document.getElementById('gs-btn'); bar.insertBefore(wrap, gs || uc || null); }
+      [...bar.children].filter(isAction).forEach(el => { el.dataset.tbHome = '1'; menu.appendChild(el); });
+    } else if (wrap.parentNode) {
+      [...menu.children].forEach(el => bar.insertBefore(el, wrap));
+      wrap.remove();
+    }
+    moving = false;
+    refresh();
+  };
+  wrap.querySelector('.tb-more-b').addEventListener('click', (e) => { e.stopPropagation(); wrap.classList.toggle('open'); });
+  menu.addEventListener('click', (e) => {
+    // close after choosing an action (but not when opening a nested dropdown)
+    if (e.target.closest('.tb-dd-b')) return;
+    if (e.target.closest('button, a')) wrap.classList.remove('open');
+  });
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) wrap.classList.remove('open'); });
+  new MutationObserver(() => { if (!moving) apply(); }).observe(bar, { childList: true });
+  new MutationObserver(() => { if (!moving) refresh(); }).observe(menu, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'hidden', 'class'] });
+  (mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply));
+  apply();
 }
 
 // Merge two assets that are the same machine (same serial) — Device Check. IT admin.
