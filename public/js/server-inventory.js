@@ -78,7 +78,6 @@ async function loadServers(page = 1) {
 }
 
 // Categories with more than 4 devices (Switch, Access Point …) are grouped (closed until clicked).
-const sOpenGroups = new Set();
 function rowHtml(s, inGroup) {
   return `
     <tr class="${s.fields_locked ? 'row-locked' : ''}${inGroup ? ' sg-in' : ''}">
@@ -123,7 +122,9 @@ function renderTable(rows) {
   for (const [cat, all] of groups) {
     const list = all.filter(s => modelCount.get(s.brand_model || '—') > 4), single = all.filter(s => modelCount.get(s.brand_model || '—') <= 4);
     if (list.length) {
-      const open = sOpenGroups.has(cat);
+      // First load: a category that spans several cabinets opens straight to its Kabin rows; a tap overrides.
+      sGroupDefault.set(cat, spansCabinets(list));
+      const open = sGroupState.has(cat) ? sGroupState.get(cat) : sGroupDefault.get(cat);
       const models = [...list.reduce((m, s) => m.set(s.brand_model || '—', (m.get(s.brand_model || '—') || 0) + 1), new Map())].sort((a, b) => b[1] - a[1]);
       const st = list.reduce((m, s) => { m[s.status] = (m[s.status] || 0) + 1; return m; }, {});
       html += `<tr class="sg-grp" onclick="toggleSGroup(${jsArg(cat)})"><td colspan="12">
@@ -185,7 +186,13 @@ function cabinetRows(cat, list) {
   }).join('');
 }
 function toggleSCab(key) { sOpenCabs.has(key) ? sOpenCabs.delete(key) : sOpenCabs.add(key); renderTable(sRows); }
-function toggleSGroup(cat) { sOpenGroups.has(cat) ? sOpenGroups.delete(cat) : sOpenGroups.add(cat); renderTable(sRows); }
+const sGroupState = new Map();   // category → open (true/false) once the user has tapped it
+const sGroupDefault = new Map(); // category → opens by itself (spans several cabinets)
+function spansCabinets(list) { const c = new Set(list.map(cabinetOf)); c.delete('(no cabinet)'); return c.size >= 2; }
+function toggleSGroup(cat) {
+  const cur = sGroupState.has(cat) ? sGroupState.get(cat) : !!sGroupDefault.get(cat);
+  sGroupState.set(cat, !cur); renderTable(sRows);
+}
 
 function renderPagination(total, page, limit) {
   const totalPages = Math.ceil(total / limit);
