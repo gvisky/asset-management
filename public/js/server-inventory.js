@@ -102,6 +102,13 @@ function rowHtml(s, inGroup) {
       </td>
     </tr>`;
 }
+// Phone: tap anywhere on a device row (not on a button / link) to open its view.
+document.addEventListener('click', (e) => {
+  if (!window.matchMedia('(max-width: 768px)').matches) return;
+  const tr = e.target.closest('#servers-tbody tr:not(.sg-grp)');
+  if (!tr || e.target.closest('button, a, input, select')) return;
+  const v = tr.querySelector('button[title="View"]'); if (v) v.click();
+});
 let sRows = [];
 function renderTable(rows) {
   sRows = rows;
