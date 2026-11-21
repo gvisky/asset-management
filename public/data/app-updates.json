@@ -5,6 +5,7 @@
     "items": [
       "Every edit form on a phone (port, device, server, asset …) opens as a full-height sheet: the form scrolls, the title and the Save / Cancel buttons stay at the bottom of the screen, with big touch-size fields and buttons.",
       "Network map on a phone: tapping a switch (list or map) jumps straight to its ports; each port is a 2-line card (port · connected to · far port, then cable / mode / VLAN / patch / note) — tap it to edit.",
+      "Server Inventory on a phone: the tabs are short — 🏭 OT · 🖥 IT · All · ☁ Virtual — and fit on one line (full names stay on laptop).",
       "Front-panel port buttons are bigger for fingers. Laptop / desktop view is unchanged."
     ]
   },

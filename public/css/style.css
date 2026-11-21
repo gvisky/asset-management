@@ -1656,6 +1656,7 @@ body.nm-full .nm-svg { height: calc(100vh - 78px); } body.nm-full .nm-scroll { m
   .si-tabs::-webkit-scrollbar { display: none; }
   .si-tabs button { flex: none; white-space: nowrap; font-size: 13px; padding: 8px 10px; }
   .si-tabs [data-io] + [data-t="vm"] { margin-left: 0; }
+  .si-tabs .tl-long { display: none; }   /* phone: 🏭 OT · 🖥 IT · All · ☁ Virtual on one line */
 
   /* Server Inventory phone cards: key fields only (full record via Edit / View) */
   #servers-tbody td[data-label="#"],
