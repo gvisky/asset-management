@@ -368,8 +368,10 @@ function initMobileNav() {
   backdrop.className = 'sidebar-backdrop';
   document.body.appendChild(backdrop);
 
-  const open  = () => { sidebar.classList.add('open');  backdrop.classList.add('show'); };
-  const close = () => { sidebar.classList.remove('open'); backdrop.classList.remove('show'); };
+  // While the menu is open the page behind is locked, so a swipe scrolls the menu only.
+  const open  = () => { sidebar.classList.add('open');  backdrop.classList.add('show'); document.documentElement.classList.add('nav-open'); };
+  const close = () => { sidebar.classList.remove('open'); backdrop.classList.remove('show'); document.documentElement.classList.remove('nav-open'); };
+  backdrop.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
   toggle.addEventListener('click', () =>
     sidebar.classList.contains('open') ? close() : open());

@@ -37,6 +37,10 @@ a { color: inherit; text-decoration: none; }
   position: fixed;
   top: 0; left: 0;
   height: 100vh;
+  height: 100dvh;                /* real visible height on phones (address bar) */
+  overflow-y: auto;              /* long menu scrolls by itself */
+  overscroll-behavior: contain;  /* …without scrolling the page behind it */
+  -webkit-overflow-scrolling: touch;
   z-index: 100;
   transition: transform .25s ease;
   /* Keep nav clear of the notch (landscape) and home indicator */
@@ -60,7 +64,7 @@ a { color: inherit; text-decoration: none; }
   margin-top: 2px;
 }
 
-.sidebar nav { flex: 1; padding: 12px 0; }
+.sidebar nav { flex: 1 0 auto; padding: 12px 0; }
 
 .nav-section-label {
   font-size: 10px;
@@ -1727,3 +1731,7 @@ body.nm-full .nm-svg { height: calc(100vh - 78px); } body.nm-full .nm-scroll { m
   /* Front-panel ports: bigger touch targets */
   .fp .pt, .fp .pt-chip { min-width: 34px; min-height: 30px; }
 }
+
+/* Phone menu open: the page behind does not scroll (app.js initMobileNav) */
+html.nav-open, html.nav-open body { overflow: hidden; }
+html.nav-open .sidebar-backdrop { touch-action: none; }
