@@ -853,3 +853,8 @@ async function stopCampaign(id) {
   if (!confirm('Stop this open link? People who did not confirm yet cannot use it any more.')) return;
   try { await apiPost(`/api/confirm/campaigns/${id}/stop`, {}); showToast('Stopped'); openCampaigns(); } catch { showToast('Could not stop', 'error'); }
 }
+
+// ── Phase 3 list pattern (js/listkit.js): saved views ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  ListKit.savedViews({ key: 'people', mount: '#ui-views', fields: ['search-input', 'filter-country', 'filter-status', 'filter-usertype', 'sort-by'], apply: () => loadPeople(1) });
+});

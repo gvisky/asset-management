@@ -80,8 +80,8 @@ async function loadServers(page = 1) {
 // Categories with more than 4 devices (Switch, Access Point …) are grouped (closed until clicked).
 function rowHtml(s, inGroup) {
   return `
-    <tr class="${s.fields_locked ? 'row-locked' : ''}${inGroup ? ' sg-in' : ''}">
-      <td class="text-muted text-sm">${s.id}</td>
+    <tr class="${s.fields_locked ? 'row-locked' : ''}${inGroup ? ' sg-in' : ''}" data-id="${s.id}">
+      <td class="text-muted text-sm lk-idc">${siCanBulk() ? `<input type="checkbox" class="lk-sel" data-id="${s.id}" aria-label="Select ${sEsc(s.hostname || s.id)}">` : ''}${s.id}</td>
       <td>${s.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}<code style="font-size:12px;color:var(--brand)">${sEsc(s.asset_code) || '—'}</code></td>
       <td>${s.it_ot === 'OT' ? '<span class="si-ot" title="OT device (Operation Technology)">OT</span> ' : ''}<strong>${sEsc(s.hostname) || '—'}</strong>${s.hostname && /\//.test(s.hostname) ? ` <a href="/network-map.html?host=${encodeURIComponent(s.hostname)}" title="Open on the network map" onclick="event.stopPropagation()">🗺</a>` : ''}</td>
       <td>${sEsc(s.brand_model) || '—'} ${DeviceSpecs.btn(s.brand_model, s.category)}</td>
@@ -109,6 +109,27 @@ document.addEventListener('click', (e) => {
   const v = tr.querySelector('button[title="View"]'); if (v) v.click();
 });
 let sRows = [];
+const siCanBulk = () => { const u = window.CURRENT_USER || {}; return ['admin', 'editor'].includes(u.role); };
+// ── Phase 3 list pattern (js/listkit.js): saved views + bulk actions ─────────────────────────────────────
+function initSiListKit() {
+  ListKit.savedViews({ key: 'servers', mount: '#si-views', fields: ['search-input', 'filter-itot', 'filter-country', 'filter-status', 'filter-producer', 'filter-category'], apply: () => loadServers(1) });
+  const t = setInterval(() => {
+    if (!window.CURRENT_USER) return; clearInterval(t);
+    if (!siCanBulk()) { const a = document.getElementById('si-all'); if (a) a.remove(); return; }
+    if (document.querySelector('#servers-tbody tr[data-id]') && !document.querySelector('#servers-tbody .lk-sel')) loadServers(sCurrentPage);
+    const byId = (id) => sRows.find(s => s.id === Number(id));
+    // The server edit keeps every field that is not sent, so only the chosen field changes (same permission checks as an edit).
+    const bulk = ListKit.bulk({ tbody: '#servers-tbody', all: '#si-all', noun: 'device', actions: [
+      { label: 'Set status…', run: async (ids) => { const v = await ListKit.choose(`Status for ${ids.length} device(s)`, ['Active', 'Broken', 'Stock']); if (!v) return;
+        await ListKit.each(ids, (id) => apiPut(`${SAPI}/${id}`, { status: v }), `Status → ${v}`); bulk.clear(); loadServers(sCurrentPage); if (typeof loadStats === 'function') loadStats(); } },
+      { label: 'Export CSV', run: async (ids) => ListKit.csv(`devices-${new Date().toISOString().slice(0, 10)}.csv`, ids.map(byId).filter(Boolean), [
+        ['#', s => s.id], ['IT / OT', s => s.it_ot || 'IT'], ['Hostname', s => s.hostname], ['Category', s => s.category], ['Brand / Model', s => s.brand_model], ['Producer', s => s.producer],
+        ['Serial', s => s.serial_no], ['Asset code', s => s.asset_code], ['IP', s => s.ip_address], ['MAC', s => s.mac], ['Connected to', s => s.switch_port], ['Country', s => s.country],
+        ['Location', s => s.location], ['Status', s => s.status], ['Warranty', s => s.warranty_expiry]]) },
+    ] });
+  }, 100);
+}
+document.addEventListener('DOMContentLoaded', initSiListKit);
 function renderTable(rows) {
   sRows = rows;
   const tbody = document.getElementById('servers-tbody');

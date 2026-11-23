@@ -717,3 +717,8 @@ document.addEventListener('DOMContentLoaded', () => {
     refresh();
   });
 });
+
+// ── Phase 3 list pattern (js/listkit.js): saved views ───────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  ListKit.savedViews({ key: 'devices', mount: '#dv-views', fields: ['search-input', 'f-view', 'f-issue', 'f-country', 'f-os', 'f-source', 'f-compliant', 'f-asset', 'f-extra'], apply: () => loadDevices(1) });
+});

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Users — Hayat IT</title>
-  <link rel="stylesheet" href="/css/style.css?v=20261123w">
+  <link rel="stylesheet" href="/css/style.css?v=20261123y">
 </head>
 <body>
 
@@ -92,7 +92,7 @@
 
 
     <div class="card">
-      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+      <div class="card-header lk-bar" style="flex-wrap:wrap;gap:10px">
         <div class="search-box" style="min-width:240px;flex:1">
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="search-input" placeholder="Search name, email, employee ID, department, cost center…">
@@ -125,6 +125,7 @@
           <option value="name">Sort: name A → Z</option>
           <option value="logon">Sort: longest since last logon first</option>
         </select>
+        <span id="ui-views"></span>
         <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
       </div>
 
@@ -206,7 +207,7 @@
 </div>
 
 <!-- Edit User (Department / Cost Center) modal -->
-<div class="modal-overlay" id="edituser-overlay">
+<div class="modal-overlay" id="edituser-overlay" data-drawer>
   <div class="modal" style="max-width:480px">
     <div class="modal-header">
       <span class="modal-title" id="edituser-title">Edit User</span>
@@ -232,7 +233,7 @@
 </div>
 
 <!-- Linked assets (by AD Name) modal -->
-<div class="modal-overlay" id="assets-overlay">
+<div class="modal-overlay" id="assets-overlay" data-drawer>
   <div class="modal" style="max-width:640px">
     <div class="modal-header">
       <span class="modal-title" id="assets-title">Assets</span>
@@ -248,6 +249,7 @@
 <script src="/js/auth.js?v=20261123u"></script>
 <script src="/js/app.js?v=20261123s"></script>
 <script src="/js/alerts.js?v=20261123s"></script>
-<script src="/js/user-inventory.js?v=20261119h"></script>
+<script src="/js/listkit.js?v=20261123x"></script>
+<script src="/js/user-inventory.js?v=20261123x"></script>
 </body>
 </html>
