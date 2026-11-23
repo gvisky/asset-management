@@ -222,7 +222,7 @@ let assetBaseline = null;   // first big load — rows from it get no New / Edit
 function renderTable(rows) {
   const tbody = document.getElementById('assets-tbody');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="14"><div class="empty-state">
+    tbody.innerHTML = `<tr><td colspan="12"><div class="empty-state">
       <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
       <p>No assets found.</p>
     </div></td></tr>`;
@@ -245,11 +245,9 @@ function assetRowHtml(a, devHtml = '', extraClass = '') {
           : `<code style="font-size:12px;color:var(--brand)">${esc(a.asset_code) || '—'}</code>`}</td>
       <td>${a.asset_type ? `<span class="badge badge-office" style="font-size:10px">${esc(a.asset_type)}</span><br>` : ''}${esc(a.brand_model) || '—'}${descHint(a)}</td>
       <td class="text-muted text-sm">${esc(a.computer_no) || '—'}${devHtml}${(a.device_refs || []).map(r => `<div class="inv-diff" title="${hEsc(r.text)}">⚠ SAP description names ${hEsc(r.serial)} = Intune <b>${hEsc(r.device)}</b> (${hEsc(String(r.upn || '').split('@')[0])})</div>`).join('')}</td>
-      <td><span class="badge badge-factory">${esc(a.country) || '—'}</span></td>
-      <td>${locationBadge(a.location)}</td>
+      <td><span class="badge badge-factory">${esc(a.country) || '—'}</span>${a.location ? `<div style="margin-top:3px">${locationBadge(a.location)}</div>` : ''}</td>
       <td class="truncate" title="${esc(a.department)}${a.cost_center_desc ? ' · ' + esc(a.cost_center_desc) : ''}">${esc(a.department) || '—'}${a.cost_center ? `<br><span class="text-muted" style="font-size:10.5px">CC ${esc(a.cost_center)}</span>` : ''}</td>
-      <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${esc(a.user_name) || '—'}</td>
-      <td class="text-muted text-sm">${adNameCell(a)}</td>
+      <td>${a.user_locked ? '<span title="Locked — User/AD changed; IT admin unlocks via History Usage">🔒</span> ' : ''}${esc(a.user_name) || '—'}<div class="text-muted text-sm inv-ad">${adNameCell(a)}</div></td>
       <td class="text-muted text-sm">${esc(a.serial_no) || '—'}</td>
       <td class="text-sm" title="${a.purchase_date ? 'Purchased ' + esc(a.purchase_date) : 'No purchase date'}">${yearsInUse(a.purchase_date) || '—'}</td>
       <td>${a.status === 'Broken' && isLaptopType(a.asset_type) && canEdit()
@@ -316,7 +314,7 @@ function looseDeviceRow(d) {
   const computer = isComputerOs(d.os);
   const n = daysAgo(d.last_checkin || d.last_sign_in);
   const missing = issuesOf(d).some(i => i.code === 'not_in_assets');
-  return `<tr class="inv-loose ${missing ? 'inv-missing' : ''}"><td></td><td colspan="13" class="text-sm">
+  return `<tr class="inv-loose ${missing ? 'inv-missing' : ''}"><td></td><td colspan="11" class="text-sm">
     ${computer ? '💻' : '📱'} <b>${hEsc(d.name || '—')}</b> · ${hEsc([d.manufacturer, d.model].filter(Boolean).join(' ') || d.os || '')}
     ${d.serial_no ? ` · SN ${hEsc(d.serial_no)}` : ''} · ${hEsc(d.ownership || 'Entra only')}${d.managed_by ? ' · ' + hEsc(d.managed_by) : ''}
     ${complianceBadge(d)} <span style="color:${daysColor(n)}">⟳ ${daysTxt(n)}</span>
@@ -326,11 +324,11 @@ function looseDeviceRow(d) {
 function renderGrouped(r) {
   const tbody = document.getElementById('assets-tbody');
   // Devices in Intune / Entra matching the search (name, serial, user) — who really has that machine.
-  const hits = (r.deviceHits || []).length ? `<tr class="inv-hits"><td colspan="14">🔎 <b>In Intune / Entra:</b> ${r.deviceHits.map(h =>
+  const hits = (r.deviceHits || []).length ? `<tr class="inv-hits"><td colspan="12">🔎 <b>In Intune / Entra:</b> ${r.deviceHits.map(h =>
       `<span class="inv-hit">${isComputerOs(h.os) ? '💻' : '📱'} <b>${hEsc(h.name || '—')}</b> · SN ${hEsc(h.serial || '—')} · ${hEsc(h.model || '')} · used by <b>${hEsc(h.user || '—')}</b>`
       + ` · ${h.asset_id ? `asset #${h.asset_id}` : '<span style="color:#dc2626">not in Asset Inventory</span>'}`
       + ` <a href="/devices.html?search=${encodeURIComponent(h.name || h.serial || '')}">open →</a></span>`).join('')}</td></tr>` : '';
-  if (!r.groups.length) { tbody.innerHTML = hits + '<tr><td colspan="14"><div class="empty-state"><p>No assets found.</p></div></td></tr>'; return; }
+  if (!r.groups.length) { tbody.innerHTML = hits + '<tr><td colspan="12"><div class="empty-state"><p>No assets found.</p></div></td></tr>'; return; }
   r.groups.forEach(g => g.assets.forEach(a => invRows.set(String(a.id), a)));
   tbody.innerHTML = hits + r.groups.map(g => {
     const p = g.person;
@@ -356,12 +354,12 @@ function renderGrouped(r) {
       p && p.ad_manager ? `↑ ${hEsc(p.ad_manager)}` : '',
       toCheck ? `<span class="badge badge-broken" style="font-size:10px">⚠ ${toCheck} to check</span>` : ''].filter(Boolean).join(' · ');
     // One block per user: gap · header · their assets · "other devices" section.
-    return `<tr class="inv-gap"><td colspan="14"></td></tr>`
-      + `<tr class="inv-group"><td colspan="14">${head}<span class="inv-group-meta">${meta}</span></td></tr>`
+    return `<tr class="inv-gap"><td colspan="12"></td></tr>`
+      + `<tr class="inv-group"><td colspan="12">${head}<span class="inv-group-meta">${meta}</span></td></tr>`
       + g.assets.map(a => assetRowHtml(a, (linked.get(a.id) || []).map(deviceLine).join(''), 'inv-in-group')).join('')
-      + (looseUnique.length ? `<tr class="inv-loose inv-loose-head"><td></td><td colspan="13">Other devices of this user in Intune / Entra (${looseUnique.length})</td></tr>` : '')
+      + (looseUnique.length ? `<tr class="inv-loose inv-loose-head"><td></td><td colspan="11">Other devices of this user in Intune / Entra (${looseUnique.length})</td></tr>` : '')
       + looseUnique.map(looseDeviceRow).join('');
-  }).join('') + '<tr class="inv-gap"><td colspan="14"></td></tr>';
+  }).join('') + '<tr class="inv-gap"><td colspan="12"></td></tr>';
 }
 
 // Years in use = Purchase Date (YYYY-MM-DD) → today, e.g. "4.3 yrs". '' when no valid date.

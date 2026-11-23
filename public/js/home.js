@@ -65,7 +65,11 @@
       const h = new Date().getHours();
       $('hm-hello').innerHTML = `<h2>${h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'}, ${esc(String(u.full_name || u.username).split(' ')[0])}</h2>
         <div class="text-muted text-sm">${u.team === 'HR' ? 'People and leavers' : u.team === 'OT' ? 'OT devices and the factory network' : u.team === 'NET' ? 'Network devices of IT and OT' : ''}</div>`;
-      ({ HR: hr, OT: ot, NET: net }[u.team] || (() => { $('hm-cards').innerHTML = '<p class="text-muted">Nothing here for this account yet.</p>'; }))();
+      Promise.resolve(({ HR: hr, OT: ot, NET: net }[u.team] || (() => { $('hm-cards').innerHTML = '<p class="text-muted">Nothing here for this account yet.</p>'; }))()).then(() => {
+        // What's new in the app — the same list as the avatar menu.
+        $('hm-cards').insertAdjacentHTML('beforeend', '<div class="card"><div class="card-header"><span class="card-title">🚀 What\'s new in the app</span><button class="btn btn-ghost btn-sm" type="button" onclick="Shell.openNews()">See all →</button></div><div class="card-body" id="hm-news"></div></div>');
+        if (window.Shell && Shell.newsCard) Shell.newsCard($('hm-news'), 3);
+      });
     }, 100);
   });
 })();

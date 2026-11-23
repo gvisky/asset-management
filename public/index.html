@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Overview — Hayat IT</title>
-  <link rel="stylesheet" href="/css/style.css?v=20261124d">
+  <link rel="stylesheet" href="/css/style.css?v=20261124g">
 </head>
 <body>
 
@@ -101,6 +101,11 @@
         <div class="card" id="ov-health-card" hidden>
           <div class="card-header"><span class="card-title">Health now</span><a class="btn btn-ghost btn-sm" href="/system-health.html">Monitoring →</a></div>
           <div class="card-body" id="ov-health"><div class="text-muted text-sm">Loading…</div></div>
+        </div>
+        <!-- What's new in the app (newest first) — also in the avatar menu -->
+        <div class="card" id="ov-news-card">
+          <div class="card-header"><span class="card-title">🚀 What's new in the app</span><button class="btn btn-ghost btn-sm" type="button" onclick="Shell.openNews()">See all →</button></div>
+          <div class="card-body" id="ov-news"><div class="text-muted text-sm">Loading…</div></div>
         </div>
       </div>
     </div>
@@ -278,13 +283,13 @@
 <!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 
-<script src="/js/shell.js?v=20261124b"></script>
+<script src="/js/shell.js?v=20261124g"></script>
 <script src="/js/auth.js?v=20261124a"></script>
 <script src="/js/app.js?v=20261123s"></script>
 <script src="/js/alerts.js?v=20261123s"></script>
 <script src="/js/needs-attention.js?v=20261117a"></script>
 <script src="/js/parts-check.js?v=20261113a"></script>
 <script src="/js/server-attention.js?v=20261123u"></script>
-<script src="/js/dashboard.js?v=20261124a"></script>
+<script src="/js/dashboard.js?v=20261124g"></script>
 </body>
 </html>
