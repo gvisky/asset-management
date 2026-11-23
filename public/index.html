@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Overview — Hayat IT</title>
-  <link rel="stylesheet" href="/css/style.css?v=20261124g">
+  <link rel="stylesheet" href="/css/style.css?v=20261124i">
 </head>
 <body>
 
@@ -74,8 +74,9 @@
     <div class="kpi-grid" id="kpi-grid"></div>
 
     <!-- Breakdown: by country, by asset type -->
-    <div class="grid-2" style="margin-bottom:28px">
-      <div class="dash-col">
+    <!-- Two columns; Inbox, Health now and What's new go to the shorter one (js/dashboard.js balanceOverview) -->
+    <div class="grid-2" style="margin-bottom:28px" id="ov-grid">
+      <div class="dash-col" id="ov-colL">
         <div class="card">
           <div class="card-header">
             <span class="card-title">Assets by Country</span>
@@ -89,7 +90,7 @@
           <div class="card-body" id="ov-inbox"><div class="text-muted text-sm">Loading…</div></div>
         </div>
       </div>
-      <div class="dash-col">
+      <div class="dash-col" id="ov-colR">
       <div class="card">
         <div class="card-header">
           <span class="card-title">Assets by Type <span class="text-muted text-sm" id="bd-type-scope"></span></span>
@@ -290,6 +291,6 @@
 <script src="/js/needs-attention.js?v=20261117a"></script>
 <script src="/js/parts-check.js?v=20261113a"></script>
 <script src="/js/server-attention.js?v=20261123u"></script>
-<script src="/js/dashboard.js?v=20261124g"></script>
+<script src="/js/dashboard.js?v=20261124j"></script>
 </body>
 </html>
