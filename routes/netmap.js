@@ -24,9 +24,11 @@ const H = {};   // handlers also run by the link check (POST /link-check, and on
 router.use(requireAuth);
 // Asset users, and the OT team (Operation Technology) — OT only reads, and only its OT view.
 const isOT = (req) => !!req.user && req.user.team === 'OT';
-router.use((req, res, next) => (req.user && (req.user.asset_access !== 0 || isOT(req)) ? next() : res.status(403).json({ error: 'No access' })));
+// Network team: the whole map (IT + OT); NET editors change ports, a network admin (net_admin) also imports / deletes.
+const isNET = (req) => !!req.user && req.user.team === 'NET';
+router.use((req, res, next) => (req.user && (req.user.asset_access !== 0 || isOT(req) || isNET(req)) ? next() : res.status(403).json({ error: 'No access' })));
 const canEdit = (req) => ['admin', 'editor'].includes(req.user.role) && !isOT(req);
-const isAdmin = (req) => req.user.role === 'admin' && !isOT(req);
+const isAdmin = (req) => (req.user.role === 'admin' || !!req.user.net_admin) && !isOT(req);
 // OT view: the Kabin switches (IT-KABIN, HARICI KABIN, CCTV …, card readers) and everything cabled to them. A device's "ot"
 // column overrides the rule (1 = show, 0 = hide). IT can preview it with ?view=ot.
 const otView = (req) => isOT(req) || req.query.view === 'ot';
@@ -117,7 +119,7 @@ const desc = (p) => (p && (p.peer_host || p.peer_port || p.patch) ? `${p.peer_ho
 // Server Inventory records that know their switch port ("Connected to"), shown on that port. OT: only OT records;
 // users without Asset Inventory access (other than OT) get none.
 async function records(req, otOnly) {
-  if (req.user.asset_access === 0 && !isOT(req)) return [];
+  if (req.user.asset_access === 0 && !isOT(req) && !isNET(req)) return [];
   // Records cabled to a switch (end devices on the map) + every camera, also without a switch yet (camera pins on drawings).
   return all(`SELECT id, hostname, category, switch_port, it_ot FROM servers WHERE deleted_at IS NULL AND (COALESCE(switch_port, '') <> '' OR category LIKE '%camera%')${otOnly || isOT(req) ? " AND it_ot = 'OT'" : ''}`);
 }
@@ -128,7 +130,7 @@ router.get('/', wrap(async (req, res) => {
   let ports = devices.length ? await all(`SELECT p.* FROM net_ports p JOIN net_devices d ON d.id = p.device_id WHERE d.site = ? ORDER BY p.device_id, p.sort, p.port`, [site]) : [];
   let vlans = await all('SELECT * FROM net_vlans WHERE site = ? ORDER BY CAST(vlan AS INTEGER)', [site]);
   let patches = await all('SELECT panel, port, outlet, note FROM net_patch_ports WHERE site = ? ORDER BY panel, port', [site]);
-  const team = { isOT: isOT(req), isIT: req.user.team === 'IT' };
+  const team = { isOT: isOT(req), isIT: req.user.team === 'IT', isNET: isNET(req) };
   if (otView(req)) {
     // Read-only slice for the OT team (or IT previewing it): no racks, drawings, patch panels or other devices.
     const sl = otSlice(devices, ports);

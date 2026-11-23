@@ -63,7 +63,7 @@ const NM = (() => {
     if (typeof NMRacks !== 'undefined' && (!$('nm-view-rack').hidden || !$('nm-view-draw').hidden)) NMRacks.show(!$('nm-view-rack').hidden ? 'rack' : 'draw');
     [...$('nm-mode').options].forEach(o => { o.hidden = ot && (o.value === 'physical' || o.value === 'system'); });
     if (ot && (mode === 'physical' || mode === 'system')) { mode = 'map'; $('nm-mode').value = 'map'; }
-    $('nm-ot').innerHTML = team.isIT ? `<span class="nm-tabs small" title="OT view = what the OT team sees: Kabin switches and what is connected to them"><button class="${ot ? '' : 'on'}" data-o="it">IT view</button><button class="${ot ? 'on' : ''}" data-o="ot">OT view</button></span>`
+    $('nm-ot').innerHTML = team.isIT || team.isNET ? `<span class="nm-tabs small" title="OT view = what the OT team sees: Kabin switches and what is connected to them"><button class="${ot ? '' : 'on'}" data-o="it">IT view</button><button class="${ot ? 'on' : ''}" data-o="ot">OT view</button></span>`
       : ot ? '<span class="nm-otbadge" title="Kabin switches (IT / CCTV Kabin) and the devices connected to them">OT view</span>' : '';
     $('nm-ot').querySelectorAll('button[data-o]').forEach(b => { b.onclick = () => { otMode = b.dataset.o === 'ot'; localStorage.setItem('nm-view', otMode ? 'ot' : 'it'); sel = null; load(D.site).then(fit); }; });
     document.body.classList.toggle('nm-is-ot', ot);

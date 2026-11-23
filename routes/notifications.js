@@ -14,6 +14,7 @@ router.use(requireAuth);
 function visibility(req) {
   // OT members only use the Network map: they see notifications addressed to the OT team, nothing else.
   if (req.user.team === 'OT') return { clause: "audience = 'OT'", params: [] };
+  if (req.user.team === 'NET') return { clause: "audience = 'NET'", params: [] };   // Network team: only notes addressed to it
   const conds = ["(audience = 'all'"];
   const params = [];
   if (req.user.team) { conds[0] += ' OR audience = ?'; params.push(req.user.team); }

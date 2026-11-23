@@ -251,7 +251,7 @@ async function onView(id) {
         <div id="maint-list" class="text-muted text-sm">Loading…</div>
       </div>`;
     document.getElementById('view-overlay').classList.add('open');
-    if ((window.CURRENT_USER || {}).team !== 'OT') loadMaintenance(id);
+    if (!['OT', 'NET'].includes((window.CURRENT_USER || {}).team)) loadMaintenance(id);
   } catch (e) { showToast('Failed to load server', 'error'); }
 }
 
@@ -314,7 +314,7 @@ function applyFieldLock(s) {
   const banner = document.getElementById('lock-banner');
   const unlockBtn = document.getElementById('modal-unlock');
   const me = window.CURRENT_USER || {};
-  const it = isIT() || (me.team === 'OT' && s && s.it_ot === 'OT');   // OT editors own the OT devices
+  const it = isIT() || (me.team === 'OT' && s && s.it_ot === 'OT') || me.team === 'NET';   // OT editors own the OT devices, the Network team the network devices
   const itAdmin = isITAdmin();
   const isNew = !s || !s.id;
   const locked = !isNew && !!s.fields_locked;
@@ -437,10 +437,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Update from the network map (implementation document) — admins ──
 // The button shows for admins once the page knows who you are.
-document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin') document.getElementById('btn-netsync').style.display = '';
+document.addEventListener('DOMContentLoaded', () => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.role === 'admin' || window.CURRENT_USER.net_admin) document.getElementById('btn-netsync').style.display = '';
   if (window.CURRENT_USER.team === 'IT' && window.CURRENT_USER.role === 'admin') { document.getElementById('btn-otimport').style.display = ''; document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-macports').style.display = ''; document.getElementById('btn-camsw').style.display = ''; document.getElementById('btn-cctvimport').style.display = ''; }
   // OT team: read-only list of the OT devices.
   if (window.CURRENT_USER.team === 'OT' && window.CURRENT_USER.role === 'editor') { document.getElementById('btn-portlinks').style.display = ''; document.getElementById('btn-macports').style.display = ''; document.getElementById('btn-camsw').style.display = ''; }
+  if (window.CURRENT_USER.team === 'NET') { document.querySelector('.topbar-title').textContent = 'Network devices'; document.getElementById('btn-add').textContent = '+ Add network device'; }
   if (window.CURRENT_USER.team === 'OT') { document.querySelector('.topbar-title').textContent = 'OT devices'; const s = document.querySelector('.si-tabs [data-io=OT]'); if (s) s.textContent = '🏭 OT devices'; setIoTab('OT'); }
   const v = Number(new URLSearchParams(location.search).get('view')); if (v) onView(v);
   const ed = Number(new URLSearchParams(location.search).get('edit')); if (ed) onEdit(ed); /* from ⚠️ OT Needs Attention */ }, 150); });
@@ -483,7 +484,7 @@ async function openNetSync(keepSite) {
 
 // ── ⚠️ Needs Attention — Servers & Network: Missing Info (js/server-attention.js) ──
 // The OT team only reads the OT list: no counters, summary or virtual servers for them.
-const notOT = () => new Promise(res => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); res(window.CURRENT_USER.team !== 'OT'); }, 60); });
+const notOT = () => new Promise(res => { const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); res(!['OT', 'NET'].includes(window.CURRENT_USER.team)); }, 60); });
 async function naCount() { if (!(await notOT())) return; const n = await ServerAttention.count(); const c = document.getElementById('na-cnt'); if (c) c.textContent = n || ''; }
 function openMissing() {
   let ov = document.getElementById('na-ov');

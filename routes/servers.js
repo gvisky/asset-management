@@ -17,7 +17,17 @@ router.use(requireAuth);
 // OT team (Operation Technology): only the OT devices (it_ot = 'OT') — list, filters, one record; OT editors may also edit
 // an OT record (never an IT one, never delete).
 const isOT = (req) => !!req.user && req.user.team === 'OT';
+// Network team (lib/net-team.js): the network devices of IT and OT — list, filters, one record; editors add / edit them,
+// a network admin also deletes (restorable). Never servers, PCs, cameras …
+const NETT = require('../lib/net-team');
+const isNET = (req) => NETT.isNET(req.user);
 router.use((req, res, next) => {
+  if (isNET(req)) {
+    if (req.method === 'GET' && !/^\/(stats|usage|needs-info|ot-attention)\b/.test(req.path)) return next();
+    if (req.user.net_admin && req.method === 'DELETE' && /^\/\d+$/.test(req.path)) return next();
+    if (req.user.role === 'editor' && ((req.method === 'PUT' && /^\/\d+$/.test(req.path)) || (req.method === 'POST' && req.path === '/'))) return next();
+    return res.status(403).json({ error: 'Network team: the network devices only (editors can add and edit them)' });
+  }
   if (isOT(req)) {
     if (req.method === 'GET' && !/^\/(stats|usage|needs-info)\b/.test(req.path)) return next();
     if (req.user.ot_admin && req.method === 'DELETE' && /^\/\d+$/.test(req.path)) return next();   // OT admin: delete an OT device (restorable)
@@ -32,8 +42,11 @@ router.use((req, res, next) => {
 // IT / OT filter: ?it_ot=IT|OT (OT users always OT). IT = everything not marked OT.
 function itOtClause(req) {
   const v = isOT(req) ? 'OT' : String(req.query.it_ot || '').toUpperCase();
-  return v === 'OT' ? "COALESCE(it_ot, '') = 'OT'" : v === 'IT' ? "COALESCE(it_ot, '') <> 'OT'" : '';
+  const c = v === 'OT' ? "COALESCE(it_ot, '') = 'OT'" : v === 'IT' ? "COALESCE(it_ot, '') <> 'OT'" : '';
+  return isNET(req) ? (c ? `${c} AND ${NETT.NET_CAT_SQL}` : NETT.NET_CAT_SQL) : c;   // Network team: network devices only
 }
+// A record the Network team may not see / change: anything that is not a network device.
+const netHidden = (req, row) => isNET(req) && !NETT.isNetCategory(row.category);
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const countryFilter = (req) => countrySql(req, 'country');
@@ -210,7 +223,7 @@ async function otAttention(req) {
 
 router.get('/:id', wrap(async (req, res) => {
   const row = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);
-  if (!row || (isOT(req) && row.it_ot !== 'OT')) return res.status(404).json({ error: 'Server not found' });
+  if (!row || (isOT(req) && row.it_ot !== 'OT') || netHidden(req, row)) return res.status(404).json({ error: 'Server not found' });
   if (!inScope(req, row.country)) return res.status(403).json({ error: 'Not in your region' });
   res.json(row);
 }));
@@ -403,7 +416,7 @@ router.post('/photos', requireITAdmin, wrap(async (req, res) => {
 }));
 router.get('/:id/photo', wrap(async (req, res) => {
   const s = await get('SELECT country, it_ot FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
-  if (!s || (isOT(req) && s.it_ot !== 'OT') || !inScope(req, s.country)) return res.status(404).end();
+  if (!s || (isOT(req) && s.it_ot !== 'OT') || netHidden(req, s) || !inScope(req, s.country)) return res.status(404).end();
   const p = await get('SELECT mime, data_b64 FROM server_photos WHERE server_id = ?', [req.params.id]);
   if (!p || !p.data_b64) return res.status(404).end();
   res.set('Content-Type', p.mime).set('Cache-Control', 'private, max-age=300');
@@ -551,10 +564,11 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const v = {};
   FIELDS.forEach(f => v[f] = req.body[f] != null ? req.body[f] : '');
   if (isOT(req)) v.it_ot = 'OT';   // a device added by the OT team is an OT device
+  if (isNET(req) && !NETT.isNetCategory(v.category)) return res.status(400).json({ error: 'Network team: set a network category (Switch, Router, Firewall, Access Point, Wireless Controller, Voice Gateway …)' });
   if (!v.status) v.status = 'Active';
   const finalCountry = resolveCountry(req, req.body.country);
   const ts0 = new Date().toISOString().slice(0, 16).replace('T', ' ');
-  const history_usage = req.body.history_usage || `${ts0} UTC: created by ${req.user.username}${isOT(req) ? ' (OT team)' : ''}`;
+  const history_usage = req.body.history_usage || `${ts0} UTC: created by ${req.user.username}${isOT(req) ? ' (OT team)' : isNET(req) ? ' (Network team)' : ''}`;
 
   const cols = ['country', ...FIELDS, 'history_usage'];
   const vals = [finalCountry, ...FIELDS.map(f => v[f]), history_usage];
@@ -571,6 +585,8 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const existing = await get('SELECT * FROM servers WHERE id = ? AND deleted_at IS NULL', [req.params.id]);
   if (!existing) return res.status(404).json({ error: 'Server not found' });
   if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
+  if (netHidden(req, existing)) return res.status(404).json({ error: 'Server not found' });
+  if (isNET(req) && req.body.category !== undefined && !NETT.isNetCategory(req.body.category)) return res.status(400).json({ error: 'Network team: the category must stay a network category' });
   if (isOT(req)) {
     if (existing.it_ot !== 'OT') return res.status(404).json({ error: 'Server not found' });
     req.body.it_ot = 'OT';   // an OT editor cannot move a device to IT
@@ -598,7 +614,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     if (existing.fields_locked) {
       return res.status(403).json({ error: 'Serial, Brand/Model and Asset Code are locked. An IT admin must unlock this record first.' });
     }
-    if (req.user.team !== 'IT' && !(isOT(req) && existing.it_ot === 'OT')) {
+    if (req.user.team !== 'IT' && !(isOT(req) && existing.it_ot === 'OT') && !isNET(req)) {
       return res.status(403).json({ error: 'Only IT members can edit Serial, Brand/Model or Asset Code.' });
     }
   }
@@ -652,6 +668,7 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   if (!existing) return res.status(404).json({ error: 'Server not found' });
   if (!inScope(req, existing.country)) return res.status(403).json({ error: 'Not in your region' });
   if (isOT(req) && !(req.user.ot_admin && existing.it_ot === 'OT')) return res.status(403).json({ error: 'Only an OT admin can delete OT devices' });
+  if (isNET(req) && (!req.user.net_admin || netHidden(req, existing))) return res.status(403).json({ error: 'Only a network admin can delete network devices' });
   await run("UPDATE servers SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?", [req.user.username, req.params.id]);
   await OTA.logServer(req.user, existing, await get('SELECT * FROM servers WHERE id = ?', [req.params.id]));
   const label = existing.hostname || existing.asset_code || 'untitled';

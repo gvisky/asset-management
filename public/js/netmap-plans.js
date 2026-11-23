@@ -324,7 +324,7 @@ const NMPlans = self.NMPlans = (() => {
       : { st: 'sw', sub: `${name} · port ?`, tip: `Switch: ${host}${name !== host ? ' (' + name + ')' : ''} — port not known yet` };
   }
   // Editors (IT) and OT editors may edit cameras (OT devices) from the popups.
-  const canCam = () => { const u = window.CURRENT_USER || {}; return (u.team === 'IT' && ['admin', 'editor'].includes(u.role)) || (u.team === 'OT' && u.role === 'editor'); };
+  const canCam = () => { const u = window.CURRENT_USER || {}; return (u.team === 'IT' && ['admin', 'editor'].includes(u.role)) || ((u.team === 'OT' || u.team === 'NET') && u.role === 'editor'); };
   function editCam(id) {
     DeviceEdit.open(id, { onSaved: async () => { await NM.reload(); render(); if (focusI != null) info(focusI); } });
   }

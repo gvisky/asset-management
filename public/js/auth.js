@@ -19,7 +19,7 @@ async function ensureAuth() {
     renderUserChrome();
     applyRoleGates();
     applyAssetGating();
-    if (window.CURRENT_USER.team !== 'OT') loadGlobalSearch();
+    if (!['OT', 'NET'].includes(window.CURRENT_USER.team)) loadGlobalSearch();
     return window.CURRENT_USER;
   } catch {
     window.location.href = '/login.html';
@@ -75,7 +75,7 @@ function canEdit()       { return window.CURRENT_USER && ['admin','editor'].incl
 function isIT()          { return window.CURRENT_USER && window.CURRENT_USER.team === 'IT'; }
 function isITAdmin()     { return isIT() && window.CURRENT_USER.role === 'admin'; }   // e.g. Viet
 function roleLabel(u)    {
-  const r = (u.ot_admin ? 'Admin' : (u.role || '').charAt(0).toUpperCase() + (u.role || '').slice(1)) + (u.team === 'OT' ? ' · OT' : '');
+  const r = (u.ot_admin || u.net_admin ? 'Admin' : (u.role || '').charAt(0).toUpperCase() + (u.role || '').slice(1)) + (u.team === 'OT' ? ' · OT' : u.team === 'NET' ? ' · Network' : '');
   return u.country ? `${u.country} ${r}` : r;
 }
 
@@ -143,9 +143,9 @@ function renderUserChrome() {
   };
   const ico = (d) => `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${d}</svg>`;
   navAdd('nav-stocktake', '/stocktake.html', ico('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>') + ' Stocktake', '#nav-maintenance', u.asset_access !== 0);
-  navAdd('nav-netmap', '/network-map.html', ico('<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>') + ' Network map', '#nav-servers', u.asset_access !== 0 || u.team === 'OT');
+  navAdd('nav-netmap', '/network-map.html', ico('<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>') + ' Network map', '#nav-servers', u.asset_access !== 0 || u.team === 'OT' || u.team === 'NET');
   navAdd('nav-otna', '/ot-attention.html', ico('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>') + ' OT Needs Attention', '#nav-netmap', u.team === 'OT');
-  navAdd('nav-otrep', '/ot-reports.html', ico('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>') + ' OT Reports', '#nav-otna', u.team === 'OT');
+  navAdd('nav-otrep', '/ot-reports.html', ico('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>') + ' OT Reports', '#nav-otna', u.team === 'OT' || u.team === 'NET');
   navAdd('nav-otact', '/ot-activity.html', ico('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>') + ' OT Activity', '#nav-otrep', !!u.ot_admin);
   // IT team: the OT pages are reached from Needs Attention / Reports / Users & Audit (not in the menu) — mark that page
   // in the menu and add a way back in the top bar.
@@ -249,6 +249,14 @@ function applyAssetGating() {
     document.querySelectorAll('.sidebar nav a').forEach(a => { if (!['nav-netmap', 'nav-servers', 'nav-otna', 'nav-otrep', 'nav-otact'].includes(a.id)) a.style.display = 'none'; });
     document.querySelectorAll('.sidebar .nav-section-label').forEach((l, i) => { if (i > 0) l.style.display = 'none'; });
     if (!['/network-map.html', '/server-inventory.html', '/ot-attention.html', '/ot-reports.html'].concat(u.ot_admin ? ['/ot-activity.html'] : []).includes(window.location.pathname)) window.location.href = '/network-map.html';
+    return;
+  }
+  // Network team: the network devices of IT and OT (Server Inventory), the full Network map and OT Reports.
+  if (u && u.team === 'NET') {
+    document.documentElement.classList.add('is-net', u.role === 'editor' ? 'is-net-editor' : 'is-net-viewer');
+    document.querySelectorAll('.sidebar nav a').forEach(a => { if (!['nav-netmap', 'nav-servers', 'nav-otrep'].includes(a.id)) a.style.display = 'none'; });
+    document.querySelectorAll('.sidebar .nav-section-label').forEach((l, i) => { if (i > 0) l.style.display = 'none'; });
+    if (!['/network-map.html', '/server-inventory.html', '/ot-reports.html'].includes(window.location.pathname)) window.location.href = '/network-map.html';
     return;
   }
   if (!u || u.asset_access !== 0) return;

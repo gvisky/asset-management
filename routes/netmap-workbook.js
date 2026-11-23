@@ -18,7 +18,7 @@ const { macNorm, str, portSort, desc, FIELDS, normSn, parseLoc, placeDevices, mo
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 router.use(requireAuth);
-router.use((req, res, next) => (req.user && req.user.asset_access !== 0 && req.user.role === 'admin' ? next() : res.status(403).json({ error: 'Admins only' })));
+router.use((req, res, next) => (req.user && ((req.user.asset_access !== 0 && req.user.role === 'admin') || req.user.net_admin) ? next() : res.status(403).json({ error: 'Admins only' })));
 
 // ── Names ────────────────────────────────────────────────────────────────────
 const U = (s) => String(s == null ? '' : s).trim().toUpperCase();

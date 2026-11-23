@@ -24,6 +24,19 @@ app.use(async (req, res, next) => {
 // After the body parsers, so the request context reaches the route handlers.
 app.use(require('./lib/activity').activityLog);
 
+// Network team (team NET): only its pages and APIs (lib/net-team.js) — the routes then show it the network devices only.
+const NET = require('./lib/net-team');
+app.use(async (req, res, next) => {
+  try {
+    const api = req.path.startsWith('/api');
+    if (api ? NET.netApiAllowed(req.path) : NET.netPageAllowed(req.path)) return next();
+    const u = await getUserFromRequest(req);
+    if (!NET.isNET(u)) return next();
+    if (api) return res.status(403).json({ error: 'Network team: network devices and the Network map only' });
+    return res.redirect('/network-map.html');
+  } catch (e) { next(e); }
+});
+
 // API routes
 app.use('/api/auth',      require('./routes/auth'));
 app.use('/api/assets',    require('./routes/assets'));
