@@ -169,7 +169,7 @@
     const up = new URLSearchParams(location.search);
     if (up.get('tab') === 'vm') { if (up.get('search')) q = up.get('search'); tab('vm'); }
     // Count of virtual servers on the tab — once the user is known (the OT team has no virtual servers).
-    const vt = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(vt); if (window.CURRENT_USER.team === 'OT') return;
+    const vt = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(vt); if (['OT', 'NET'].includes(window.CURRENT_USER.team)) return;
       apiGet('/api/virtual-servers').then(r => { const c = $('vm-cnt'); if (c && r.rows.length) c.textContent = r.rows.length; }).catch(() => {}); }, 60);
   });
 })();

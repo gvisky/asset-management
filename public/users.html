@@ -174,8 +174,9 @@
             <option value="IT">IT member</option>
             <option value="HR">HR member</option>
             <option value="OT">OT member — Network map (OT view) only</option>
+            <option value="NET">Network team — network devices of IT and OT + Network map</option>
           </select>
-          <span class="text-muted text-sm">IT or HR — controls the User Inventory page. Only an IT admin can edit User Inventory. OT — sees only the Network map in its OT view (Kabin switches and what is connected to them) and its drawings; OT viewers only look, OT editors can edit the ports to end devices (cameras, access control …), never ports to network devices.</span>
+          <span class="text-muted text-sm">IT or HR — controls the User Inventory page. Only an IT admin can edit User Inventory. OT — sees only the Network map in its OT view (Kabin switches and what is connected to them) and its drawings; OT viewers only look, OT editors can edit the ports to end devices (cameras, access control …), never ports to network devices. Network team — only the network devices (switches, routers, firewalls, voice gateways, wireless controllers, access points) of IT and OT in Server Inventory, the full Network map (racks, drawings) and OT Reports; viewers look, editors add / edit network devices and ports, a Network admin (role Admin) also deletes and imports them. No Asset / User Inventory, Budget or Users.</span>
         </div>
         <div class="form-group" style="margin-bottom:14px">
           <label class="form-label">Asset Inventory access</label>
@@ -200,9 +201,9 @@
 
 <div class="toast-container" id="toast-container"></div>
 
-<script src="/js/auth.js?v=20261123a"></script>
+<script src="/js/auth.js?v=20261123n"></script>
 <script src="/js/ot-links.js?v=20261120a"></script>
 <script src="/js/app.js"></script>
-<script src="/js/users.js?v=20261113ax"></script>
+<script src="/js/users.js?v=20261123n"></script>
 </body>
 </html>

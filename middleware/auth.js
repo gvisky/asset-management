@@ -19,7 +19,12 @@ function parseCookies(req) {
 }
 
 // Look up the logged-in user from the session cookie. Returns user or null.
-async function getUserFromRequest(req) {
+// Looked up once per request (the body parser, the page gate, the Network-team gate and the route all ask).
+function getUserFromRequest(req) {
+  if (!req._authUser) req._authUser = lookupUser(req);
+  return req._authUser;
+}
+async function lookupUser(req) {
   const cookies = parseCookies(req);
   const token = cookies.sid;
   if (!token) return null;
@@ -38,6 +43,8 @@ async function getUserFromRequest(req) {
   // OT admin (team OT + role admin): everywhere else an OT editor — never an IT admin — plus the OT activity log and
   // restoring / deleting OT devices (checked with user.ot_admin).
   if (user && user.team === 'OT' && user.role === 'admin') { user.role = 'editor'; user.ot_admin = 1; }
+  // Network admin (team NET + role admin): a NET editor that also imports / deletes network devices — never an IT admin.
+  if (user && user.team === 'NET' && user.role === 'admin') { user.role = 'editor'; user.net_admin = 1; }
   if (!user) return null;
   // Two-step login required but not set up yet: only the login / setup API works (pages send them to
   // /mfa-setup.html — see server.js). Everything else sees "not signed in" until the authenticator is added.

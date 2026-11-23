@@ -49,7 +49,7 @@ async function loadUsers() {
         <td class="text-muted text-sm">${u.id}</td>
         <td><strong>${htmlEsc(u.username)}</strong>${u.id === (me && me.id) ? ' <span class="text-muted text-sm">(you)</span>' : ''}</td>
         <td>${htmlEsc(u.full_name) || '—'}</td>
-        <td>${u.team === 'OT' && u.role === 'admin' ? '<span class="badge badge-broken" title="OT admin: OT editor + OT activity log, restore and delete OT devices — no IT admin rights">OT admin</span>' : roleBadge(u.role)}</td>
+        <td>${u.team === 'NET' && u.role === 'admin' ? '<span class="badge badge-broken" title="Network admin: Network team editor + delete / import network devices — no IT admin rights">Network admin</span>' : u.team === 'OT' && u.role === 'admin' ? '<span class="badge badge-broken" title="OT admin: OT editor + OT activity log, restore and delete OT devices — no IT admin rights">OT admin</span>' : roleBadge(u.role)}</td>
         <td>${u.team ? `<span class="badge badge-office">${htmlEsc(u.team)}</span>` : '<span class="text-muted text-sm">—</span>'}</td>
         <td>${u.country ? String(u.country).split(',').map(c => `<span class="badge badge-factory" style="margin:1px">${htmlEsc(c)}</span>`).join('') : '<span class="text-muted text-sm">Global</span>'}</td>
         <td class="text-sm">${Number(u.asset_access) === 0 ? '<span class="text-muted">User Inv. only</span>' : 'Yes'}</td>

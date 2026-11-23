@@ -18,7 +18,7 @@ const netmap = require('./netmap');
 const servers = require('./servers');
 
 router.use(requireAuth);
-router.use((req, res, next) => (req.user && (req.user.team === 'OT' || req.user.team === 'IT') ? next() : res.status(403).json({ error: 'OT team and IT only' })));
+router.use((req, res, next) => (req.user && (req.user.team === 'OT' || req.user.team === 'IT' || req.user.team === 'NET') ? next() : res.status(403).json({ error: 'OT team and IT only' })));
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 
 const LIST = [

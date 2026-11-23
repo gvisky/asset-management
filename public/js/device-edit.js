@@ -12,7 +12,8 @@ const DeviceEdit = (() => {
   const exOf = (r) => { try { return JSON.parse(r.extra || '{}') || {}; } catch { return {}; } };
   const valOf = (r, k) => { if (!k.startsWith('x-')) return r[k] == null ? '' : String(r[k]); const v = exOf(r)[k.slice(2)]; return Array.isArray(v) ? v.join(', ') : v == null ? '' : String(v); };
   const canEdit = (r) => { const u = window.CURRENT_USER || {};
-    return (u.team === 'IT' && ['admin', 'editor'].includes(u.role)) || (u.team === 'OT' && u.role === 'editor' && r.it_ot === 'OT'); };
+    return (u.team === 'IT' && ['admin', 'editor'].includes(u.role)) || (u.team === 'OT' && u.role === 'editor' && r.it_ot === 'OT')
+      || (u.team === 'NET' && u.role === 'editor' && /switch|router|firewall|gateway|wireless|wlc|access\s*point|network/i.test(r.category || '')); };
   // Free switch ports of the map for "Connected to" (loaded once).
   async function loadPorts() {
     if (ports) return ports;
