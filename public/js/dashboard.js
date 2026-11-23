@@ -476,7 +476,31 @@ async function loadOverviewCards() {
   }, 100);
 }
 
+// Fill both columns evenly: the first card of each column stays (Assets by Country / by Type); Inbox, Health now and
+// What's new each go to whichever column is shorter at that moment. Runs again when their content or the window changes.
+function balanceOverview() {
+  const L = document.getElementById('ov-colL'), R = document.getElementById('ov-colR');
+  if (!L || !R || getComputedStyle(document.getElementById('ov-grid')).gridTemplateColumns.split(' ').length < 2) return;   // one column (phone)
+  const flow = ['ov-inbox-card', 'ov-health-card', 'ov-news-card'].map(id => document.getElementById(id)).filter(c => c && !c.hidden);
+  const gap = parseFloat(getComputedStyle(L).rowGap) || 18;
+  const ch = flow.map(c => c.getBoundingClientRect().height + gap);   // both columns have the same width → same card heights
+  flow.forEach(c => c.remove());
+  const base = [L.getBoundingClientRect().height, R.getBoundingClientRect().height];
+  // 3 cards → try all 8 ways and keep the one with the smallest difference between the columns.
+  let best = 0, bestDiff = Infinity;
+  for (let m = 0; m < (1 << flow.length); m++) {
+    const t = [...base]; flow.forEach((_, i) => { t[(m >> i) & 1] += ch[i]; });
+    const d = Math.abs(t[0] - t[1]); if (d < bestDiff) { bestDiff = d; best = m; }
+  }
+  flow.forEach((c, i) => ((best >> i) & 1 ? R : L).appendChild(c));
+}
+let _balT = 0;
+const balanceSoon = () => { clearTimeout(_balT); _balT = setTimeout(balanceOverview, 120); };
+
 document.addEventListener('DOMContentLoaded', () => {
+  ['bd-country', 'bd-type', 'ov-inbox', 'ov-health', 'ov-news'].forEach(id => { const el = document.getElementById(id); if (el) new MutationObserver(balanceSoon).observe(el, { childList: true, subtree: true }); });
+  const hc = document.getElementById('ov-health-card'); if (hc) new MutationObserver(balanceSoon).observe(hc, { attributes: true, attributeFilter: ['hidden'] });
+  window.addEventListener('resize', balanceSoon);
   loadStats();
   loadOverviewCards();
   const nw = () => (window.Shell && Shell.newsCard ? Shell.newsCard(document.getElementById('ov-news'), 3) : setTimeout(nw, 200)); nw();

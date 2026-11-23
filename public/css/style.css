@@ -2039,3 +2039,4 @@ tr.lk-on > td { background: #eff6ff !important; }
 .ac-table td { vertical-align: top; } .ac-txt { font-size: 13px; max-width: 720px; word-break: break-word; }
 .ac-area { font-size: 12px; font-weight: 600; color: var(--ac); white-space: nowrap; } .ac-act { font-size: 11px; color: #94a3b8; margin-top: 1px; }
 tr.ac-bad td { background: #fef2f2; } tr.ac-health td:first-child, tr.ac-portlog td:first-child, tr.ac-ot td:first-child, tr.ac-scan td:first-child { box-shadow: inset 3px 0 0 #cbd5e1; }
+#ov-grid { align-items: start; }
