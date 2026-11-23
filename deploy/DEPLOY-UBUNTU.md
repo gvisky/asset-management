@@ -139,7 +139,8 @@ docker compose up -d                                          # restart on the l
 docker compose logs --tail=20 app                             # must say "Using local SQLite file: /data/assets.db"
 ```
 Do this in a quiet moment (changes made between the copy and the restart would stay in Turso only).
-Keep Turso for a few weeks as an extra copy, then delete it.
+**Keep the Turso database — do not delete it.** It stays as a backup copy (the snapshot script only reads from it).
+To refresh that copy later, Render can stay connected to Turso, or restore a server backup into Turso with `node db/restore.js` (tables of `db/backup.js`).
 
 ## 7. Nightly backups
 
