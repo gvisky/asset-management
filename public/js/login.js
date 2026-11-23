@@ -3,7 +3,7 @@
 const $ = (id) => document.getElementById(id);
 let challenge = null;
 
-const goHome = (me) => { window.location.href = me && (me.team === 'OT' || me.team === 'NET') ? '/network-map.html' : '/'; };
+const goHome = (me) => { window.location.href = '/'; };
 function showStep(mfa) {
   $('login-form').style.display = mfa ? 'none' : '';
   $('mfa-form').style.display = mfa ? '' : 'none';

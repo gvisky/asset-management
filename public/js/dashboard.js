@@ -439,9 +439,46 @@ async function loadAppUpdates() {
   }
 }
 
+// ── Overview (phase 5): Inbox top items + Health now ────────────────────────────────────────────────────
+async function loadOverviewCards() {
+  await new Promise(r => { const w = setInterval(() => { if (window.CURRENT_USER) { clearInterval(w); r(); } }, 100); });
+  const box = document.getElementById('ov-inbox');
+  if (box && window.CURRENT_USER.role === 'viewer') document.getElementById('ov-inbox-card').hidden = true;
+  else if (box) {
+    try {
+      const d = await apiGet('/api/inbox');
+      const items = d.areas.flatMap(a => a.items.map(i => ({ ...i, area: a.title }))).sort((x, y) => y.count - x.count).slice(0, 6);
+      box.innerHTML = items.length ? `<div class="ov-total"><b>${d.total.toLocaleString()}</b> open item${d.total === 1 ? '' : 's'}</div>` + items.map(i =>
+        `<a class="ov-row" href="${escHtml(i.href)}"><span class="ov-area">${escHtml(i.area)}</span><span class="ov-lbl">${escHtml(i.label)}</span><b>${i.count.toLocaleString()}</b></a>`).join('')
+        : '<div class="ov-ok">✅ Nothing to fix right now.</div>';
+      if (window.Shell && Shell.setInboxCount) Shell.setInboxCount(d.total);
+    } catch { document.getElementById('ov-inbox-card').hidden = true; }
+  }
+  const t = setInterval(async () => {
+    if (!window.CURRENT_USER) return; clearInterval(t);
+    if (window.CURRENT_USER.team !== 'IT') return;
+    const card = document.getElementById('ov-health-card'), hb = document.getElementById('ov-health');
+    if (!card) return;
+    card.hidden = false;
+    try {
+      const d = await apiGet('/api/health');
+      const cols = d.collectors || [], checks = d.checks || [];
+      if (!cols.length) { hb.innerHTML = '<div class="text-muted text-sm">No collectors yet — add one on the Monitoring page.</div>'; return; }
+      hb.innerHTML = cols.map(c => {
+        const cs = checks.filter(x => x.collector_id === c.id);
+        const n = (s) => cs.filter(x => x.shown_status === s).length;
+        const state = c.revoked ? 'revoked' : !c.online ? 'offline' : n('down') ? 'down' : n('warn') ? 'warn' : 'up';
+        return `<div class="ov-site"><span class="ib-dot ${state === 'up' ? '' : state === 'warn' ? 'warn' : state === 'down' ? 'down' : 'stale'}" style="${state === 'up' ? 'background:#16a34a' : ''}"></span>
+          <b>${escHtml(c.name)}</b><span class="text-muted text-sm">${escHtml(c.site || c.country || '')}</span>
+          <span class="ov-counts">${state === 'offline' ? '<span style="color:#b45309">not reporting</span>' : `<span style="color:#15803d">${n('up')} up</span>${n('warn') ? ` · <span style="color:#b45309">${n('warn')} warn</span>` : ''}${n('down') ? ` · <span style="color:#b91c1c">${n('down')} down</span>` : ''}`}</span></div>`;
+      }).join('');
+    } catch { hb.innerHTML = '<div class="text-muted text-sm">Could not load.</div>'; }
+  }, 100);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadStats();
-  loadAppUpdates();
+  loadOverviewCards();
   // Servers & network devices: count card (list on the Needs Attention page).
   if (typeof ServerAttention !== 'undefined' && document.getElementById('na-servers-dash')) {
     const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.asset_access !== 0 && window.CURRENT_USER.role !== 'viewer') ServerAttention.summary(document.getElementById('na-servers-dash')); }, 150);

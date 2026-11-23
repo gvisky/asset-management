@@ -12,7 +12,7 @@ let me = null;
 
 async function start() {
   try { me = await api('/api/auth/me'); } catch (e) { window.location.href = '/login.html'; return; }
-  if (!me.mfa_setup_required) { window.location.href = (me.team === 'OT' || me.team === 'NET') ? '/network-map.html' : '/'; return; }
+  if (!me.mfa_setup_required) { window.location.href = '/'; return; }
   $('ms-who').innerHTML = `Hello <b style="color:#fff">${esc(me.full_name || me.username)}</b> — two-step login is now required for every account. One time, about 1 minute.`;
   $('ms-body').innerHTML = `
     <ol style="margin:0 0 14px 18px;padding:0;line-height:1.75;font-size:14px">
@@ -56,7 +56,7 @@ function done(codes) {
     <button class="btn btn-primary" id="ms-continue" style="width:100%;justify-content:center" disabled>Continue</button>`;
   $('ms-copy').onclick = () => navigator.clipboard.writeText(txt).then(() => { $('ms-copy').textContent = '✓ Copied'; });
   $('ms-saved').onchange = () => { $('ms-continue').disabled = !$('ms-saved').checked; };
-  $('ms-continue').onclick = () => { window.location.href = (me.team === 'OT' || me.team === 'NET') ? '/network-map.html' : '/'; };
+  $('ms-continue').onclick = () => { window.location.href = '/'; };
 }
 
 $('ms-logout').addEventListener('click', async (e) => {

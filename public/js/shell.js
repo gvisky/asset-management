@@ -34,6 +34,7 @@
   function items(f) {
     return [
       ['Home', 'nav-dashboard', '/', 'Overview', 'home', f.asset],
+      ['Home', 'nav-home', '/home.html', 'Overview', 'home', !f.asset && (f.hr || f.ot || f.net)],
       ['Home', 'nav-alerts', '/inbox.html', 'Inbox', 'inbox', !f.viewer && (f.asset || f.it || f.hr)],
       ['Home', 'nav-otna', '/ot-attention.html', 'Inbox', 'inbox', f.ot],
       ['End-user IT', 'nav-inventory', '/inventory.html', 'Assets', 'laptop', f.asset, ['/scan.html']],
@@ -172,6 +173,54 @@
     else { const s = document.createElement('script'); s.src = '/js/alerts.js?v=20261123s'; s.onload = () => setTimeout(go, 50); document.head.appendChild(s); }
   }
 
+  // ── What's new (avatar menu): /data/app-updates.json, a dot while something new is unread ────────────────
+  const SEEN = 'hc-news-seen';
+  let news = null;
+  async function loadNews() {
+    if (news) return news;
+    try { news = (await (await fetch('/data/app-updates.json', { cache: 'no-store' })).json()).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))); }
+    catch { news = []; }
+    return news;
+  }
+  const fmtD = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const e = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  async function openNews() {
+    const list = await loadNews();
+    let seen = ''; try { seen = localStorage.getItem(SEEN) || ''; } catch { /* ignore */ }
+    let ov = document.getElementById('news-ov');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'news-ov'; ov.className = 'modal-overlay'; ov.setAttribute('data-drawer', '');
+      ov.innerHTML = `<div class="modal"><div class="modal-header"><span class="modal-title">What's new</span><button class="modal-close" aria-label="Close">✕</button></div><div class="modal-body news-body"></div></div>`;
+      ov.querySelector('.modal-close').onclick = () => ov.classList.remove('open');
+      ov.addEventListener('click', (ev) => { if (ev.target === ov) ov.classList.remove('open'); });
+      document.body.appendChild(ov);
+    }
+    ov.querySelector('.news-body').innerHTML = list.length ? list.slice(0, 40).map(u => `<div class="news-item">
+        <div class="news-date">${e(fmtD(u.date))}${u.date > seen ? ' <span class="badge badge-active">New</span>' : ''}</div>
+        <div class="news-title">${e(u.title)}</div>${(u.items || []).length ? `<ul>${u.items.map(i => `<li>${e(i)}</li>`).join('')}</ul>` : ''}</div>`).join('')
+      : '<p class="text-muted">No updates yet.</p>';
+    ov.classList.add('open');
+    if (list[0]) { try { localStorage.setItem(SEEN, list[0].date); } catch { /* ignore */ } }
+    document.querySelectorAll('.news-dot').forEach(d => d.remove());
+  }
+  async function buildNews() {
+    const menu = document.querySelector('#user-chrome .uc-menu');
+    if (!menu || document.getElementById('news-btn')) return;
+    const b = document.createElement('button');
+    b.className = 'btn btn-ghost btn-sm'; b.id = 'news-btn'; b.setAttribute('role', 'menuitem');
+    b.innerHTML = `${ico('<path d="M12 2l2.4 5.6L20 8l-4.4 3.9L17 18l-5-3-5 3 1.4-6.1L4 8l5.6-.4z"/>')} What's new`;
+    b.onclick = () => { document.getElementById('user-chrome').classList.remove('open'); openNews(); };
+    const pw = document.getElementById('mfa-btn-open');
+    menu.insertBefore(b, pw || null);
+    const list = await loadNews();
+    let seen = ''; try { seen = localStorage.getItem(SEEN) || ''; } catch { /* ignore */ }
+    const fresh = list.filter(u => u.date > seen && Date.now() - new Date(u.date + 'T00:00:00').getTime() < 14 * 86400000).length;
+    if (fresh) {
+      b.insertAdjacentHTML('beforeend', `<span class="uc-tag news-dot" style="background:#dbeafe;color:#1d4ed8">${fresh} new</span>`);
+      const av = document.getElementById('uc-avatar'); if (av) av.insertAdjacentHTML('beforeend', '<i class="news-dot av-dot"></i>');
+    }
+  }
+
   function buildTopbar(u) {
     const bar = document.querySelector('.topbar');
     if (!bar || document.getElementById('tb-bell')) return;
@@ -193,8 +242,8 @@
   }
 
   window.Shell = {
-    setInboxCount,
-    build(u) { try { buildNav(u); buildTabs(); buildTopbar(u); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
+    setInboxCount, openNews,
+    build(u) { try { buildNav(u); buildTabs(); buildTopbar(u); buildNews(); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
     getScope, setScope, current: () => current,
   };
   // Safety: never leave the menu hidden.

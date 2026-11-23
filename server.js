@@ -33,7 +33,7 @@ app.use(async (req, res, next) => {
     const u = await getUserFromRequest(req);
     if (!NET.isNET(u)) return next();
     if (api) return res.status(403).json({ error: 'Network team: network devices and the Network map only' });
-    return res.redirect('/network-map.html');
+    return res.redirect('/home.html');
   } catch (e) { next(e); }
 });
 
