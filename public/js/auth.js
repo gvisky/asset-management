@@ -9,6 +9,8 @@ async function ensureAuth() {
     const r = await fetch('/api/auth/me');
     if (!r.ok) throw new Error('not auth');
     window.CURRENT_USER = await r.json();
+    // Two-step login is required and this account has not set it up yet → setup page first.
+    if (window.CURRENT_USER.mfa_setup_required) { window.location.href = '/mfa-setup.html'; return null; }
     // Viewers only look: nothing of "Needs Attention" (things to fix / to add) is shown to them.
     if (window.CURRENT_USER.role === 'viewer') {
       document.documentElement.classList.add('is-viewer');

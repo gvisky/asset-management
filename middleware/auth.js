@@ -1,5 +1,6 @@
 const { get, run } = require('../db/database');
 const { hashToken } = require('../db/auth-utils');
+const { mfaRequired } = require('../lib/mfa-policy');
 
 // Parse a cookie header into an object (avoids adding cookie-parser dependency).
 function parseCookies(req) {
@@ -37,17 +38,30 @@ async function getUserFromRequest(req) {
   // OT admin (team OT + role admin): everywhere else an OT editor — never an IT admin — plus the OT activity log and
   // restoring / deleting OT devices (checked with user.ot_admin).
   if (user && user.team === 'OT' && user.role === 'admin') { user.role = 'editor'; user.ot_admin = 1; }
-  return user || null;
+  if (!user) return null;
+  // Two-step login required but not set up yet: only the login / setup API works (pages send them to
+  // /mfa-setup.html — see server.js). Everything else sees "not signed in" until the authenticator is added.
+  if (!Number(user.mfa_enabled) && await mfaRequired()) {
+    user.mfa_setup_required = true;
+    req.mfaSetupPending = true;
+    if (!String(req.originalUrl || req.url || '').startsWith('/api/auth/')) return null;
+  }
+  return user;
 }
 
 // Require any authenticated user.
 async function requireAuth(req, res, next) {
   try {
     const user = await getUserFromRequest(req);
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    if (!user) return notAuth(req, res);
     req.user = user;
     next();
   } catch (e) { next(e); }
+}
+// 401, or 403 "set up two-step login first" for a signed-in user who still has to add the authenticator.
+function notAuth(req, res) {
+  if (req.mfaSetupPending) return res.status(403).json({ error: 'Set up two-step login first', mfa_setup: true });
+  return res.status(401).json({ error: 'Not authenticated' });
 }
 
 // Require one of the given roles (e.g. requireRole('admin','editor')).
@@ -55,7 +69,7 @@ function requireRole(...roles) {
   return async (req, res, next) => {
     try {
       const user = await getUserFromRequest(req);
-      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      if (!user) return notAuth(req, res);
       if (!roles.includes(user.role)) {
         return res.status(403).json({ error: 'You do not have permission for this action' });
       }
@@ -71,7 +85,7 @@ function requireGlobalAdmin(req, res, next) {
   return (async () => {
     try {
       const user = await getUserFromRequest(req);
-      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      if (!user) return notAuth(req, res);
       if (user.role !== 'admin' || user.country) {
         return res.status(403).json({ error: 'Global administrator only' });
       }
@@ -92,7 +106,7 @@ function requireITAdmin(req, res, next) {
   return (async () => {
     try {
       const user = await getUserFromRequest(req);
-      if (!user) return res.status(401).json({ error: 'Not authenticated' });
+      if (!user) return notAuth(req, res);
       if (!isITAdmin(user)) {
         return res.status(403).json({ error: 'IT administrator only' });
       }
@@ -102,4 +116,4 @@ function requireITAdmin(req, res, next) {
   })();
 }
 
-module.exports = { getUserFromRequest, requireAuth, requireRole, requireGlobalAdmin, requireITAdmin, isITAdmin, parseCookies };
+module.exports = { notAuth, getUserFromRequest, requireAuth, requireRole, requireGlobalAdmin, requireITAdmin, isITAdmin, parseCookies };

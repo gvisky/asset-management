@@ -115,7 +115,7 @@ setInterval(watchCollectors, 60000).unref();
 // ── Everything below needs a logged-in IT user ────────────────────────────────
 router.use(wrap(async (req, res, next) => {
   const user = await getUserFromRequest(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!user) return req.mfaSetupPending ? res.status(403).json({ error: 'Set up two-step login first', mfa_setup: true }) : res.status(401).json({ error: 'Not authenticated' });
   if (user.team !== 'IT') return res.status(403).json({ error: 'System Health is for the IT team' });
   req.user = user;
   next();

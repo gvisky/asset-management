@@ -53,6 +53,19 @@
 
   <main class="content">
     <div id="ot-box" data-ot="activity"></div>
+    <!-- Two-step login policy -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-body" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 18px">
+        <span style="font-size:22px">🔐</span>
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:600">Two-step login (Google / Microsoft Authenticator)</div>
+          <div class="text-muted text-sm" id="mfa-pol-sub">Loading…</div>
+        </div>
+        <label style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;cursor:pointer">
+          <input type="checkbox" id="mfa-pol" style="width:18px;height:18px"> Required for everyone
+        </label>
+      </div>
+    </div>
     <!-- Users -->
     <div class="card" style="margin-bottom:24px">
       <div class="card-header">

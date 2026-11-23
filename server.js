@@ -57,7 +57,8 @@ app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff 
 
 // Public files that must load before login (login page + shared CSS/JS)
 const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico',
-  '/my-devices.html', '/js/my-devices.js'];   // "My devices": opened from the personal link, no login
+  '/my-devices.html', '/js/my-devices.js',
+  '/mfa-setup.html', '/js/mfa-setup.js'];   // two-step login setup (required before any other page)   // "My devices": opened from the personal link, no login
 
 // Which build is running (Render sets RENDER_GIT_COMMIT; the Ubuntu server's deploy/update.sh sets APP_COMMIT) — to check a deploy really went live.
 app.get('/api/version', (req, res) => {
@@ -74,6 +75,7 @@ app.use(async (req, res, next) => {
 
     const user = await getUserFromRequest(req);
     if (!user) {
+      if (req.mfaSetupPending && req.method === 'GET' && req.accepts('html')) return res.redirect('/mfa-setup.html');
       if (req.method === 'GET' && req.accepts('html')) return res.redirect('/login.html');
       return res.status(401).json({ error: 'Not authenticated' });
     }
