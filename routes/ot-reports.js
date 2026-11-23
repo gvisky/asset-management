@@ -130,7 +130,8 @@ const R = {
   async 'ot-changes'(req) {
     const { site, devices } = await data(req);
     const otHosts = new Set(devices.filter(d => /switch/i.test(d.role || '') && netmap.otOn(d)).map(d => d.hostname));
-    const log = (await all("SELECT * FROM net_port_log WHERE site = ? AND at >= datetime('now', '-90 days') ORDER BY at DESC", [site])).filter(l => otHosts.has(l.device));
+    // Port history from the write-once change log (audit_log; old net_port_log lines were copied in).
+    const log = (await all("SELECT site, device, port, before_text AS before, after_text AS after, username AS by_user, created_at AS at FROM audit_log WHERE site = ? AND device <> '' AND created_at >= datetime('now', '-90 days') ORDER BY created_at DESC", [site])).filter(l => otHosts.has(l.device));
     const users = new Set((await all("SELECT username FROM users WHERE team = 'OT'")).map(u => u.username));
     return {
       dashboard: { title: 'Port changes on the OT switches', subtitle: `Last 90 days · ${log.length} changes`,

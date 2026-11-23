@@ -48,6 +48,7 @@ function itOtClause(req) {
 // A record the Network team may not see / change: anything that is not a network device.
 const netHidden = (req, row) => isNET(req) && !NETT.isNetCategory(row.category);
 
+const CL = require('../lib/changelog');   // write-once change log (audit_log)
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const countryFilter = (req) => countrySql(req, 'country');
 
@@ -282,7 +283,7 @@ router.post('/ot-import', requireITAdmin, wrap(async (req, res) => {
       // Only while the port is still empty (nobody changed it since the preview).
       stmts.push({ sql: `UPDATE net_ports SET peer_host = ?, vlan = ?, mode = ?, note = ?, updated_by = ?, updated_at = datetime('now') WHERE id = ? AND COALESCE(peer_host, '') = ''`,
         args: [f.peer_host, f.vlan, f.mode, f.note, req.user.username, f.port_id] });
-      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)',
+      stmts.push({ sql: CL.PORT_LOG_SQL,
         args: [site, f.hostname, f.port, '(free)', `${f.peer_host}${f.vlan ? ' vlan ' + f.vlan : ''} ACCESS (OT device list)`, req.user.username] });
     }
     await batch(stmts); done.ports = p.fills.length;
@@ -356,7 +357,7 @@ router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
             serial = COALESCE(NULLIF(?, ''), serial), notes = ?, updated_at = datetime('now') WHERE id = ?`, [sw.hostname, sw.model, sw.ip, sw.mac, sw.serial, notes, devId]);
         for (const pt of sw.add) await run('INSERT OR IGNORE INTO net_ports (device_id, port, sort) VALUES (?, ?, ?)', [devId, pt, sort(pt)]);
         for (const id of sw.remove) await run("DELETE FROM net_ports WHERE id = ? AND COALESCE(peer_host, '') = '' AND COALESCE(note, '') = ''", [id]);
-        await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [site, sw.map, '', '', `OT CCTV report: ${sw.changes.join('; ')}`, req.user.username]);
+        await run(CL.PORT_LOG_SQL, [site, sw.map, '', '', `OT CCTV report: ${sw.changes.join('; ')}`, req.user.username]);
         done.switchesUpdated++;
       } else {
         if (await get('SELECT id FROM net_devices WHERE site = ? AND hostname = ?', [site, sw.hostname])) continue;
@@ -364,7 +365,7 @@ router.post('/cctv-import', requireITAdmin, wrap(async (req, res) => {
           [site, sw.hostname, 'CCTV switch', sw.role, sw.model, sw.ip, sw.mac, sw.serial, sw.location, notes]);
         devId = Number(r.lastInsertRowid);
         for (const pt of sw.ports) await run('INSERT OR IGNORE INTO net_ports (device_id, port, sort) VALUES (?, ?, ?)', [devId, pt, sort(pt)]);
-        await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [site, sw.hostname, '', '', 'device added (OT CCTV report)', req.user.username]);
+        await run(CL.PORT_LOG_SQL, [site, sw.hostname, '', '', 'device added (OT CCTV report)', req.user.username]);
         done.switchesAdded++;
       }
       // Its Server Inventory record (OT), found by serial / MAC / name, else added; linked to the map device.
@@ -547,7 +548,7 @@ router.post('/mac-ports', wrap(async (req, res) => {
       stmts.push({ sql: `UPDATE net_ports SET peer_host = ?, peer_port = ?, vlan = CASE WHEN COALESCE(vlan, '') = '' THEN ? ELSE vlan END, mode = CASE WHEN COALESCE(mode, '') = '' THEN 'ACCESS' ELSE mode END,
           updated_at = datetime('now'), updated_by = ? WHERE id = ? AND (COALESCE(peer_host, '') = '' OR UPPER(peer_host) = UPPER(?))`,
         args: [r.hostname, r.mac, r.vlan, req.user.username, r.port_id, r.hostname] });
-      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, r.switch, r.port, '(free)', `${r.hostname} ${r.mac} (MAC table)`, req.user.username] });
+      stmts.push({ sql: CL.PORT_LOG_SQL, args: [site, r.switch, r.port, '(free)', `${r.hostname} ${r.mac} (MAC table)`, req.user.username] });
       mapped++;
     }
   }
@@ -575,8 +576,7 @@ router.post('/', requireRole('admin', 'editor'), wrap(async (req, res) => {
   const result = await run(
     `INSERT INTO servers (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`, vals);
   const created = await get('SELECT * FROM servers WHERE id = ?', [result.lastInsertRowid]);
-  await OTA.logServer(req.user, null, created);
-  await audit(req.user, 'CREATE', created.id, `Created server "${created.hostname || created.asset_code || 'untitled'}" (${finalCountry})`);
+  await OTA.logServer(req.user, null, created, { action: 'CREATE', details: `Created server "${created.hostname || created.asset_code || 'untitled'}" (${finalCountry})` });   // one row
   res.status(201).json(created);
 }));
 
@@ -657,8 +657,7 @@ router.put('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
     `UPDATE servers SET ${setFields.map(c => c + ' = ?').join(', ')} WHERE id = ? AND deleted_at IS NULL`,
     [...setVals, req.params.id]);
   const updated = await get('SELECT * FROM servers WHERE id = ?', [req.params.id]);
-  await OTA.logServer(req.user, existing, updated);
-  await audit(req.user, 'UPDATE', updated.id, `Updated server "${updated.hostname || updated.asset_code || 'untitled'}"`);
+  await OTA.logServer(req.user, existing, updated, { action: 'UPDATE', details: `Updated server "${updated.hostname || updated.asset_code || 'untitled'}"` });   // one row
   res.json(updated);
 }));
 
@@ -670,9 +669,8 @@ router.delete('/:id', requireRole('admin', 'editor'), wrap(async (req, res) => {
   if (isOT(req) && !(req.user.ot_admin && existing.it_ot === 'OT')) return res.status(403).json({ error: 'Only an OT admin can delete OT devices' });
   if (isNET(req) && (!req.user.net_admin || netHidden(req, existing))) return res.status(403).json({ error: 'Only a network admin can delete network devices' });
   await run("UPDATE servers SET deleted_at = datetime('now'), deleted_by = ? WHERE id = ?", [req.user.username, req.params.id]);
-  await OTA.logServer(req.user, existing, await get('SELECT * FROM servers WHERE id = ?', [req.params.id]));
   const label = existing.hostname || existing.asset_code || 'untitled';
-  await audit(req.user, 'DELETE', Number(req.params.id), `Deleted server "${label}"`);
+  await OTA.logServer(req.user, existing, await get('SELECT * FROM servers WHERE id = ?', [req.params.id]), { action: 'DELETE', details: `Deleted server "${label}"` });   // one row
   await notify({ audience: 'all', country: existing.country, scope: 'asset', level: 'warning',
     message: `${req.user.full_name} deleted server "${label}" [${existing.country}].` });
   res.json({ message: 'Deleted' });

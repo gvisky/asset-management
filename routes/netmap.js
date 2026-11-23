@@ -19,6 +19,7 @@ const { get, all, run, batch, audit } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
 const OTA = require('../lib/ot-activity');
 
+const CL = require('../lib/changelog');   // write-once change log (audit_log)
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const H = {};   // handlers also run by the link check (POST /link-check, and once on start-up)
 router.use(requireAuth);
@@ -222,7 +223,7 @@ router.post('/device', wrap(async (req, res) => {
   // Port list from a count: "GE 1/0/" × 48 etc.
   const n = Math.min(96, Number(req.body.port_count) || 0), prefix = str(req.body.port_prefix, 20);
   if (n && prefix) await batch(Array.from({ length: n }, (_, i) => ({ sql: 'INSERT OR IGNORE INTO net_ports (device_id, port, sort) VALUES (?, ?, ?)', args: [d.id, `${prefix}${i + 1}`, i + 1] })));
-  await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [site, h, '', '', 'device added', req.user.username]);
+  await run(CL.PORT_LOG_SQL, [site, h, '', '', 'device added', req.user.username]);
   res.json(d);
 }));
 router.put('/device/:id', wrap(async (req, res) => {
@@ -233,17 +234,17 @@ router.put('/device/:id', wrap(async (req, res) => {
   if ('ot' in b) {
     const ot = b.ot === 1 || b.ot === '1' ? 1 : b.ot === 0 || b.ot === '0' ? 0 : null;
     if (ot !== d.ot) { await run('UPDATE net_devices SET ot = ? WHERE id = ?', [ot, d.id]);
-      await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [d.site, d.hostname, '', `OT view: ${d.ot == null ? 'auto' : d.ot ? 'shown' : 'hidden'}`, `OT view: ${ot == null ? 'auto' : ot ? 'shown' : 'hidden'}`, req.user.username]); }
+      await run(CL.PORT_LOG_SQL, [d.site, d.hostname, '', `OT view: ${d.ot == null ? 'auto' : d.ot ? 'shown' : 'hidden'}`, `OT view: ${ot == null ? 'auto' : ot ? 'shown' : 'hidden'}`, req.user.username]); }
   }
   if ('state' in b) {
     const st = b.state === 'retired' ? 'retired' : '';
     await run("UPDATE net_devices SET state = ?, updated_at = datetime('now') WHERE id = ?", [st, d.id]);
-    if (st !== (d.state || '')) await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [d.site, d.hostname, '', d.state || 'in use', st || 'in use', req.user.username]);
+    if (st !== (d.state || '')) await run(CL.PORT_LOG_SQL, [d.site, d.hostname, '', d.state || 'in use', st || 'in use', req.user.username]);
   }
   if ('alias' in b) {
     await run(`UPDATE net_devices SET alias = ?, role = ?, model = ?, serial = ?, mgmt_ip = ?, mac = ?, location = ?, notes = ?, updated_at = datetime('now') WHERE id = ?`,
       [str(b.alias), str(b.role, 40), str(b.model), str(b.serial, 60), str(b.mgmt_ip, 60), 'mac' in b ? macNorm(b.mac) : (d.mac || ''), str(b.location), str(b.notes, 500), d.id]);
-    await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [d.site, d.hostname, '', '', 'device details edited', req.user.username]);
+    await run(CL.PORT_LOG_SQL, [d.site, d.hostname, '', '', 'device details edited', req.user.username]);
   }
   res.json(await deviceOf(d.id));
 }));
@@ -258,8 +259,7 @@ router.delete('/device/:id', wrap(async (req, res) => {
   if (!isAdmin(req)) return res.status(403).json({ error: 'Admins only' });
   const d = await deviceOf(req.params.id); if (!d) return res.status(404).json({ error: 'Not found' });
   await batch([{ sql: 'DELETE FROM net_ports WHERE device_id = ?', args: [d.id] }, { sql: 'DELETE FROM net_devices WHERE id = ?', args: [d.id] },
-    { sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [d.site, d.hostname, '', '', 'device deleted', req.user.username] }]);
-  await audit(req.user, 'NETMAP', null, `Network map "${d.site}": deleted device ${d.hostname}`);
+    { sql: CL.PORT_LOG_SQL, args: [d.site, d.hostname, '', '', 'device deleted', req.user.username] }]);   // one row
   res.json({ ok: true });
 }));
 
@@ -267,14 +267,15 @@ router.delete('/device/:id', wrap(async (req, res) => {
 // point at another device's port that still points here, clear that one.
 // meta (optional): OT activity log entry details ({ kind, restore_of, prefix, force, withOt: also set the owner column }).
 async function setPort(dev, port, values, user, meta = {}) {
+  const uname = user && typeof user === 'object' ? user.username : user;   // user: account object (IP / team in the log) or a name
   const before = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
   const v = Object.fromEntries(FIELDS.map(k => [k, str(values[k], k === 'note' ? 200 : 80)]));
   await run(`INSERT INTO net_ports (device_id, port, sort, ${FIELDS.join(', ')}, updated_by) VALUES (?, ?, ?, ${FIELDS.map(() => '?').join(', ')}, ?)
       ON CONFLICT(device_id, port) DO UPDATE SET ${FIELDS.map(k => `${k} = excluded.${k}`).join(', ')}, updated_by = excluded.updated_by, updated_at = datetime('now')`,
-    [dev.id, port, portSort(port), ...FIELDS.map(k => v[k]), user]);
+    [dev.id, port, portSort(port), ...FIELDS.map(k => v[k]), uname]);
   if (meta.withOt) await run('UPDATE net_ports SET ot = ? WHERE device_id = ? AND port = ?', [values.ot === 1 || values.ot === 0 ? values.ot : null, dev.id, port]);
-  if (desc(before) !== desc(v)) await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [dev.site, dev.hostname, port, desc(before), desc(v), user]);
-  await OTA.logPort(user, dev, before, await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]), { ...meta, port });
+  // ONE change-log row: the port history text and (OT switches) the rows for restore.
+  await OTA.logPort(user, dev, before, await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]), { ...meta, port, beforeText: desc(before), afterText: desc(v) });
   return { before, v };
 }
 // OT activity → restore a port as it was (and its far end, like a normal edit).
@@ -326,9 +327,8 @@ router.put('/port', wrap(async (req, res) => {
     req.body.grp = cur ? cur.grp : '';
   }
   if (req.body.peer_host === dev.hostname && req.body.peer_port === port) return res.status(400).json({ error: 'A port cannot connect to itself' });
-  const { before, v } = await setPort(dev, port, req.body, req.user.username);
-  await mirror(dev, port, before, v, req.user.username);
-  await audit(req.user, 'NETMAP', null, `Network map "${dev.site}": ${dev.hostname} ${port}: ${desc(before)} → ${desc(v)}`);
+  const { before, v } = await setPort(dev, port, req.body, req.user);
+  await mirror(dev, port, before, v, req.user);   // each changed port is logged once by setPort
   res.json({ ok: true });
 }));
 // IT team: set a port's owner — OT (blue: the OT team may change it), IT (green) or automatic. PUT { device_id, port, ot: 1 | 0 | null }.
@@ -340,10 +340,9 @@ router.put('/port/owner', wrap(async (req, res) => {
   const cur = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]);
   if (!cur) await run('INSERT INTO net_ports (device_id, port, sort, ot, updated_by) VALUES (?, ?, ?, ?, ?)', [dev.id, port, portSort(port), ot, req.user.username]);
   else await run("UPDATE net_ports SET ot = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ?", [ot, req.user.username, cur.id]);
-  await OTA.logPort(req.user, dev, cur || null, await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]), { kind: 'port_owner', port, force: true });
   const lbl = (v) => (v === 1 ? 'OT' : v === 0 ? 'IT' : 'automatic');
-  await run('INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', [dev.site, dev.hostname, port, `owner ${lbl(cur ? cur.ot : null)}`, `owner ${lbl(ot)}`, req.user.username]);
-  await audit(req.user, 'NETMAP', null, `Network map "${dev.site}": ${dev.hostname} ${port} owner → ${lbl(ot)}`);
+  await OTA.logPort(req.user, dev, cur || null, await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, port]),
+    { kind: 'port_owner', port, force: true, beforeText: `owner ${lbl(cur ? cur.ot : null)}`, afterText: `owner ${lbl(ot)}` });   // one row
   res.json({ ok: true, ot });
 }));
 // Swap the cabling of two ports of one device (move a cable to another port).
@@ -354,7 +353,7 @@ router.post('/port/move', wrap(async (req, res) => {
   const a = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, from]) || {};
   const b = await get('SELECT * FROM net_ports WHERE device_id = ? AND port = ?', [dev.id, to]) || {};
   const pick = (p) => Object.fromEntries(FIELDS.map(k => [k, p[k] || '']));
-  const A = pick(a), B = pick(b), u = req.user.username;
+  const A = pick(a), B = pick(b), u = req.user;   // each port written is logged once by setPort
   // Write both, then fix the far ends to point at the new port numbers.
   const r1 = await setPort(dev, to, A, u);
   const r2 = await setPort(dev, from, B, u);
@@ -366,18 +365,19 @@ router.post('/port/move', wrap(async (req, res) => {
     if (cur && cur.peer_host === dev.hostname && cur.peer_port === oldPort) await setPort(np, v.peer_port, { ...cur, peer_port: port }, u);
   }
   void r1; void r2;
-  await audit(req.user, 'NETMAP', null, `Network map "${dev.site}": ${dev.hostname} moved ${from} ⇄ ${to}`);
   res.json({ ok: true });
 }));
 
+// Port / device history of the map — from the write-once change log (audit_log), same shape as the old net_port_log.
+const LOG_COLS = "id, site, device, port, before_text AS before, after_text AS after, username AS by_user, created_at AS at";
 router.get('/log', wrap(async (req, res) => {
   const site = str(req.query.site, 80), dev = str(req.query.device, 80);
   if (otView(req)) {
     const hosts = (await all('SELECT * FROM net_devices WHERE site = ?', [site])).filter(d => d.state !== 'retired' && otOn(d)).map(d => d.hostname).filter(h => !dev || h === dev);
     if (!hosts.length) return res.json([]);
-    return res.json(await all(`SELECT * FROM net_port_log WHERE site = ? AND device IN (${hosts.map(() => '?').join(',')}) AND port <> '' ORDER BY id DESC LIMIT 300`, [site, ...hosts]));
+    return res.json(await all(`SELECT ${LOG_COLS} FROM audit_log WHERE site = ? AND device IN (${hosts.map(() => '?').join(',')}) AND port <> '' ORDER BY id DESC LIMIT 300`, [site, ...hosts]));
   }
-  res.json(await all(`SELECT * FROM net_port_log WHERE site = ?${dev ? ' AND device = ?' : ''} ORDER BY id DESC LIMIT 300`, dev ? [site, dev] : [site]));
+  res.json(await all(`SELECT ${LOG_COLS} FROM audit_log WHERE site = ? AND device <> ''${dev ? ' AND device = ?' : ''} ORDER BY id DESC LIMIT 300`, dev ? [site, dev] : [site]));
 }));
 // Everything below (Server Inventory sync, racks, drawing uploads) is not part of the OT view — except looking at the drawings.
 router.use((req, res, next) => (isOT(req) && !(req.method === 'GET' && /^\/(drawings?|racks)(\/|$)/.test(req.path)) && !(req.method === 'PUT' && /^\/drawing\/\d+\/camera-pin$/.test(req.path)) ? res.status(403).json({ error: 'Not part of the OT view' }) : next()));
@@ -547,7 +547,7 @@ router.post('/cctv-switches', wrap(H.cctvSwitches = async (req, res) => {
     if (p.action === 'link') {
       stmts.push({ sql: 'UPDATE net_rack_items SET device_id = ? WHERE id = ? AND device_id IS NULL', args: [p.device_id, p.item_id] });
       stmts.push({ sql: "UPDATE net_devices SET location = ?, updated_at = datetime('now') WHERE id = ?", args: [p.location, p.device_id] });
-      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', `linked to its rack slot (${p.label}, ${p.location})`, req.user.username] });
+      stmts.push({ sql: CL.PORT_LOG_SQL, args: [site, p.hostname, '', '', `linked to its rack slot (${p.label}, ${p.location})`, req.user.username] });
       continue;
     }
     if (p.action === 'fix') {
@@ -556,14 +556,14 @@ router.post('/cctv-switches', wrap(H.cctvSwitches = async (req, res) => {
       p.remove.forEach(id => stmts.push({ sql: "DELETE FROM net_ports WHERE id = ? AND COALESCE(peer_host, '') = '' AND COALESCE(note, '') = ''", args: [id] }));
       p.rename.forEach(r => { stmts.push({ sql: 'UPDATE net_ports SET port = ?, sort = ? WHERE id = ?', args: [r.to, portSort(r.to), r.id] });
         stmts.push({ sql: `UPDATE net_ports SET peer_port = ? WHERE peer_host = ? AND peer_port = ? AND device_id IN (SELECT id FROM net_devices WHERE site = ?)`, args: [r.to, p.hostname, r.from, site] }); });
-      stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', `ports set to ${p.model} (${p.ports.length})`, req.user.username] });
+      stmts.push({ sql: CL.PORT_LOG_SQL, args: [site, p.hostname, '', '', `ports set to ${p.model} (${p.ports.length})`, req.user.username] });
       continue;
     }
     stmts.push({ sql: `INSERT OR IGNORE INTO net_devices (site, hostname, alias, role, model, location, notes, source, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, 'racks', ?)`,
       args: [site, p.hostname, p.alias, p.role, p.model, p.location, 'Added from the rack layout (CCTV)', p.server_id] });
     p.ports.forEach(pt => stmts.push({ sql: `INSERT OR IGNORE INTO net_ports (device_id, port, sort) SELECT id, ?, ? FROM net_devices WHERE site = ? AND hostname = ?`, args: [pt, portSort(pt), site, p.hostname] }));
     stmts.push({ sql: `UPDATE net_rack_items SET device_id = (SELECT id FROM net_devices WHERE site = ? AND hostname = ?) WHERE id = ? AND device_id IS NULL`, args: [site, p.hostname, p.item_id] });
-    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, p.hostname, '', '', 'device added (CCTV switch from the rack layout)', req.user.username] });
+    stmts.push({ sql: CL.PORT_LOG_SQL, args: [site, p.hostname, '', '', 'device added (CCTV switch from the rack layout)', req.user.username] });
   }
   if (stmts.length) await batch(stmts);
   const added = plan.filter(p => p.action === 'add').length, fixed = plan.filter(p => p.action === 'fix' || p.action === 'link').length;
@@ -603,7 +603,7 @@ router.post('/racks/place-cctv', wrap(H.placeCctv = async (req, res) => {
   for (const x of rows.filter(x => x.u)) {
     stmts.push({ sql: 'INSERT INTO net_rack_items (rack_id, device_id, kind, label, u, height, auto) VALUES (?, ?, ?, ?, ?, 1, 0)', args: [x.rack_id, x.device_id, 'device', x.hostname, x.u] });
     stmts.push({ sql: "UPDATE net_devices SET location = ?, updated_at = datetime('now') WHERE id = ?", args: [x.location, x.device_id] });
-    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, x.hostname, '', '', `placed in ${x.rack} U${x.u}`, req.user.username] });
+    stmts.push({ sql: CL.PORT_LOG_SQL, args: [site, x.hostname, '', '', `placed in ${x.rack} U${x.u}`, req.user.username] });
   }
   if (stmts.length) await batch(stmts);
   await audit(req.user, 'NETMAP', null, `Network map "${site}": ${rows.filter(x => x.u).length} CCTV switch(es) placed in their racks`);
@@ -625,7 +625,7 @@ router.post('/cctv-links', wrap(H.cctvLinks = async (req, res) => {
     // A new link goes on a free port; a moved one (HK chain) only if the port still points where it did.
     stmts.push({ sql: `UPDATE net_ports SET peer_host = ?, peer_port = '', cable = 'SFP', mode = 'trunk', note = ?, updated_at = datetime('now'), updated_by = ? WHERE id = ? AND COALESCE(peer_host, '') = ?`,
       args: [r.peer, r.note.slice(0, 300), req.user.username, r.port_id, r.from || ''] });
-    stmts.push({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, r.hostname, r.port, r.from ? `${r.from} trunk` : '(free)', `${r.peer} trunk (CCTV uplink)`, req.user.username] });
+    stmts.push({ sql: CL.PORT_LOG_SQL, args: [site, r.hostname, r.port, r.from ? `${r.from} trunk` : '(free)', `${r.peer} trunk (CCTV uplink)`, req.user.username] });
   }
   if (stmts.length) await batch(stmts);
   await OTA.logPortsBulk(req.user, site, snap, 'CCTV uplinks');

@@ -1,15 +1,11 @@
 /* 📜 Audit log & activities — ONE timeline of every log the app keeps, grouped by area (global admins).
 
-   Sources (tables) and how they are used here:
-     audit_log      the master log: sign-ins, every change, export, import, page visit (lib/activity.js + audit())
-     health_events  monitoring status changes (system, no user)                         — only here
-     qr_scans       every QR label / stocktake scan                                       — only here
-     net_port_log   Network map device / port history. Device-level lines (added, edited, OT view) are only here;
-                    port-level lines DUPLICATE the audit 'NETMAP' entry → shown only with ?detail=1
-     ot_activity    OT device / OT port changes with before → after for restore. DUPLICATES the audit entries
-                    (UPDATE / NETMAP) → shown only with ?detail=1 (restore stays on the OT activity page)
-   Not merged (kept where they are): history_usage on each asset / server (the record's own trail, also in the audit
-   log), notifications (messages to people, made from the same events), asset_confirmations (audited as CONFIRM_*).
+   Since the write-once change log (lib/changelog.js) every change is ONE row of audit_log — Network map device / port
+   lines and OT changes (with before / after for restore) included. Other sources merged here:
+     health_events  monitoring status changes (system, no user)
+     qr_scans       every QR label / stocktake scan
+   Rows copied from the old tables (legacy = 'portlog' | 'ot') repeat old audit entries, so they are shown only with
+   ?detail=1 — except the old device-level Network map lines (device added / edited …), which exist only there.
 
      GET /api/activity?area=a,b&user=&q=&from=&to=&views=1&detail=1&page=&limit=   → { rows, total, areas, users }
      GET /api/activity/export.csv?…  (same filters, max 50 000 rows) */
@@ -25,8 +21,7 @@ router.use(requireGlobalAdmin);
 const AREA_SQL = `CASE
   WHEN src = 'health' THEN 'Monitoring'
   WHEN src = 'scan' THEN 'Stocktake & labels'
-  WHEN src = 'portlog' THEN 'Network map'
-  WHEN src = 'ot' THEN 'OT'
+  WHEN ot = 1 THEN 'OT'
   WHEN action IN ('LOGIN', 'LOGIN_FAILED', 'LOGOUT', 'MFA', 'PASSWORD') THEN 'Sign-in & security'
   WHEN action = 'USER' THEN 'Users & access'
   WHEN action = 'VIEW' THEN 'Page visits'
@@ -47,12 +42,12 @@ const AREA_SQL = `CASE
 
 function source(q) {
   const parts = [
-    `SELECT 'audit' AS src, id, created_at AS at, COALESCE(username, '') AS who, COALESCE(action, '') AS action, COALESCE(details, '') AS text, COALESCE(ip, '') AS ip, asset_id FROM audit_log${q.views === '1' ? '' : " WHERE action <> 'VIEW'"}`,
-    `SELECT 'health', id, created_at, 'system', 'STATUS', COALESCE(name, '') || ': ' || COALESCE(from_status, '?') || ' → ' || COALESCE(to_status, '?') || CASE WHEN COALESCE(summary, '') <> '' THEN ' — ' || summary ELSE '' END, '', NULL FROM health_events`,
-    `SELECT 'scan', id, scanned_at, COALESCE(scanned_by, ''), 'SCAN', 'Scanned ' || COALESCE(code, '') || ' (' || COALESCE(source, '') || CASE WHEN COALESCE(result, '') <> '' THEN ', ' || result ELSE '' END || ')', COALESCE(ip, ''), asset_id FROM qr_scans`,
-    `SELECT 'portlog', id, at, COALESCE(by_user, ''), 'NETMAP_LOG', COALESCE(site, '') || ': ' || COALESCE(device, '') || CASE WHEN COALESCE(port, '') <> '' THEN ' ' || port ELSE '' END || ' — ' || CASE WHEN COALESCE(before, '') <> '' THEN before || ' → ' ELSE '' END || COALESCE(after, ''), '', NULL FROM net_port_log${q.detail === '1' ? '' : " WHERE COALESCE(port, '') = '' AND COALESCE(after, '') <> 'device deleted'"}`,
+    `SELECT CASE WHEN COALESCE(legacy, '') = '' THEN 'audit' ELSE legacy END AS src, id, created_at AS at, COALESCE(username, '') AS who, COALESCE(action, '') AS action,
+       COALESCE(details, '') AS text, COALESCE(ip, '') AS ip, asset_id, COALESCE(ot, 0) AS ot FROM audit_log
+       WHERE ${q.views === '1' ? '1 = 1' : "action <> 'VIEW'"}${q.detail === '1' ? '' : " AND (COALESCE(legacy, '') = '' OR (legacy = 'portlog' AND ref_type = 'device' AND after_text <> 'device deleted'))"}`,
+    `SELECT 'health', id, created_at, 'system', 'STATUS', COALESCE(name, '') || ': ' || COALESCE(from_status, '?') || ' → ' || COALESCE(to_status, '?') || CASE WHEN COALESCE(summary, '') <> '' THEN ' — ' || summary ELSE '' END, '', NULL, 0 FROM health_events`,
+    `SELECT 'scan', id, scanned_at, COALESCE(scanned_by, ''), 'SCAN', 'Scanned ' || COALESCE(code, '') || ' (' || COALESCE(source, '') || CASE WHEN COALESCE(result, '') <> '' THEN ', ' || result ELSE '' END || ')', COALESCE(ip, ''), asset_id, 0 FROM qr_scans`,
   ];
-  if (q.detail === '1') parts.push(`SELECT 'ot', id, at, COALESCE(by_user, ''), 'OT_CHANGE', COALESCE(label, '') || ': ' || COALESCE(summary, ''), '', NULL FROM ot_activity`);
   return `(SELECT *, ${AREA_SQL} AS area FROM (${parts.join(' UNION ALL ')}))`;
 }
 
