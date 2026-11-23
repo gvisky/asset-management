@@ -110,4 +110,5 @@ async function editYears() {
   catch (e) { let m = 'Could not save'; try { m = JSON.parse(e.message).error || m; } catch {} showToast(m, 'error'); }
 }
 
-document.addEventListener('DOMContentLoaded', () => { document.getElementById('kpi-dep-btn').addEventListener('click', editYears); load(); });
+// Depreciation years are edited in Settings (phase 4).
+document.addEventListener('DOMContentLoaded', () => { document.getElementById('kpi-dep-btn').addEventListener('click', () => { location.href = '/settings.html#st-assets'; }); load(); });
