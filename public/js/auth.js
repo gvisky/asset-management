@@ -318,7 +318,7 @@ ensureAuth();
 
 // ── Two-step login settings (Google / Microsoft Authenticator) ───────────────
 // Turn on: QR → scan with the app → type a code → save the 10 recovery codes.
-// Turn off / new recovery codes: password (+ a current code to turn off).
+// Required for everyone — no "turn off". New recovery codes: password · Move to a new phone: password + a current code.
 function mfaModal(title, body, foot) {
   let ov = document.getElementById('mfa-ov');
   if (!ov) {
@@ -362,29 +362,28 @@ async function openMfaSettings() {
         <li>Type the code the app shows.</li>
       </ol>`,
       `<button class="btn btn-ghost" onclick="document.getElementById('mfa-ov').classList.remove('open')">Not now</button><button class="btn btn-primary" id="mfa-start">Set up</button>`);
-    document.getElementById('mfa-start').onclick = mfaSetup;
+    document.getElementById('mfa-start').onclick = () => mfaSetup();
     return;
   }
   mfaModal('🔐 Two-step login is on', `
     <p style="margin:0 0 8px">✅ You sign in with your password <b>and</b> a code from your authenticator app.</p>
     <p class="text-muted" style="margin:0 0 14px;font-size:13px">Recovery codes left: <b>${st.recovery_left}</b> of 10.</p>
     <div class="form-group"><label class="form-label">Your password</label><input class="form-control" id="mfa-pw" type="password" autocomplete="current-password"></div>
-    <div class="form-group"><label class="form-label">Current 6-digit code (only to turn it off)</label><input class="form-control" id="mfa-off-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></div>
+    <div class="form-group"><label class="form-label">Current 6-digit code (only to move to a new phone)</label><input class="form-control" id="mfa-off-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></div>
+    <p class="text-muted" style="margin:0 0 6px;font-size:12.5px">Two-step login is required for every account and cannot be turned off. Lost your phone and your recovery codes? Ask an IT admin to reset it.</p>
     <div id="mfa-msg" class="text-sm" style="color:#dc2626"></div>`,
-    `<button class="btn btn-ghost" id="mfa-newcodes">New recovery codes</button><button class="btn btn-danger" id="mfa-off">Turn off</button>`);
+    `<button class="btn btn-ghost" id="mfa-newcodes">New recovery codes</button><button class="btn btn-primary" id="mfa-move">📱 Move to a new phone</button>`);
   document.getElementById('mfa-newcodes').onclick = async () => {
     try { const d = await mfaApi('/recovery', { password: document.getElementById('mfa-pw').value }); mfaModal('🔐 New recovery codes', mfaCodesHtml(d.recovery_codes) + '<p class="text-muted text-sm" style="margin:10px 0 0">The old codes no longer work.</p>'); }
     catch (e) { document.getElementById('mfa-msg').textContent = e.message; }
   };
-  document.getElementById('mfa-off').onclick = async () => {
-    if (!confirm('Turn off two-step login? Your account will be protected by the password only.')) return;
-    try { await mfaApi('/disable', { password: document.getElementById('mfa-pw').value, code: document.getElementById('mfa-off-code').value }); showToast('Two-step login turned off'); setTimeout(() => location.reload(), 600); }
-    catch (e) { document.getElementById('mfa-msg').textContent = e.message; }
-  };
+  document.getElementById('mfa-move').onclick = () => mfaSetup({ password: document.getElementById('mfa-pw').value, code: document.getElementById('mfa-off-code').value });
 }
-async function mfaSetup() {
+// creds = { password, code } when moving to a new phone (the old phone keeps working until the new code is confirmed).
+async function mfaSetup(creds) {
   let d;
-  try { d = await mfaApi('/setup', {}); } catch (e) { showToast(e.message, 'error'); return; }
+  try { d = await mfaApi('/setup', creds && creds.password !== undefined ? creds : {}); }
+  catch (e) { const m = document.getElementById('mfa-msg'); if (m && creds) m.textContent = e.message; else showToast(e.message, 'error'); return; }
   mfaModal('🔐 Scan with your authenticator app', `
     <div style="text-align:center"><img src="${d.qr}" alt="QR code" width="220" height="220" style="border:1px solid var(--border);border-radius:10px;padding:6px;background:#fff"></div>
     <p class="text-muted" style="font-size:12.5px;margin:8px 0 2px;text-align:center">Can't scan? In the app choose <b>Enter a setup key</b> and type:</p>
