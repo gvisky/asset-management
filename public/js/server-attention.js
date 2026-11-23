@@ -52,10 +52,10 @@
   async function summary(root) {
     let d; try { d = await load(true); } catch { root.innerHTML = ''; return; }
     root.innerHTML = `<div class="card na-sum"><div class="card-header"><span class="card-title">${TITLE}</span><span style="flex:1"></span>
-        <a class="btn btn-ghost btn-sm" href="/alerts.html#na-servers">Open the list →</a></div>
+        <a class="btn btn-ghost btn-sm" href="/inbox.html#na-servers">Open the list →</a></div>
       <div class="card-body na-sum-b"><div class="na-big ${d.total ? '' : 'ok'}">${d.total}</div>
         <div><div class="text-sm" style="margin-bottom:6px">${d.total ? `device${d.total > 1 ? 's' : ''} in Server Inventory need info${Object.keys(d.byCountry).length ? ' · ' + Object.entries(d.byCountry).map(([c, n]) => `${esc(c)} ${n}`).join(' · ') : ''}` : 'All servers and network devices have their key info 🎉'}</div>
-          <div class="na-chips" style="margin:0">${ISSUES.map(k => d.counts[k] ? `<a class="na-chip" href="/alerts.html#na-servers">${k} <b>${d.counts[k]}</b></a>` : '').join('')}</div>
+          <div class="na-chips" style="margin:0">${ISSUES.map(k => d.counts[k] ? `<a class="na-chip" href="/inbox.html#na-servers">${k} <b>${d.counts[k]}</b></a>` : '').join('')}</div>
           ${d.models.length ? `<div class="text-sm" style="color:#b45309;margin-top:6px">📦 Quantity differs from the document: ${d.models.map(m => esc(m.family)).join(', ')}</div>` : ''}</div></div></div>`;
   }
   async function count() { try { return (await load(true)).total; } catch { return 0; } }

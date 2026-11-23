@@ -26,6 +26,7 @@
     lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     bin: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   };
 
@@ -33,8 +34,8 @@
   function items(f) {
     return [
       ['Home', 'nav-dashboard', '/', 'Overview', 'home', f.asset],
-      ['Home', 'nav-alerts', '/alerts.html', 'Needs attention', 'inbox', f.asset && !f.viewer],
-      ['Home', 'nav-otna', '/ot-attention.html', 'OT needs attention', 'inbox', f.ot],
+      ['Home', 'nav-alerts', '/inbox.html', 'Inbox', 'inbox', !f.viewer && (f.asset || f.it || f.hr)],
+      ['Home', 'nav-otna', '/ot-attention.html', 'Inbox', 'inbox', f.ot],
       ['End-user IT', 'nav-inventory', '/inventory.html', 'Assets', 'laptop', f.asset, ['/scan.html']],
       ['End-user IT', 'nav-devices', '/devices.html', 'Devices', 'phone', f.asset],
       ['End-user IT', 'nav-licenses', '/licenses.html', 'Licenses', 'badge', f.asset],
@@ -52,6 +53,7 @@
       ['Insights', 'nav-kpi', '/kpi.html', 'KPIs', 'kpi', f.asset],
       ['Admin', 'nav-users', '/users.html', 'Users & access', 'lock', f.globalAdmin, ['/ot-activity.html'].filter(() => !f.otAdmin)],
       ['Admin', 'nav-bin', '/deleted.html', 'Recycle bin', 'bin', f.admin],
+      ['Admin', 'nav-settings', '/settings.html', 'Settings', 'gear', f.admin && !f.ot && !f.net],
     ];
   }
   function flags(u) {
@@ -77,6 +79,10 @@
       html += `<a href="${href}" class="nav-link${act && act[1] === id ? ' active' : ''}" id="${id}">${ico(I[icon])}<span>${label}</span></a>`;
     }
     nav.innerHTML = html;
+    // Inbox count on the menu (GET /api/inbox?count=1 — cached on the server for 2 minutes).
+    if (document.getElementById('nav-alerts') && location.pathname !== '/inbox.html') {
+      setTimeout(() => fetch('/api/inbox?count=1').then(r => (r.ok ? r.json() : null)).then(d => d && setInboxCount(d.total)).catch(() => {}), 1200);
+    }
     const logo = document.querySelector('.sidebar-logo');
     if (logo) logo.innerHTML = '<a href="/" class="brand"><span class="brand-mark">H</span><span><b>Hayat IT</b><small>Communication Tools</small></span></a>';
     document.documentElement.classList.add('shell-ready');
@@ -153,7 +159,16 @@
     buildCountry(bar, u);
   }
 
+  function setInboxCount(n) {
+    const l = document.getElementById('nav-alerts'); if (!l) return;
+    let b = l.querySelector('.nav-cnt');
+    if (!n) { if (b) b.remove(); return; }
+    if (!b) { b = document.createElement('span'); b.className = 'nav-cnt'; l.appendChild(b); }
+    b.textContent = n > 999 ? '999+' : String(n);
+  }
+
   window.Shell = {
+    setInboxCount,
     build(u) { try { buildNav(u); buildTopbar(u); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
     getScope, setScope, current: () => current,
   };
