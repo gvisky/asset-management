@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Hayat IT — new layout mock-up</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+/* Mock-up only (sample data). Design tokens from docs/UX-REDESIGN.md §6. */
+:root{--bg:#F8FAFC;--card:#fff;--line:#E2E8F0;--tx:#0F172A;--tx2:#475569;--tx3:#94A3B8;--pri:#2563EB;--ok:#16A34A;--warn:#D97706;--bad:#DC2626;--info:#2563EB;--grey:#64748B;--ot:#EA580C;--side:#0F172A}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:var(--tx);background:var(--bg);display:flex;min-height:100vh}
+svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.side{width:236px;background:var(--side);color:#CBD5E1;display:flex;flex-direction:column;padding:14px 10px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;color:#fff;font-weight:700;font-size:15px;padding:4px 8px 16px}
+.logo{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);display:grid;place-items:center;font-size:13px}
+.grp{font-size:10.5px;letter-spacing:.08em;color:#64748B;font-weight:600;margin:14px 10px 4px}
+.nav a{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:7px;color:#CBD5E1;text-decoration:none;font-size:13.5px}
+.nav a:hover{background:#1E293B}.nav a.on{background:#1E293B;color:#fff;box-shadow:inset 3px 0 0 #3B82F6}
+.cnt{margin-left:auto;background:#DC2626;color:#fff;border-radius:9px;font-size:11px;padding:0 7px;font-weight:600}
+.side .foot{margin-top:auto;font-size:12px;color:#64748B;padding:8px 10px}
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{height:56px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;padding:0 22px;position:sticky;top:0;z-index:5}
+.crumb{color:var(--tx2);font-size:13px}.crumb b{color:var(--tx);font-weight:600}
+.search{flex:1;max-width:460px;margin:0 auto;display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;color:var(--tx3);background:var(--bg)}
+.search kbd{margin-left:auto;font:11px Inter,sans-serif;border:1px solid var(--line);border-radius:4px;padding:0 5px;background:#fff}
+.pill-btn{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:6px 10px;background:#fff;color:var(--tx);font-size:13px}
+.bell{position:relative}.bell i{position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;background:var(--bad)}
+.av{width:32px;height:32px;border-radius:50%;background:#DBEAFE;color:#1D4ED8;display:grid;place-items:center;font-weight:700;font-size:12px}
+.page{padding:20px 22px;display:flex;gap:16px;align-items:flex-start}
+.col{flex:1;min-width:0}
+.ph{display:flex;align-items:flex-end;gap:12px;margin-bottom:12px}.ph h1{margin:0;font-size:20px}
+.sum{color:var(--tx2);font-size:13px;margin-top:2px}.sum b{color:var(--tx)}.sum .w{color:var(--warn);font-weight:600}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font:600 13px Inter,sans-serif;color:var(--tx);display:inline-flex;gap:6px;align-items:center}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--line);margin-bottom:12px}.tabs a{padding:8px 0;color:var(--tx2);text-decoration:none;font-weight:500}.tabs a.on{color:var(--pri);box-shadow:inset 0 -2px 0 var(--pri)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+.fbar{display:flex;gap:8px;padding:10px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.fin{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--tx3);min-width:220px}
+.sel{border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--tx);background:#fff;font-size:13px}
+.sel.add{color:var(--pri);border-style:dashed}
+.chip-on{background:#EFF6FF;border-color:#BFDBFE;color:#1D4ED8}
+table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;font-weight:600;color:var(--tx2);font-size:12px;padding:9px 10px;border-bottom:1px solid var(--line);background:#FBFDFF;position:sticky;top:56px}
+td{padding:9px 10px;border-bottom:1px solid #F1F5F9;white-space:nowrap}tr:hover td{background:#F8FAFC}tr.sel-row td{background:#EFF6FF}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px}.t2{color:var(--tx2);font-size:12px}
+.st{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:600}
+.st::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.ok{color:#15803D;background:#F0FDF4}.warn{color:#B45309;background:#FFFBEB}.bad{color:#B91C1C;background:#FEF2F2}.info{color:#1D4ED8;background:#EFF6FF}
+.type{font-size:11.5px;border:1px solid var(--line);border-radius:5px;padding:0 6px;color:var(--tx2)}
+.bulk{display:flex;gap:8px;align-items:center;padding:8px 10px;background:#0F172A;color:#fff;border-radius:0 0 10px 10px;font-size:13px}.bulk .btn{padding:4px 10px;background:#1E293B;color:#fff;border-color:#334155}
+.drawer{width:400px;flex:none;position:sticky;top:76px}
+.dh{padding:14px 16px;border-bottom:1px solid var(--line)}.dh h2{margin:0;font-size:16px}
+.dtabs{display:flex;gap:14px;padding:0 16px;border-bottom:1px solid var(--line)}.dtabs a{padding:9px 0;color:var(--tx2);text-decoration:none;font-size:13px}.dtabs a.on{color:var(--pri);box-shadow:inset 0 -2px 0 var(--pri)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:14px 16px}
+.f label{display:block;font-size:11.5px;color:var(--tx3);margin-bottom:2px}.f div{border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:13px}
+.f.wide{grid-column:1/-1}.warnf div{border-color:#FCD34D;background:#FFFBEB}
+.dfoot{display:flex;justify-content:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:#FBFDFF;border-radius:0 0 10px 10px}
+.tl{padding:0 16px 14px}.tl div{font-size:12.5px;color:var(--tx2);padding:4px 0 4px 12px;border-left:2px solid var(--line)}
+.note{margin:10px 22px 22px;color:var(--tx3);font-size:12px}
+</style></head><body>
+<aside class="side">
+  <div class="brand"><div class="logo">H</div>Hayat IT</div>
+  <div class="grp">HOME</div><nav class="nav">
+    <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Overview</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>Inbox<span class="cnt">12</span></a></nav>
+  <div class="grp">END-USER IT</div><nav class="nav">
+    <a class="on" href="#"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Assets</a>
+    <a href="#"><svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>Devices</a>
+    <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg>Licenses</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg>Maintenance</a>
+    <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 20h1"/></svg>Stocktake</a></nav>
+  <div class="grp">PEOPLE</div><nav class="nav">
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>Users</a></nav>
+  <div class="grp">INFRASTRUCTURE</div><nav class="nav">
+    <a href="#"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="7" rx="1"/><rect x="2" y="14" width="20" height="7" rx="1"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>Servers &amp; storage</a>
+    <a href="#"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/></svg>Network</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M2 20h20M5 20V9l5 3V9l5 3V6l4 2v12"/></svg>OT</a>
+    <a href="#"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Monitoring</a></nav>
+  <div class="grp">FINANCE &amp; INSIGHTS</div><nav class="nav">
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Budget</a>
+    <a href="#"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-6"/></svg>Reports</a></nav>
+  <div class="grp">ADMIN</div><nav class="nav">
+    <a href="#"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Users &amp; access</a>
+    <a href="#"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a></nav>
+  <div class="foot">‹ Collapse</div>
+</aside>
+<main>
+  <div class="top">
+    <div class="crumb">End-user IT › <b>Assets</b></div>
+    <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search assets, people, IPs, MACs…<kbd>Ctrl K</kbd></div>
+    <div class="pill-btn">🌏 Vietnam <span style="color:var(--tx3)">▾</span></div>
+    <div class="pill-btn bell"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg><i></i></div>
+    <div class="av" title="IT Admin · IT">VN</div>
+  </div>
+  <div class="page">
+    <div class="col">
+      <div class="ph"><div><h1>Assets</h1><div class="sum"><b>633</b> assets · 626 active · <span style="color:var(--bad)">4 broken</span> · 3 stock · <span class="w">326 need info</span></div></div>
+        <div style="margin-left:auto;display:flex;gap:8px"><span class="btn">⋯ Import / Export</span><span class="btn pri">+ Add asset</span></div></div>
+      <div class="tabs"><a class="on" href="#">All</a><a href="#">By user</a><a href="#">Stock &amp; disposal</a><a href="#">Models &amp; warranty</a></div>
+      <div class="card">
+        <div class="fbar"><div class="fin"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search code, serial, user…</div>
+          <span class="sel chip-on">Type: Laptop ✕</span><span class="sel">Status ▾</span><span class="sel">Location ▾</span><span class="sel add">+ Filter</span>
+          <span style="margin-left:auto" class="sel">Saved view: My site ▾</span><span class="sel">⚙ Columns</span></div>
+        <table><thead><tr><th><input type="checkbox"></th><th>Asset code</th><th>Model</th><th>User</th><th>Department</th><th>Location</th><th>Status</th><th>Warranty</th><th>Updated</th></tr></thead><tbody>
+<tr><td><input type="checkbox" checked></td><td class="mono">2801300005xx</td><td>Lenovo T490 <span class="type">Laptop</span></td><td>Nguyen Van A</td><td>Finance</td><td>Office</td><td><span class="st ok">Active</span></td><td>2027-03-01</td><td class="t2">2 h ago</td></tr>
+<tr class="sel-row"><td><input type="checkbox" checked></td><td class="mono">2801300003xx</td><td>Lenovo E14 G4 <span class="type">Laptop</span></td><td>Tran Thi B</td><td>Sales</td><td>Office</td><td><span class="st warn">Needs info</span></td><td style="color:var(--warn)">2026-12-20</td><td class="t2">today</td></tr>
+<tr><td><input type="checkbox"></td><td class="mono">2801300007xx</td><td>Dell Latitude 5440 <span class="type">Laptop</span></td><td>Le Van C</td><td>Production</td><td>Factory</td><td><span class="st ok">Active</span></td><td>2028-06-10</td><td class="t2">yesterday</td></tr>
+<tr><td><input type="checkbox"></td><td class="mono">2801300009xx</td><td>Lenovo T14 <span class="type">Laptop</span></td><td class="t2">— in stock</td><td>IT</td><td>Office</td><td><span class="st info">Stock</span></td><td>2028-01-15</td><td class="t2">3 d ago</td></tr>
+<tr><td><input type="checkbox"></td><td class="mono">2801300002xx</td><td>HP ProBook 450 <span class="type">Laptop</span></td><td>Pham Van D</td><td>QA</td><td>Factory</td><td><span class="st bad">Broken</span></td><td class="t2">expired</td><td class="t2">5 d ago</td></tr>
+<tr><td><input type="checkbox"></td><td class="mono">2801300004xx</td><td>Lenovo T490 <span class="type">Laptop</span></td><td>Hoang Thi E</td><td>HR</td><td>Office</td><td><span class="st ok">Active</span></td><td>2027-03-01</td><td class="t2">1 w ago</td></tr>
+        </tbody></table>
+        <div class="bulk">2 selected <span class="btn">Assign</span><span class="btn">Move</span><span class="btn">Change status</span><span class="btn">Export</span><span style="margin-left:auto;color:#94A3B8">Esc to clear</span></div>
+      </div>
+    </div>
+    <div class="card drawer">
+      <div class="dh"><div class="t2">Laptop · VNHCMC0xxx</div><h2>Lenovo E14 G4</h2><div style="margin-top:6px"><span class="st warn">Needs info: serial, cost center</span></div></div>
+      <div class="dtabs"><a class="on" href="#">Overview</a><a href="#">History</a><a href="#">Maintenance</a><a href="#">Files</a></div>
+      <div class="fields">
+        <div class="f"><label>Asset code</label><div class="mono">2801300003xx</div></div>
+        <div class="f warnf"><label>Serial ⚠</label><div style="color:var(--tx3)">add serial</div></div>
+        <div class="f"><label>User</label><div>Tran Thi B</div></div>
+        <div class="f"><label>Department</label><div>Sales</div></div>
+        <div class="f warnf"><label>Cost center ⚠</label><div style="color:var(--tx3)">choose…</div></div>
+        <div class="f"><label>Location</label><div>HCM Office</div></div>
+        <div class="f"><label>Purchase</label><div>2023-12-20</div></div>
+        <div class="f"><label>Warranty</label><div style="color:var(--warn)">2026-12-20 · 27 d</div></div>
+        <div class="f wide"><label>Note</label><div style="color:var(--tx3)">—</div></div>
+      </div>
+      <div class="tl"><div>Today — status Needs info (auto)</div><div>2024-01-05 — assigned to Tran Thi B by IT</div></div>
+      <div class="dfoot"><span class="btn">Cancel</span><span class="btn pri">Save</span></div>
+    </div>
+  </div>
+  <div class="note">Mock-up for discussion: sample data only. Layout and tokens from docs/UX-REDESIGN.md.</div>
+</main>
+</body></html>
