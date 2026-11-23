@@ -59,10 +59,10 @@ app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff 
 const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico',
   '/my-devices.html', '/js/my-devices.js'];   // "My devices": opened from the personal link, no login
 
-// Which build is running (Render sets RENDER_GIT_COMMIT) — to check a deploy really went live.
+// Which build is running (Render sets RENDER_GIT_COMMIT; the Ubuntu server's deploy/update.sh sets APP_COMMIT) — to check a deploy really went live.
 app.get('/api/version', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({ commit: (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || 'local', started: STARTED });
+  res.json({ commit: (process.env.RENDER_GIT_COMMIT || process.env.APP_COMMIT || '').slice(0, 7) || 'local', started: STARTED });
 });
 const STARTED = new Date().toISOString();
 

@@ -6,3 +6,6 @@ db/assets.db-wal
 .git
 .claude
 *.md
+deploy/.env
+deploy/backups
+backups
