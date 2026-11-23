@@ -215,6 +215,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 400);
 
   loadUsers();
+  loadMfaPolicy();
+  document.getElementById('mfa-pol').addEventListener('change', async (e) => {
+    const on = e.target.checked;
+    if (!confirm(on ? 'Require two-step login for everyone?\n\nAnyone without it will have to set up Google / Microsoft Authenticator at their next page or sign-in before they can use the app.'
+                    : 'Make two-step login optional?\n\nPeople who already turned it on keep it; others can sign in with the password only.')) { e.target.checked = !on; return; }
+    try { await apiPut('/api/users/mfa-policy', { required: on }); showToast(on ? 'Two-step login is now required for everyone' : 'Two-step login is now optional'); loadMfaPolicy(); }
+    catch (err) { e.target.checked = !on; showToast('Could not change the setting', 'error'); }
+  });
   loadAudit();
   // Audit log filters
   let auT = null;
@@ -278,4 +286,14 @@ async function resetMfa(id, username) {
   if (!confirm(`Turn off two-step login for ${username}?\n\nThey can then sign in with the password only, and should set up the authenticator again (avatar menu → Two-step login).`)) return;
   try { await apiPost(`/api/users/${id}/mfa-reset`, {}); showToast(`Two-step login of ${username} reset`); loadUsers(); }
   catch (e) { showToast('Could not reset', 'error'); }
+}
+
+// Two-step login policy (required for everyone / optional) + how many accounts have it on.
+async function loadMfaPolicy() {
+  try {
+    const p = await apiGet('/api/users/mfa-policy');
+    document.getElementById('mfa-pol').checked = !!p.required;
+    document.getElementById('mfa-pol-sub').textContent = `${p.enabled} of ${p.users} accounts have it on · `
+      + (p.required ? 'required — the others must set it up at their next page or sign-in' : 'optional — each person can turn it on in the avatar menu');
+  } catch (e) { document.getElementById('mfa-pol-sub').textContent = 'Could not load the setting'; }
 }

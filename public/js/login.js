@@ -30,6 +30,7 @@ $('login-form').addEventListener('submit', async (e) => {
       btn.disabled = false; btn.textContent = 'Sign in';
       return;
     }
+    if (data.mfa_setup_required) { window.location.href = '/mfa-setup.html'; return; }
     goHome(data);
   } catch (err) {
     errEl.textContent = err.message; errEl.style.display = 'block';

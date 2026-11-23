@@ -3,6 +3,7 @@ const router = express.Router();
 const { get, run, audit } = require('../db/database');
 const totp = require('../lib/totp');
 const QRCode = require('qrcode');
+const { mfaRequired } = require('../lib/mfa-policy');
 const { hashPassword, verifyPassword, newToken, hashToken } = require('../db/auth-utils');
 const { requireAuth, getUserFromRequest } = require('../middleware/auth');
 
@@ -43,7 +44,8 @@ router.post('/login', wrap(async (req, res) => {
     return res.json({ mfa_required: true, challenge });
   }
   await startSession(req, res, user, 'Logged in');
-  res.json(publicUser(user));
+  // Two-step login required for everyone but not set up yet → the browser goes to the setup page.
+  res.json({ ...publicUser(user), mfa_setup_required: await mfaRequired() });
 }));
 
 const CHALLENGE_MS = 5 * 60 * 1000;   // the code must be entered within 5 minutes

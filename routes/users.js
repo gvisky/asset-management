@@ -36,6 +36,19 @@ router.get('/', wrap(async (req, res) => {
   res.json(rows);
 }));
 
+// ── Two-step login policy: required for everyone (default) or optional ──────────
+const { mfaRequired, setMfaRequired } = require('../lib/mfa-policy');
+router.get('/mfa-policy', wrap(async (req, res) => {
+  const r = await get('SELECT COUNT(*) AS n, SUM(CASE WHEN mfa_enabled = 1 THEN 1 ELSE 0 END) AS on_ FROM users');
+  res.json({ required: await mfaRequired(), users: Number(r.n) || 0, enabled: Number(r.on_) || 0 });
+}));
+router.put('/mfa-policy', wrap(async (req, res) => {
+  const on = !!(req.body && req.body.required);
+  await setMfaRequired(on);
+  await audit(req.user, 'MFA', null, on ? 'Two-step login REQUIRED for everyone' : 'Two-step login made optional');
+  res.json({ required: on });
+}));
+
 // ── POST /api/users — create a user ───────────────────────────────────────
 router.post('/', wrap(async (req, res) => {
   const { username, full_name = '', password, role = 'viewer', country = '', team = '', asset_access } = req.body;

@@ -1,6 +1,14 @@
 [
   {
     "date": "2026-11-23",
+    "title": "Two-step login is now required for everyone",
+    "items": [
+      "Anyone who has not set up two-step login is taken to a setup page right after sign-in (or at the next page if already signed in): install Google / Microsoft Authenticator, scan the QR, type the code, save the 10 recovery codes. Nothing else opens until it is done.",
+      "Users & Audit: a switch 'Required for everyone' (on) and how many accounts have it on. Turn it off to make it optional again. Reset 2-step still helps someone who lost their phone (they set it up again at their next sign-in)."
+    ]
+  },
+  {
+    "date": "2026-11-23",
     "title": "Two-step login (Google / Microsoft Authenticator)",
     "items": [
       "Protect your account with a 6-digit code from your phone: avatar menu (top right) → 🔐 2-step login → scan the QR with Google Authenticator or Microsoft Authenticator → type the code → save the 10 recovery codes.",
