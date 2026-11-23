@@ -1933,8 +1933,8 @@ tr.lk-on > td { background: #eff6ff !important; }
 @media (max-width: 768px) {
   .lk-bar .search-box { flex: 1 1 100% !important; min-width: 0 !important; }
   .lk-bar select.filter-select { flex: 1 1 calc(50% - 8px); min-width: 0; }
-  .lk-tabs { flex-direction: column; align-items: stretch; gap: 4px; }
-  .lk-tools { margin-left: 0; overflow-x: auto; flex-wrap: nowrap; }
+  .lk-tabs { display: block; min-width: 0; }
+  .lk-tools { margin-left: 0; overflow-x: auto; flex-wrap: nowrap; max-width: 100%; padding-bottom: 8px; scrollbar-width: none; }
   .lk-tools .btn { white-space: nowrap; }
   .lk-bulk { left: 12px; right: 12px; transform: none; }
 }
@@ -1970,3 +1970,38 @@ tr.lk-on > td { background: #eff6ff !important; }
 #user-chrome .uc-avatar { position: relative; } .av-dot { position: absolute; top: 0; right: 0; width: 9px; height: 9px; border-radius: 50%; background: #2563eb; border: 2px solid #fff; }
 .news-item { padding: 10px 0; border-bottom: 1px solid #f1f5f9; } .news-date { font-size: 12px; color: #64748b; } .news-title { font-weight: 600; margin: 2px 0 4px; font-size: 14px; }
 .news-item ul { margin: 0 0 0 18px; padding: 0; font-size: 13px; color: #334155; line-height: 1.55; }
+
+/* ── Phase 6: phone — bottom bar, scanner, full-screen record panels ────────────────────────────────────── */
+.bb { display: none; }
+.scan-ov { display: none; }
+@media (max-width: 768px) {
+  .bb { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 150; background: #fff; border-top: 1px solid var(--border);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 16px rgba(15,23,42,.06); }
+  .bb a { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 4px; font-size: 11px; font-weight: 500; color: #64748b; position: relative; min-height: 48px; justify-content: center; }
+  .bb a.on { color: #1d4ed8; } .bb a.on svg { stroke-width: 2.4; }
+  .bb a:active { background: #f1f5f9; border-radius: 10px; }
+  .bb-n { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; border-radius: 9px; background: #dc2626; color: #fff; font: 600 10.5px/18px Inter, sans-serif; text-align: center; padding: 0 5px; font-style: normal; }
+  .bb-n[hidden] { display: none; }
+  html.has-bb .content { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  html.has-bb #gs-btn { display: none; }                         /* Search is on the bottom bar */
+  html.has-bb .lk-bulk { bottom: calc(70px + env(safe-area-inset-bottom)); }
+  /* Record panels (View / Edit) take the whole screen; Save stays pinned at the bottom */
+  .modal-overlay[data-drawer] { align-items: stretch; padding: 0 !important; z-index: 220; }
+  .modal-overlay[data-drawer] .modal { width: 100% !important; max-width: none !important; height: 100dvh; max-height: 100dvh !important; border-radius: 0 !important;
+    display: flex; flex-direction: column; overflow: hidden; margin: 0 !important; }
+  .modal-overlay[data-drawer] .modal-header { position: sticky; top: 0; padding-top: max(14px, env(safe-area-inset-top)); background: #fff; z-index: 1; }
+  .modal-overlay[data-drawer] .modal-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+  .modal-overlay[data-drawer] .modal-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); background: #f8fafc; flex-wrap: wrap; }
+  .modal-overlay[data-drawer] .modal-footer .btn-primary { flex: 1 1 100%; order: 9; min-height: 46px; font-size: 15px; }
+  .modal-overlay[data-drawer] .modal-footer { gap: 6px; padding-top: 8px; }
+  .modal-overlay[data-drawer] .modal-footer .btn:not(.btn-primary) { flex: 1 1 0; min-width: 0; font-size: 12px; line-height: 1.25; padding: 6px 6px; white-space: normal; text-align: center; }
+  /* Camera scanner */
+  .scan-ov.open { display: block; position: fixed; inset: 0; z-index: 3000; background: #000; }
+  .scan-ov video { width: 100%; height: 100%; object-fit: cover; }
+  .scan-frame { position: absolute; left: 50%; top: 45%; width: 64vw; height: 64vw; max-width: 320px; max-height: 320px; transform: translate(-50%, -50%);
+    border: 3px solid rgba(255,255,255,.9); border-radius: 18px; box-shadow: 0 0 0 9999px rgba(0,0,0,.45); }
+  .scan-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; color: #fff;
+    padding: max(14px, env(safe-area-inset-top)) 16px 14px; font-size: 16px; background: linear-gradient(rgba(0,0,0,.55), transparent); }
+  .scan-top button { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255,255,255,.18); color: #fff; font-size: 18px; }
+  .scan-msg { position: absolute; left: 16px; right: 16px; bottom: calc(28px + env(safe-area-inset-bottom)); color: #fff; text-align: center; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+}
