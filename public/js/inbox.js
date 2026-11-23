@@ -20,11 +20,14 @@
     if (!d.areas.length) { box.innerHTML = '<div class="ib-empty">Everything on your list is done. New items appear here as soon as a check finds them.</div>'; return; }
     box.innerHTML = d.areas.map(a => {
       const n = a.items.reduce((t, i) => t + i.count, 0);
-      return `<div class="ib-card">
+      // Many rules (more than twice the next-longest card) → a double-width card with the rules in two columns.
+      const others = d.areas.filter(x => x !== a).map(x => x.items.length), wide = d.areas.length > 1 && a.items.length >= 5 && a.items.length > 1.6 * Math.max(1, ...others);
+      return `<div class="ib-card${wide ? ' ib-wide' : ''}">
         <div class="ib-card-h"><span class="ib-ico">${ICON[a.key] || '•'}</span><b>${esc(a.title)}</b><span class="ib-team">${esc(a.team)}</span><span class="ib-n">${n.toLocaleString()}</span></div>
-        ${a.items.map(i => `<a class="ib-item" href="${esc(i.href)}" data-sec="${esc(SEC[a.key] || '')}"${i.hint ? ` title="${esc(i.hint)}"` : ''}><span>${esc(i.label)}</span><b>${i.count.toLocaleString()}</b></a>`).join('')}
+        <div class="ib-items">${a.items.map(i => `<a class="ib-item" href="${esc(i.href)}" data-sec="${esc(SEC[a.key] || '')}"${i.hint ? ` title="${esc(i.hint)}"` : ''}><span>${esc(i.label)}</span><b>${i.count.toLocaleString()}</b></a>`).join('')}</div>
       </div>`;
     }).join('');
+    fitWide();
     // Links to this page scroll to the section instead of reloading.
     box.querySelectorAll('a.ib-item').forEach(l => l.addEventListener('click', (e) => {
       const href = l.getAttribute('href');
@@ -34,6 +37,19 @@
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }));
   }
+
+  // A double-width card only while every card still fits in one row (else it would push a card to a row of its own).
+  function fitWide() {
+    const box = $('ib-areas'); if (!box) return;
+    const cards = [...box.querySelectorAll('.ib-card')], wide = cards.filter(c => c.dataset.wide === '1' || c.classList.contains('ib-wide'));
+    if (!wide.length) return;
+    wide.forEach(c => { c.dataset.wide = '1'; });
+    const gap = parseFloat(getComputedStyle(box).columnGap) || 14;
+    const cols = Math.max(1, Math.floor((box.clientWidth + gap) / (260 + gap)));
+    const fits = cards.length + wide.length <= cols;
+    wide.forEach(c => c.classList.toggle('ib-wide', fits));
+  }
+  window.addEventListener('resize', () => { clearTimeout(fitWide.t); fitWide.t = setTimeout(fitWide, 120); });
 
   async function loadLeavers() {
     const box = $('ib-leavers');
