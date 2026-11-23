@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Devices — Hayat IT</title>
-  <link rel="stylesheet" href="/css/style.css?v=20261123w">
+  <link rel="stylesheet" href="/css/style.css?v=20261123y">
 </head>
 <body>
 
@@ -74,7 +74,7 @@
     </div>
 
     <div class="card">
-      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+      <div class="card-header lk-bar" style="flex-wrap:wrap;gap:10px">
         <div class="search-box" style="min-width:240px;flex:1">
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="search-input" placeholder="Search device, user, email, serial, model…">
@@ -97,6 +97,11 @@
           <option value="conflict">PC No and serial point to different assets</option>
         </select>
         <select class="filter-select" id="f-country"><option value="">All countries</option></select>
+        <button type="button" class="btn btn-ghost btn-sm lk-more-b" data-lk-more="#dv-more" aria-controls="dv-more">⚙ Filters <span class="lk-n" hidden></span></button>
+        <span id="dv-views"></span>
+        <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
+      </div>
+      <div class="lk-bar lk-bar2" id="dv-more" hidden>
         <select class="filter-select" id="f-os"><option value="">All OS</option></select>
         <select class="filter-select" id="f-source">
           <option value="">Intune + Entra</option>
@@ -121,7 +126,6 @@
           <option value="corp_unlinked">Company devices not in Asset Inventory</option>
           <option value="user_notin">User not in User Inventory</option>
         </select>
-        <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
       </div>
       <div class="bulk-bar" id="bulk-bar" hidden>
         <b id="bulk-count">0 selected</b>
@@ -281,6 +285,7 @@
 <script src="/js/auth.js?v=20261123u"></script>
 <script src="/js/app.js?v=20261123s"></script>
 <script src="/js/alerts.js?v=20261123s"></script>
-<script src="/js/devices.js?v=20261110h"></script>
+<script src="/js/listkit.js?v=20261123x"></script>
+<script src="/js/devices.js?v=20261123x"></script>
 </body>
 </html>

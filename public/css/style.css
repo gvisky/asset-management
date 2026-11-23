@@ -1918,7 +1918,7 @@ tr.lk-on > td { background: #eff6ff !important; }
 /* Side panel (desktop): <div class="modal-overlay" data-drawer> — opens on the right, the list stays usable */
 @media (min-width: 1025px) {
   .modal-overlay[data-drawer] { background: transparent; justify-content: flex-end; align-items: stretch; pointer-events: none !important; z-index: 120; }
-  .modal-overlay[data-drawer] .modal { pointer-events: auto; width: min(560px, 44vw); max-width: none; max-height: none; height: calc(100vh - var(--header-h)); margin-top: var(--header-h);
+  .modal-overlay[data-drawer] .modal { pointer-events: auto; width: min(560px, 44vw) !important; max-width: none !important; max-height: none; height: calc(100vh - var(--header-h)); margin-top: var(--header-h);
     border-radius: 0; border-left: 1px solid var(--border); box-shadow: -14px 0 32px rgba(15,23,42,.10); display: flex; flex-direction: column; overflow: hidden;
     transform: translateX(24px); transition: transform .18s ease; }
   .modal-overlay[data-drawer]:not(.open) .modal { pointer-events: none; visibility: hidden; transition: transform .18s ease, visibility 0s linear .2s; }

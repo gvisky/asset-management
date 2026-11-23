@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Servers &amp; network — Hayat IT</title>
-  <link rel="stylesheet" href="/css/style.css?v=20261123w">
+  <link rel="stylesheet" href="/css/style.css?v=20261123y">
 </head>
 <body>
 
@@ -69,7 +69,7 @@
     <div id="si-phys">
     <div class="stat-grid" id="summary-grid" style="margin-bottom:18px"></div>
     <div class="card">
-      <div class="card-header" style="flex-wrap:wrap;gap:10px">
+      <div class="card-header lk-bar" style="flex-wrap:wrap;gap:10px">
         <div class="search-box" style="min-width:240px;flex:1">
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="search-input" placeholder="Search by hostname, IP, serial, model, OS…">
@@ -81,13 +81,14 @@
         </select>
         <select class="filter-select" id="filter-producer"><option value="">All Producers</option></select>
         <select class="filter-select" id="filter-category"><option value="">All Categories</option></select>
+        <span id="si-views"></span>
         <button class="btn btn-ghost btn-sm" id="btn-reset">Reset</button>
       </div>
 
       <div class="table-wrap">
         <table>
           <thead>
-            <tr><th>#</th><th>Asset Code</th><th>Hostname</th><th>Brand / Model</th><th>Producer</th><th>Category</th><th>IP Address</th><th>Serial #</th><th>Country</th><th>Location</th><th>Status</th><th>Actions</th></tr>
+            <tr><th><input type="checkbox" class="lk-all" id="si-all" title="Select all shown" aria-label="Select all shown"> #</th><th>Asset Code</th><th>Hostname</th><th>Brand / Model</th><th>Producer</th><th>Category</th><th>IP Address</th><th>Serial #</th><th>Country</th><th>Location</th><th>Status</th><th>Actions</th></tr>
           </thead>
           <tbody id="servers-tbody">
             <tr><td colspan="12" class="empty-state">Loading…</td></tr>
@@ -106,7 +107,7 @@
 </div>
 
 <!-- View Detail Modal -->
-<div class="modal-overlay" id="view-overlay">
+<div class="modal-overlay" id="view-overlay" data-drawer>
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title">Server Detail</span>
@@ -121,7 +122,7 @@
 </div>
 
 <!-- Add / Edit Modal -->
-<div class="modal-overlay" id="modal-overlay">
+<div class="modal-overlay" id="modal-overlay" data-drawer>
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title" id="modal-title">Add Server</span>
@@ -195,7 +196,8 @@
 <script src="/js/cctv-import.js?v=20261120c"></script>
 <script src="/js/port-links.js?v=20261120b"></script>
 <script src="/js/mac-ports.js?v=20261120b"></script>
-<script src="/js/server-inventory.js?v=20261123n"></script>
+<script src="/js/listkit.js?v=20261123x"></script>
+<script src="/js/server-inventory.js?v=20261123x"></script>
 <script src="/js/server-usage.js?v=20261119a"></script>
 <script src="/js/virtual-servers.js?v=20261123n"></script>
 </body>
