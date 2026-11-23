@@ -479,6 +479,7 @@ async function loadOverviewCards() {
 document.addEventListener('DOMContentLoaded', () => {
   loadStats();
   loadOverviewCards();
+  const nw = () => (window.Shell && Shell.newsCard ? Shell.newsCard(document.getElementById('ov-news'), 3) : setTimeout(nw, 200)); nw();
   // Servers & network devices: count card (list on the Needs Attention page).
   if (typeof ServerAttention !== 'undefined' && document.getElementById('na-servers-dash')) {
     const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); if (window.CURRENT_USER.asset_access !== 0 && window.CURRENT_USER.role !== 'viewer') ServerAttention.summary(document.getElementById('na-servers-dash')); }, 150);

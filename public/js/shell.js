@@ -27,6 +27,7 @@
     bin: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    scroll: '<path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 0 0-2-2 2 2 0 0 0-2 2v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M10 7h6M10 11h6"/>',
     bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   };
 
@@ -55,6 +56,7 @@
       ['Insights', 'nav-reports', '/reports.html', 'Reports', 'report', f.asset, ['/kpi.html']],
       ['Insights', 'nav-kpi', '/kpi.html', 'KPIs', 'kpi', f.asset, [], 'tab'],
       ['Admin', 'nav-users', '/users.html', 'Users & access', 'lock', f.globalAdmin],
+      ['Admin', 'nav-activity', '/activity.html', 'Audit log & activities', 'scroll', f.globalAdmin],
       ['Admin', 'nav-bin', '/deleted.html', 'Recycle bin', 'bin', f.admin],
       ['Admin', 'nav-settings', '/settings.html', 'Settings', 'gear', f.admin && !f.ot && !f.net],
     ];
@@ -304,6 +306,15 @@
 
   window.Shell = {
     setInboxCount, openNews,
+    // Compact "What's new" list for the Overview pages: the newest n updates, first one opened.
+    async newsCard(el, n = 3) {
+      if (!el) return;
+      const list = await loadNews();
+      if (!list.length) { el.innerHTML = '<div class="text-muted text-sm">No updates yet.</div>'; return; }
+      const fresh = (d) => Date.now() - new Date(d + 'T00:00:00').getTime() < 7 * 86400000;
+      el.innerHTML = list.slice(0, n).map((u, i) => `<details class="nw-item"${i === 0 ? ' open' : ''}><summary><span class="nw-date">${e(fmtD(u.date))}</span><b>${e(u.title)}</b>${fresh(u.date) ? ' <span class="badge badge-active">New</span>' : ''}</summary>
+        ${(u.items || []).length ? `<ul>${u.items.map(x => `<li>${e(x)}</li>`).join('')}</ul>` : ''}</details>`).join('');
+    },
     build(u) { try { buildNav(u); buildTabs(); buildTopbar(u); buildNews(); buildBottomBar(u); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
     getScope, setScope, current: () => current,
   };

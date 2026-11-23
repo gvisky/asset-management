@@ -2005,3 +2005,37 @@ tr.lk-on > td { background: #eff6ff !important; }
   .scan-top button { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255,255,255,.18); color: #fff; font-size: 18px; }
   .scan-msg { position: absolute; left: 16px; right: 16px; bottom: calc(28px + env(safe-area-inset-bottom)); color: #fff; text-align: center; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
 }
+
+/* ── Assets table fits the window (12 columns: Country + Site and User + AD name merged) ─────────────────── */
+.inv-table thead th { padding: 9px 8px; white-space: normal; line-height: 1.25; }
+.inv-table tbody td { padding: 9px 8px; }
+.inv-table .th-sub { font-weight: 500; color: #94a3b8; text-transform: none; letter-spacing: 0; }
+.inv-table .inv-ad { margin-top: 2px; }
+.inv-table td:last-child > div { gap: 4px !important; }
+.inv-table td:last-child .btn-sm { padding: 5px 7px; }
+.inv-table td:nth-child(4) { min-width: 120px; }
+@media (max-width: 1600px) and (min-width: 769px) {
+  .inv-table { font-size: 12.5px; }
+  .inv-table thead th { font-size: 11px; letter-spacing: .02em; padding: 8px 6px; }
+  .inv-table tbody td { padding: 8px 6px; }
+  .inv-table .when-cell { min-width: 74px; }
+  .inv-table td:nth-child(9) { max-width: 120px; overflow-wrap: anywhere; }
+  .inv-table td.truncate { max-width: 120px; }
+}
+/* What's new card (Overview pages) */
+.nw-item { border-bottom: 1px solid #f1f5f9; padding: 8px 0; }
+.nw-item:last-child { border-bottom: 0; }
+.nw-item summary { cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-size: 13.5px; }
+.nw-item summary::-webkit-details-marker { display: none; }
+.nw-item summary::before { content: "▸"; color: #94a3b8; font-size: 11px; } .nw-item[open] summary::before { content: "▾"; }
+.nw-date { font-size: 12px; color: #64748b; white-space: nowrap; }
+.nw-item ul { margin: 6px 0 0 30px; padding: 0; font-size: 13px; color: #334155; line-height: 1.55; }
+/* 📜 Audit log & activities (activity.html) */
+.ac-areas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.ac-chip { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 4px 11px; font: 13px Inter, 'Segoe UI', sans-serif; color: #334155; cursor: pointer; }
+.ac-chip b { color: #64748b; font-weight: 600; margin-left: 2px; } .ac-chip:hover { border-color: #93c5fd; }
+.ac-chip.on { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; } .ac-chip.on b { color: #1d4ed8; }
+.ac-chk { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: #475569; }
+.ac-table td { vertical-align: top; } .ac-txt { font-size: 13px; max-width: 720px; word-break: break-word; }
+.ac-area { font-size: 12px; font-weight: 600; color: var(--ac); white-space: nowrap; } .ac-act { font-size: 11px; color: #94a3b8; margin-top: 1px; }
+tr.ac-bad td { background: #fef2f2; } tr.ac-health td:first-child, tr.ac-portlog td:first-child, tr.ac-ot td:first-child, tr.ac-scan td:first-child { box-shadow: inset 3px 0 0 #cbd5e1; }
