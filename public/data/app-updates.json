@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-11-22",
+    "title": "Phone: the side menu scrolls",
+    "items": [
+      "On a phone the ☰ menu now scrolls by itself, so the last items (Needs Attention, Recycle Bin, Users & Audit) can be reached; the page behind stays still while the menu is open. Tap outside the menu to close it."
+    ]
+  },
+  {
     "date": "2026-11-21",
     "title": "Server Inventory: devices grouped by cabinet (Kabin)",
     "items": [

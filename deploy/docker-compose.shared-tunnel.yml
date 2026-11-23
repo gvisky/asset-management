@@ -1,0 +1,15 @@
+# Option B: let the ETL stack's existing cloudflared reach this app.
+# Joins the app to that stack's Docker network, so in the Cloudflare dashboard the
+# public hostname asset.hayat.io.vn can point to  http://asset-management:3000
+#
+# In .env:  COMPOSE_FILE=docker-compose.yml:docker-compose.shared-tunnel.yml
+#           SHARED_TUNNEL_NETWORK=<the ETL network, see `docker network ls`, e.g. smartetl_default>
+#           COMPOSE_PROFILES=            (empty — don't start a second cloudflared)
+services:
+  app:
+    networks: [default, shared]
+
+networks:
+  shared:
+    external: true
+    name: ${SHARED_TUNNEL_NETWORK:?set SHARED_TUNNEL_NETWORK in .env}

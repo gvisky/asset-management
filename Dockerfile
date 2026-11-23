@@ -11,6 +11,9 @@ RUN npm install --omit=dev
 COPY . .
 
 ENV NODE_ENV=production
+# Which build is running (shown at /api/version) — set by deploy/update.sh
+ARG APP_COMMIT=local
+ENV APP_COMMIT=${APP_COMMIT}
 ENV PORT=3000
 # Persist the database on a mounted volume (see render.yaml / your host's disk config)
 ENV DB_PATH=/data/assets.db

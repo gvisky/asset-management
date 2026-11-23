@@ -1,0 +1,52 @@
+# Hayat Communication Tools (asset-management) on the Ubuntu server — Docker Compose.
+# Runs next to the other stacks (ETL, …) without touching them: own project name,
+# own network, data in its own folder (deploy/data), no public ports. People reach it through a Cloudflare Tunnel.
+#
+#   cd deploy && cp .env.example .env && nano .env      # fill in (see DEPLOY-UBUNTU.md)
+#   ./update.sh                                         # build + start (and later: update)
+name: asset-management
+
+services:
+  app:
+    build:
+      context: ..
+      args:
+        APP_COMMIT: ${APP_COMMIT:-local}
+    image: asset-management:latest
+    container_name: asset-management
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+      DB_PATH: /data/assets.db          # used only when TURSO_* is empty (local database)
+    volumes:
+      - ${DATA_DIR:-./data}:/data       # local database file (step 6) — a folder next to this file, on the same drive
+      - ./backups:/app/backups          # nightly snapshots (backup.sh)
+    ports:
+      # Only on the server itself (for testing with curl / an SSH tunnel). Nothing is opened to the network.
+      - "127.0.0.1:${LOCAL_PORT:-3010}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/login.html"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  # Option A — its own Cloudflare Tunnel (COMPOSE_PROFILES=tunnel in .env).
+  # Option B — reuse the ETL stack's tunnel: see docker-compose.shared-tunnel.yml.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: asset-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on: [app]
+    profiles: ["tunnel"]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+

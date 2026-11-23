@@ -15,3 +15,8 @@ backups/
 # System Health collector: real settings hold the collector key / SNMP community
 collector/config.json
 collector/*.log
+
+# Server deployment: secrets and backups stay on the server
+deploy/.env
+deploy/backups/
+deploy/data/
