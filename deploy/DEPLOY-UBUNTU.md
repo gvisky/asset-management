@@ -140,7 +140,7 @@ docker compose logs --tail=20 app                             # must say "Using 
 ```
 Do this in a quiet moment (changes made between the copy and the restart would stay in Turso only).
 **Keep the Turso database — do not delete it.** It stays as a backup copy (the snapshot script only reads from it).
-To refresh that copy later, Render can stay connected to Turso, or restore a server backup into Turso with `node db/restore.js` (tables of `db/backup.js`).
+Never run `db/restore.js` with the Turso settings — it overwrites tables. The server's own nightly backups (step 7) are separate files.
 
 ## 7. Nightly backups
 
