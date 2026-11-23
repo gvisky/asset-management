@@ -242,7 +242,7 @@ function applyAssetGating() {
     // …and the OT devices of the Server Inventory (read-only).
     document.querySelectorAll('.sidebar nav a').forEach(a => { if (!['nav-netmap', 'nav-servers', 'nav-otna', 'nav-otrep', 'nav-otact'].includes(a.id)) a.style.display = 'none'; });
     document.querySelectorAll('.sidebar .nav-section-label').forEach((l, i) => { if (i > 0) l.style.display = 'none'; });
-    if (!['/network-map.html', '/server-inventory.html', '/ot-attention.html', '/ot-reports.html'].concat(u.ot_admin ? ['/ot-activity.html'] : []).includes(window.location.pathname)) window.location.href = '/network-map.html';
+    if (!['/home.html', '/network-map.html', '/server-inventory.html', '/ot-attention.html', '/ot-reports.html'].concat(u.ot_admin ? ['/ot-activity.html'] : []).includes(window.location.pathname)) window.location.href = '/home.html';
     return;
   }
   // Network team: the network devices of IT and OT (Server Inventory), the full Network map and OT Reports.
@@ -250,7 +250,7 @@ function applyAssetGating() {
     document.documentElement.classList.add('is-net', u.role === 'editor' ? 'is-net-editor' : 'is-net-viewer');
     document.querySelectorAll('.sidebar nav a').forEach(a => { if (!['nav-netmap', 'nav-servers', 'nav-otrep'].includes(a.id)) a.style.display = 'none'; });
     document.querySelectorAll('.sidebar .nav-section-label').forEach((l, i) => { if (i > 0) l.style.display = 'none'; });
-    if (!['/network-map.html', '/server-inventory.html', '/ot-reports.html'].includes(window.location.pathname)) window.location.href = '/network-map.html';
+    if (!['/home.html', '/network-map.html', '/server-inventory.html', '/ot-reports.html'].includes(window.location.pathname)) window.location.href = '/home.html';
     return;
   }
   if (!u || u.asset_access !== 0) return;
@@ -264,7 +264,7 @@ function applyAssetGating() {
     '/server-inventory.html', '/devices.html', '/maintenance.html', '/licenses.html', '/reports.html',
     '/stocktake.html', '/scan.html', '/labels.html', '/kpi.html', '/network-map.html'];
   if (assetPages.includes(window.location.pathname)) {
-    window.location.href = '/user-inventory.html';
+    window.location.href = '/home.html';   // their own Overview (phase 5)
   }
 }
 
