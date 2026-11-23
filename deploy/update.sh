@@ -8,9 +8,10 @@ cd "$(dirname "$0")"
 if [ "${1:-}" != "--no-pull" ]; then git -C .. pull --ff-only; fi
 export APP_COMMIT="$(git -C .. rev-parse --short HEAD)"
 echo "▶ Building asset-management ${APP_COMMIT} …"
+mkdir -p backups data
 docker compose build app
 docker compose up -d --remove-orphans
-mkdir -p backups
+mkdir -p backups data
 
 echo "▶ Waiting for the app to answer …"
 PORT="$(grep -E '^LOCAL_PORT=' .env | cut -d= -f2)"; PORT="${PORT:-3010}"

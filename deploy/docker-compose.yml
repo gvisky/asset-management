@@ -1,6 +1,6 @@
 # Hayat Communication Tools (asset-management) on the Ubuntu server — Docker Compose.
 # Runs next to the other stacks (ETL, …) without touching them: own project name,
-# own network, own volume, no public ports. People reach it through a Cloudflare Tunnel.
+# own network, data in its own folder (deploy/data), no public ports. People reach it through a Cloudflare Tunnel.
 #
 #   cd deploy && cp .env.example .env && nano .env      # fill in (see DEPLOY-UBUNTU.md)
 #   ./update.sh                                         # build + start (and later: update)
@@ -20,7 +20,7 @@ services:
       PORT: "3000"
       DB_PATH: /data/assets.db          # used only when TURSO_* is empty (local database)
     volumes:
-      - asset-data:/data                # local database file (step 6 of the guide)
+      - ${DATA_DIR:-./data}:/data       # local database file (step 6) — a folder next to this file, on the same drive
       - ./backups:/app/backups          # nightly snapshots (backup.sh)
     ports:
       # Only on the server itself (for testing with curl / an SSH tunnel). Nothing is opened to the network.
@@ -50,5 +50,3 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
-volumes:
-  asset-data:

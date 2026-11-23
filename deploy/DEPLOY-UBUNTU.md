@@ -14,7 +14,9 @@ It is done in safe steps — the website keeps working the whole time:
 | 7 | Nightly backups | — |
 
 > Nothing here touches the ETL stack or the other project: this app has its own Docker project
-> (`asset-management`), its own network and volume, and only listens on `127.0.0.1:3010`.
+> (`asset-management`) and network, and only listens on `127.0.0.1:3010`.
+> Everything lives under **/DATA/asset-management** (data drive): code, `deploy/data` (database
+> file, step 6) and `deploy/backups`. Only the Docker image itself sits in Docker's folder.
 
 ---
 
@@ -24,7 +26,7 @@ It is done in safe steps — the website keeps working the whole time:
 docker --version && docker compose version     # Docker + Compose plugin already there (ETL uses them)
 docker ps --format 'table {{.Names}}\t{{.Ports}}'   # see what runs now (ETL, …)
 ss -ltnp | grep -E ':3010\b' || echo "port 3010 is free"
-df -h /     # needs ~1 GB free (image ~460 MB + data)
+df -h / /DATA     # / needs ~0.5 GB for the image; /DATA holds code, data and backups
 ```
 If 3010 is taken, pick another port for `LOCAL_PORT` in step 3.
 
@@ -46,9 +48,8 @@ Host github-asset
   User git
   IdentityFile ~/.ssh/asset_deploy
 EOF
-sudo mkdir -p /opt/asset-management && sudo chown "$USER" /opt/asset-management
-git clone github-asset:gvisky/asset-management.git /opt/asset-management
-cd /opt/asset-management/deploy
+git clone github-asset:gvisky/asset-management.git /DATA/asset-management
+cd /DATA/asset-management/deploy
 ```
 
 ## 3. Settings (5 min)
@@ -130,7 +131,7 @@ After a week without problems, suspend the Render service.
 Faster pages (no round trip to Turso) and no dependency on Turso. Do it after step 5 is stable.
 
 ```bash
-cd /opt/asset-management/deploy
+cd /DATA/asset-management/deploy
 ./backup.sh                                                   # safety copy first (from Turso)
 docker compose exec -T app node scripts/db-snapshot.js /data/assets.db --force   # copy every table
 nano .env        # empty TURSO_DATABASE_URL and TURSO_AUTH_TOKEN
@@ -145,7 +146,7 @@ Keep Turso for a few weeks as an extra copy, then delete it.
 ```bash
 crontab -e
 # add:
-15 2 * * * /opt/asset-management/deploy/backup.sh >> /opt/asset-management/deploy/backups/backup.log 2>&1
+15 2 * * * /DATA/asset-management/deploy/backup.sh >> /DATA/asset-management/deploy/backups/backup.log 2>&1
 ```
 Each night: a full copy of every table → `deploy/backups/assets-DATE.db.gz` (kept 30 days,
 `BACKUP_KEEP_DAYS`). For an off-site copy install `rclone`, configure a remote (B2, OneDrive,
@@ -162,7 +163,7 @@ docker run --rm -v "$PWD/backups:/b" -e DB_PATH=/b/assets-<date>.db asset-manage
 
 Every time new changes are merged on GitHub:
 ```bash
-cd /opt/asset-management/deploy && ./update.sh
+cd /DATA/asset-management/deploy && ./update.sh
 ```
 (pull → rebuild → restart, a few seconds; `/api/version` shows the new commit). Render's
 auto-deploy keeps working too until you suspend it.

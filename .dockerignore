@@ -8,4 +8,5 @@ db/assets.db-wal
 *.md
 deploy/.env
 deploy/backups
+deploy/data
 backups
