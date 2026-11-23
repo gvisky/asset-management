@@ -1,6 +1,18 @@
 [
   {
     "date": "2026-11-23",
+    "title": "New layout: grouped menu, Inbox, side panels and a phone bar",
+    "items": [
+      "Menu in groups (Home, End-user IT, People, Infrastructure, Finance, Insights, Admin); each team sees only its own pages.",
+      "One country switch in the top bar for every page; your account menu (avatar) holds two-step login, password, What's new and sign out.",
+      "Inbox: one list of everything to fix (assets, servers & network, OT, leavers, monitoring) with a count in the menu.",
+      "Lists: View / Edit open as a side panel next to the list, filters in one row (more under ⚙ Filters), ★ Views to save filters, and bulk changes on Assets and Servers & network.",
+      "Related pages are tabs: Users | Leavers, Reports | KPIs, Stocktake | QR labels, OT reports | needs attention | activity. Settings collects the app settings.",
+      "Overview per team (IT, HR, OT, Network). On the phone: a bottom bar with Scan, Search, Inbox, Map and More, and full-screen record panels."
+    ]
+  },
+  {
+    "date": "2026-11-23",
     "title": "Two-step login is now required for everyone",
     "items": [
       "Anyone who has not set up two-step login is taken to a setup page right after sign-in (or at the next page if already signed in): install Google / Microsoft Authenticator, scan the QR, type the code, save the 10 recovery codes. Nothing else opens until it is done.",

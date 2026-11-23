@@ -221,6 +221,66 @@
     }
   }
 
+  // ── Phone bottom bar (phase 6): the field-work shortcuts, by team. "More" opens the side menu. ─────────────
+  const B = {
+    home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+    scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    more: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
+  };
+  function buildBottomBar(u) {
+    if (document.getElementById('bb')) return;
+    const f = flags(u);
+    let list;
+    if (f.ot) list = [['/home.html', 'Home', B.home], ['/ot-attention.html', 'Inbox', I.inbox], ['/network-map.html', 'Map', I.net], ['/server-inventory.html', 'Devices', I.server]];
+    else if (f.net) list = [['/home.html', 'Home', B.home], ['/server-inventory.html', 'Devices', I.server], ['/network-map.html', 'Map', I.net]];
+    else if (!f.asset) list = [['/home.html', 'Home', B.home], ['#search', 'Search', B.search]].concat(!f.viewer ? [['/inbox.html', 'Inbox', I.inbox]] : []).concat([['/user-inventory.html', 'Users', I.users]]);
+    else list = [['#scan', 'Scan', B.scan], ['#search', 'Search', B.search]].concat(!f.viewer ? [['/inbox.html', 'Inbox', I.inbox]] : [['/', 'Home', B.home]]).concat([['/network-map.html', 'Map', I.net]]);
+    list.push(['#more', 'More', B.more]);
+    const path = location.pathname;
+    const bar = document.createElement('nav');
+    bar.id = 'bb'; bar.className = 'bb'; bar.setAttribute('aria-label', 'Shortcuts');
+    bar.innerHTML = list.map(([h, l, icon]) => `<a href="${h.startsWith('#') ? '#' : h}" data-k="${h}"${h === path ? ' class="on" aria-current="page"' : ''}>${ico(icon).replace('width="16" height="16"', 'width="22" height="22"')}<span>${l}</span>${l === 'Inbox' ? '<i class="bb-n" hidden></i>' : ''}</a>`).join('');
+    bar.addEventListener('click', (e) => {
+      const a = e.target.closest('a[data-k]'); if (!a || !a.dataset.k.startsWith('#')) return;
+      e.preventDefault();
+      if (a.dataset.k === '#more') { const t = document.querySelector('.menu-toggle'); if (t) t.click(); }
+      if (a.dataset.k === '#search') { if (window.GlobalSearch) GlobalSearch.open(); }
+      if (a.dataset.k === '#scan') openScanner();
+    });
+    document.body.appendChild(bar);
+    document.documentElement.classList.add('has-bb');
+  }
+  // Full-screen camera scanner: an asset QR label (/scan.html?a=<id>) opens that asset; anything else
+  // (serial, asset code, other text) goes to the global search.
+  let scanStop = null;
+  async function openScanner() {
+    let ov = document.getElementById('scan-ov');
+    if (!ov) {
+      ov = document.createElement('div'); ov.id = 'scan-ov'; ov.className = 'scan-ov';
+      ov.innerHTML = `<video playsinline muted></video><div class="scan-frame"></div>
+        <div class="scan-top"><b>Scan a QR label</b><button type="button" aria-label="Close">✕</button></div>
+        <div class="scan-msg">Point the camera at an asset's QR label, a serial or asset-code barcode.</div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('.scan-top button').onclick = closeScanner;
+    }
+    ov.classList.add('open');
+    const msg = ov.querySelector('.scan-msg');
+    try {
+      if (!window.startQrScanner) await new Promise((ok, fail) => { const s = document.createElement('script'); s.src = '/js/qr-scan.js?v=20261124b'; s.onload = ok; s.onerror = fail; document.head.appendChild(s); });
+      scanStop = await startQrScanner(ov.querySelector('video'), (code) => {
+        const m = String(code).match(/\/scan\.html\?a=(\d+)/);
+        closeScanner();
+        if (m) { location.href = '/scan.html?a=' + m[1]; return; }
+        if (window.GlobalSearch) GlobalSearch.open(String(code).trim().slice(0, 80));
+      });
+    } catch (err) { msg.textContent = (err && err.message) || 'The camera could not start.'; }
+  }
+  function closeScanner() {
+    const ov = document.getElementById('scan-ov'); if (ov) ov.classList.remove('open');
+    if (scanStop) { try { scanStop(); } catch { /* ignore */ } scanStop = null; }
+  }
+
   function buildTopbar(u) {
     const bar = document.querySelector('.topbar');
     if (!bar || document.getElementById('tb-bell')) return;
@@ -239,11 +299,12 @@
     if (!n) { if (b) b.remove(); return; }
     if (!b) { b = document.createElement('span'); b.className = 'nav-cnt'; l.appendChild(b); }
     b.textContent = n > 999 ? '999+' : String(n);
+    const bn = document.querySelector('#bb .bb-n'); if (bn) { bn.textContent = n > 99 ? '99+' : String(n); bn.hidden = false; }
   }
 
   window.Shell = {
     setInboxCount, openNews,
-    build(u) { try { buildNav(u); buildTabs(); buildTopbar(u); buildNews(); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
+    build(u) { try { buildNav(u); buildTabs(); buildTopbar(u); buildNews(); buildBottomBar(u); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
     getScope, setScope, current: () => current,
   };
   // Safety: never leave the menu hidden.
