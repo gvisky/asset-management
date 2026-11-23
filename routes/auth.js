@@ -104,15 +104,22 @@ router.post('/login/mfa', wrap(async (req, res) => {
 
 // ── Two-step login settings (each user, for their own account) ─────────────────
 // GET  /api/auth/mfa            status
-// POST /api/auth/mfa/setup      new secret + QR (not active until confirmed)
+// POST /api/auth/mfa/setup      new secret + QR (not active until confirmed); already on → { password, code } (new phone)
 // POST /api/auth/mfa/enable     { code } confirm the app works → on + 10 recovery codes (shown once)
 // POST /api/auth/mfa/recovery   { password } new set of recovery codes
-// POST /api/auth/mfa/disable    { password, code } turn off
+// POST /api/auth/mfa/disable    always refused — two-step login cannot be turned off by the user (admin: Reset 2-step)
 router.get('/mfa', requireAuth, wrap(async (req, res) => {
   const u = await get('SELECT mfa_enabled, mfa_recovery FROM users WHERE id = ?', [req.user.id]);
   res.json({ enabled: !!(u && u.mfa_enabled), recovery_left: u ? recoveryList(u).length : 0 });
 }));
 router.post('/mfa/setup', requireAuth, wrap(async (req, res) => {
+  // Already on → moving to a new phone: prove it is you (password + a current code or a recovery code) first.
+  const cur = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
+  if (cur && cur.mfa_enabled) {
+    const { password, code } = req.body || {};
+    if (!verifyPassword(String(password || ''), cur.password_hash)) return res.status(401).json({ error: 'Password is incorrect' });
+    if (totp.verify(cur.mfa_secret, code) == null && !recoveryList(cur).includes(totp.hashRecovery(code))) return res.status(401).json({ error: 'Enter a current 6-digit code from your old phone (or a recovery code)' });
+  }
   const secret = totp.newSecret();
   await run('UPDATE users SET mfa_pending = ? WHERE id = ?', [secret, req.user.id]);
   const url = totp.otpauthUrl(secret, req.user.username, ISSUER);
@@ -139,16 +146,10 @@ router.post('/mfa/recovery', requireAuth, wrap(async (req, res) => {
   await audit(req.user, 'MFA', null, 'Made new recovery codes (old ones no longer work)');
   res.json({ recovery_codes: codes });
 }));
+// Two-step login is required for every login: nobody turns it off for themselves. A lost phone (and no recovery code)
+// → a global admin uses "Reset 2-step" on Users & Audit, and the user sets it up again at the next sign-in.
 router.post('/mfa/disable', requireAuth, wrap(async (req, res) => {
-  const u = await get('SELECT * FROM users WHERE id = ?', [req.user.id]);
-  const { password, code } = req.body || {};
-  if (!verifyPassword(String(password || ''), u.password_hash)) return res.status(401).json({ error: 'Password is incorrect' });
-  if (u.mfa_enabled && totp.verify(u.mfa_secret, code) == null && !recoveryList(u).includes(totp.hashRecovery(code))) {
-    return res.status(401).json({ error: 'Enter a current 6-digit code (or a recovery code)' });
-  }
-  await run("UPDATE users SET mfa_enabled = 0, mfa_secret = '', mfa_pending = '', mfa_recovery = '[]', mfa_last_step = 0 WHERE id = ?", [u.id]);
-  await audit(req.user, 'MFA', null, 'Turned off two-step login');
-  res.json({ enabled: false });
+  return res.status(403).json({ error: 'Two-step login is required and cannot be turned off. To change phone use "Move to a new phone"; if the phone is lost, ask an IT admin to reset it.' });
 }));
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────
