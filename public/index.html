@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Overview — Hayat IT</title>
-  <link rel="stylesheet" href="/css/style.css?v=20261124i">
+  <link rel="stylesheet" href="/css/style.css?v=20261124k">
 </head>
 <body>
 
@@ -125,8 +125,9 @@
     <div id="na-root" style="margin-bottom:20px"></div>
     <div id="na-servers-dash" style="margin-bottom:20px"></div>
 
-    <!-- Top Models + Alerts -->
-    <div class="grid-2" style="margin-bottom:20px;align-items:start">
+    <!-- Top Models · Alerts · Recently Added — two columns; Alerts and Recently Added go to the shorter one (balanceGrid) -->
+    <div class="grid-2" style="margin-bottom:20px" id="ov-grid2">
+      <div class="dash-col" id="ov2-colL">
       <!-- Top Models by Asset Type -->
       <div class="card">
         <div class="card-header" style="flex-wrap:wrap;gap:8px">
@@ -138,12 +139,12 @@
         </div>
       </div>
 
+      </div>
+      <div class="dash-col" id="ov2-colR">
       <!-- Consolidated alerts -->
       <div id="alert-box"></div>
-    </div>
-
-    <!-- Recent additions -->
-    <div class="card">
+      <!-- Recent additions -->
+      <div class="card" id="ov-recent-card">
       <div class="card-header">
         <span class="card-title">Recently Added</span>
         <a href="/inventory.html" class="btn btn-ghost btn-sm">View all →</a>
@@ -166,7 +167,8 @@
         </table>
       </div>
     </div>
-
+      </div>
+    </div>
   </main>
 </div>
 
@@ -291,6 +293,6 @@
 <script src="/js/needs-attention.js?v=20261117a"></script>
 <script src="/js/parts-check.js?v=20261113a"></script>
 <script src="/js/server-attention.js?v=20261123u"></script>
-<script src="/js/dashboard.js?v=20261124j"></script>
+<script src="/js/dashboard.js?v=20261124k"></script>
 </body>
 </html>
