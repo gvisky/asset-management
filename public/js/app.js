@@ -396,8 +396,8 @@ function initTopbarOverflow() {
   wrap.className = 'tb-more'; wrap.id = 'tb-more';
   wrap.innerHTML = '<button type="button" class="tb-more-b" aria-label="More actions" title="More actions">⋯<span class="tb-more-dot" hidden></span></button><div class="tb-more-m"></div>';
   const menu = wrap.querySelector('.tb-more-m');
-  const KEEP = (el) => el === wrap || el.classList.contains('menu-toggle') || el.classList.contains('topbar-title')
-    || el.id === 'user-chrome' || el.id === 'gs-btn' || el.tagName === 'SCRIPT';
+  const KEEP = (el) => el === wrap || el.classList.contains('menu-toggle') || el.classList.contains('topbar-title') || el.classList.contains('tb-crumb')
+    || el.id === 'user-chrome' || el.id === 'gs-btn' || el.id === 'tb-bell' || el.id === 'tb-country' || el.classList.contains('tb-keep') || el.tagName === 'SCRIPT';
   const isAction = (el) => !KEEP(el) && (el.matches('button, a.btn, .tb-dd, .btn, select, label, .tb-act') || el.querySelector('button, .btn'));
   let moving = false;
   const visible = (el) => getComputedStyle(el).display !== 'none' && el.style.display !== 'none';
@@ -408,11 +408,17 @@ function initTopbarOverflow() {
     const n = items.reduce((t, el) => t + [...el.querySelectorAll('.na-cnt, .badge-count')].reduce((x, c) => x + (parseInt(c.textContent, 10) || 0), 0), 0);
     const dot = wrap.querySelector('.tb-more-dot'); dot.hidden = !n; dot.textContent = n > 99 ? '99+' : (n || '');
   };
+  // Desktop: the main button (.btn-primary) stays; 3 or more other actions go into one "More" menu.
+  const primary = (el) => el.matches('.btn-primary') && !el.querySelector('.tb-dd');
   const apply = () => {
     moving = true;
-    if (mq.matches) {
-      if (!wrap.parentNode) { const uc = document.getElementById('user-chrome'); const gs = document.getElementById('gs-btn'); bar.insertBefore(wrap, gs || uc || null); }
-      [...bar.children].filter(isAction).forEach(el => { el.dataset.tbHome = '1'; menu.appendChild(el); });
+    const desk = !mq.matches && [...bar.children].filter(el => isAction(el) && !primary(el) && visible(el)).length + menu.children.length >= 3;
+    wrap.classList.toggle('desk', desk);
+    if (mq.matches || desk) {
+      if (!wrap.parentNode) { const uc = document.getElementById('user-chrome'); const gs = document.getElementById('gs-btn'); bar.insertBefore(wrap, gs || document.getElementById('tb-country') || uc || null); }
+      [...bar.children].filter(el => isAction(el) && !(desk && primary(el))).forEach(el => { el.dataset.tbHome = '1'; menu.appendChild(el); });
+      if (desk) { [...menu.children].filter(primary).forEach(el => bar.insertBefore(el, wrap)); const p1 = [...bar.children].find(el => el !== wrap && primary(el)); if (p1 && wrap.nextElementSibling !== p1) bar.insertBefore(wrap, p1); }   // [More ▾] [+ Add …]
+      wrap.querySelector('.tb-more-b').firstChild.textContent = desk ? 'More ' : '⋯';
     } else if (wrap.parentNode) {
       [...menu.children].forEach(el => bar.insertBefore(el, wrap));
       wrap.remove();
@@ -428,6 +434,11 @@ function initTopbarOverflow() {
   });
   document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) wrap.classList.remove('open'); });
   new MutationObserver(() => { if (!moving) apply(); }).observe(bar, { childList: true });
+  // Buttons shown later (after the page knows the account's role) count too.
+  let raf = 0;
+  new MutationObserver(() => { if (moving || raf) return; raf = requestAnimationFrame(() => { raf = 0; if (!mq.matches) apply(); }); })
+    .observe(bar, { subtree: false, childList: false, attributes: true, attributeFilter: ['style', 'hidden', 'class'] });
+  [...bar.children].forEach(el => new MutationObserver(() => { if (moving || raf) return; raf = requestAnimationFrame(() => { raf = 0; if (!mq.matches) apply(); }); }).observe(el, { attributes: true, attributeFilter: ['style', 'hidden'] }));
   new MutationObserver(() => { if (!moving) refresh(); }).observe(menu, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['style', 'hidden', 'class'] });
   (mq.addEventListener ? mq.addEventListener('change', apply) : mq.addListener(apply));
   apply();

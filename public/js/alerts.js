@@ -52,8 +52,8 @@ async function loadAlertButton(slotId, scope) {
 
   slot.innerHTML = `
     <div class="alert-pop-wrap">
-      <button type="button" class="btn btn-ghost btn-sm alert-btn" aria-haspopup="dialog" aria-expanded="false">
-        🔔 Alerts${unread ? ` <span class="badge badge-broken">${unread}</span>` : ''}
+      <button type="button" class="btn btn-ghost btn-sm alert-btn" title="Alerts" aria-label="Alerts" aria-haspopup="dialog" aria-expanded="false">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span class="alert-lbl">Alerts</span>${unread ? ` <span class="badge badge-broken">${unread}</span>` : ''}
       </button>
       <div class="alert-pop" role="dialog" aria-label="Alerts" hidden>
         <div class="alert-pop-head">

@@ -49,7 +49,7 @@
     b.id = 'gs-btn'; b.type = 'button'; b.className = 'gs-btn'; b.title = 'Search everything (Ctrl+K)';
     b.innerHTML = '🔍 <span>Search…</span> <kbd>Ctrl K</kbd>';
     b.onclick = () => open();
-    const uc = $('user-chrome'); if (uc) bar.insertBefore(b, uc); else bar.appendChild(b);
+    const at = $('tb-country') || $('tb-bell') || $('user-chrome'); if (at) bar.insertBefore(b, at); else bar.appendChild(b);
   }
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); open(); }
