@@ -479,9 +479,13 @@ async function loadOverviewCards() {
 // Fill both columns evenly: the first card of each column stays (Assets by Country / by Type); Inbox, Health now and
 // What's new each go to whichever column is shorter at that moment. Runs again when their content or the window changes.
 function balanceOverview() {
-  const L = document.getElementById('ov-colL'), R = document.getElementById('ov-colR');
-  if (!L || !R || getComputedStyle(document.getElementById('ov-grid')).gridTemplateColumns.split(' ').length < 2) return;   // one column (phone)
-  const flow = ['ov-inbox-card', 'ov-health-card', 'ov-news-card'].map(id => document.getElementById(id)).filter(c => c && !c.hidden);
+  balanceGrid('ov-grid', 'ov-colL', 'ov-colR', ['ov-inbox-card', 'ov-health-card', 'ov-news-card']);
+  balanceGrid('ov-grid2', 'ov2-colL', 'ov2-colR', ['alert-box', 'ov-recent-card']);
+}
+function balanceGrid(gridId, lId, rId, ids) {
+  const L = document.getElementById(lId), R = document.getElementById(rId), G = document.getElementById(gridId);
+  if (!L || !R || !G || getComputedStyle(G).gridTemplateColumns.split(' ').length < 2) return;   // one column (phone)
+  const flow = ids.map(id => document.getElementById(id)).filter(c => c && !c.hidden);
   const gap = parseFloat(getComputedStyle(L).rowGap) || 18;
   const ch = flow.map(c => c.getBoundingClientRect().height + gap);   // both columns have the same width → same card heights
   flow.forEach(c => c.remove());
@@ -498,7 +502,7 @@ let _balT = 0;
 const balanceSoon = () => { clearTimeout(_balT); _balT = setTimeout(balanceOverview, 120); };
 
 document.addEventListener('DOMContentLoaded', () => {
-  ['bd-country', 'bd-type', 'ov-inbox', 'ov-health', 'ov-news'].forEach(id => { const el = document.getElementById(id); if (el) new MutationObserver(balanceSoon).observe(el, { childList: true, subtree: true }); });
+  ['bd-country', 'bd-type', 'ov-inbox', 'ov-health', 'ov-news', 'tm-body', 'alert-box', 'recent-tbody'].forEach(id => { const el = document.getElementById(id); if (el) new MutationObserver(balanceSoon).observe(el, { childList: true, subtree: true }); });
   const hc = document.getElementById('ov-health-card'); if (hc) new MutationObserver(balanceSoon).observe(hc, { attributes: true, attributeFilter: ['hidden'] });
   window.addEventListener('resize', balanceSoon);
   loadStats();
