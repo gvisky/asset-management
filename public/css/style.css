@@ -1938,3 +1938,9 @@ tr.lk-on > td { background: #eff6ff !important; }
   .lk-tools .btn { white-space: nowrap; }
   .lk-bulk { left: 12px; right: 12px; transform: none; }
 }
+
+/* ── Phase 4: page families as tabs (js/shell.js buildTabs) ─────────────────────────────────────────────── */
+.pg-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--border); margin: -6px 0 18px; overflow-x: auto; scrollbar-width: none; }
+.pg-tabs a { padding: 8px 0 10px; font-size: 14px; font-weight: 500; color: #64748b; white-space: nowrap; box-shadow: inset 0 -2px 0 transparent; }
+.pg-tabs a:hover { color: #0f172a; }
+.pg-tabs a.on { color: #1d4ed8; font-weight: 600; box-shadow: inset 0 -2px 0 #2563eb; }

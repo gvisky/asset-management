@@ -41,17 +41,19 @@
       ['End-user IT', 'nav-licenses', '/licenses.html', 'Licenses', 'badge', f.asset],
       ['End-user IT', 'nav-maintenance', '/maintenance.html', 'Maintenance', 'wrench', f.asset],
       ['End-user IT', 'nav-stocktake', '/stocktake.html', 'Stocktake', 'qr', f.asset, ['/labels.html']],
-      ['People', 'nav-userinv', '/user-inventory.html', 'Users', 'users', f.it || f.hr],
-      ['People', 'nav-leavers', '/leavers.html', 'Leavers', 'leave', f.it || f.hr],
+      ['End-user IT', 'nav-labels', '/labels.html', 'QR labels', 'qr', f.asset, [], 'tab'],
+      ['People', 'nav-userinv', '/user-inventory.html', 'Users', 'users', f.it || f.hr, ['/leavers.html']],
+      ['People', 'nav-leavers', '/leavers.html', 'Leavers', 'leave', f.it || f.hr, [], 'tab'],
       ['Infrastructure', 'nav-servers', '/server-inventory.html', f.ot ? 'OT devices' : f.net ? 'Network devices' : 'Servers & network', 'server', f.asset || f.ot || f.net],
       ['Infrastructure', 'nav-netmap', '/network-map.html', 'Network map', 'net', f.asset || f.ot || f.net],
-      ['Infrastructure', 'nav-otrep', '/ot-reports.html', 'OT reports', 'factory', f.ot || f.net || f.it, f.ot ? [] : ['/ot-attention.html']],
-      ['Infrastructure', 'nav-otact', '/ot-activity.html', 'OT activity', 'clock', f.otAdmin],
+      ['Infrastructure', 'nav-otrep', '/ot-reports.html', f.ot ? 'OT reports' : 'OT', 'factory', f.ot || f.net || f.it, f.ot ? ['/ot-activity.html'] : ['/ot-attention.html', '/ot-activity.html']],
+      ['Infrastructure', 'nav-otna-it', '/ot-attention.html', 'OT needs attention', 'inbox', f.it, [], 'tab'],
+      ['Infrastructure', 'nav-otact', '/ot-activity.html', 'OT activity', 'clock', f.otAdmin || (f.it && (f.admin || f.editor)), [], 'tab'],
       ['Infrastructure', 'nav-health', '/system-health.html', 'Monitoring', 'pulse', f.it],
       ['Finance', 'nav-budget', '/budget.html', 'Budget', 'money', f.itAdmin],
-      ['Insights', 'nav-reports', '/reports.html', 'Reports', 'report', f.asset],
-      ['Insights', 'nav-kpi', '/kpi.html', 'KPIs', 'kpi', f.asset],
-      ['Admin', 'nav-users', '/users.html', 'Users & access', 'lock', f.globalAdmin, ['/ot-activity.html'].filter(() => !f.otAdmin)],
+      ['Insights', 'nav-reports', '/reports.html', 'Reports', 'report', f.asset, ['/kpi.html']],
+      ['Insights', 'nav-kpi', '/kpi.html', 'KPIs', 'kpi', f.asset, [], 'tab'],
+      ['Admin', 'nav-users', '/users.html', 'Users & access', 'lock', f.globalAdmin],
       ['Admin', 'nav-bin', '/deleted.html', 'Recycle bin', 'bin', f.admin],
       ['Admin', 'nav-settings', '/settings.html', 'Settings', 'gear', f.admin && !f.ot && !f.net],
     ];
@@ -61,20 +63,43 @@
     const admin = u.role === 'admin';
     return {
       asset: Number(u.asset_access) !== 0, viewer: u.role === 'viewer', it: team === 'IT', hr: team === 'HR', ot: team === 'OT', net: team === 'NET',
-      otAdmin: !!u.ot_admin, admin, itAdmin: team === 'IT' && admin, globalAdmin: admin && !String(u.country || '').trim(),
+      otAdmin: !!u.ot_admin, admin, editor: u.role === 'editor', itAdmin: team === 'IT' && admin, globalAdmin: admin && !String(u.country || '').trim(),
     };
   }
 
   let current = null;   // { group, label }
+  let allowed = new Set();   // pages this account may open (menu + tab-only)
+  // Families of pages shown as one set of tabs (docs/UX-REDESIGN.md, phase 4). Each page keeps its address.
+  const FAMILIES = [
+    [['/user-inventory.html', 'Users'], ['/leavers.html', 'Leavers']],
+    [['/reports.html', 'Reports'], ['/kpi.html', 'KPIs']],
+    [['/stocktake.html', 'Stocktake'], ['/labels.html', 'QR labels']],
+    [['/ot-reports.html', 'OT reports'], ['/ot-attention.html', 'OT needs attention'], ['/ot-activity.html', 'OT activity']],
+  ];
+  function buildTabs() {
+    const main = document.querySelector('main.content');
+    if (!main || main.querySelector('.pg-tabs')) return;
+    const path = location.pathname;
+    const fam = FAMILIES.find(f => f.some(([h]) => h === path));
+    if (!fam) return;
+    const vis = fam.filter(([h]) => allowed.has(h));
+    if (vis.length < 2) return;
+    const nav = document.createElement('nav');
+    nav.className = 'pg-tabs'; nav.setAttribute('aria-label', 'Pages');
+    nav.innerHTML = vis.map(([h, l]) => `<a href="${h}"${h === path ? ' class="on" aria-current="page"' : ''}>${l}</a>`).join('');
+    main.insertBefore(nav, main.firstChild);
+  }
   function buildNav(u) {
     const nav = document.querySelector('.sidebar nav');
     if (!nav) return;
     const f = flags(u), path = location.pathname === '/index.html' ? '/' : location.pathname;
     const list = items(f).filter(x => x[5]);
-    const act = list.find(x => x[2] === path) || list.find(x => (x[6] || []).includes(path));
+    const menu = list.filter(x => x[7] !== 'tab');   // tab-only pages are reached from their family's tabs
+    const act = menu.find(x => x[2] === path) || menu.find(x => (x[6] || []).includes(path));
     current = act ? { group: act[0], label: act[3] } : null;
+    allowed = new Set(list.map(x => x[2]));
     let html = '', grp = '';
-    for (const [g, id, href, label, icon] of list) {
+    for (const [g, id, href, label, icon] of menu) {
       if (g !== grp) { html += `<div class="nav-section-label">${g}</div>`; grp = g; }
       html += `<a href="${href}" class="nav-link${act && act[1] === id ? ' active' : ''}" id="${id}">${ico(I[icon])}<span>${label}</span></a>`;
     }
@@ -169,7 +194,7 @@
 
   window.Shell = {
     setInboxCount,
-    build(u) { try { buildNav(u); buildTopbar(u); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
+    build(u) { try { buildNav(u); buildTabs(); buildTopbar(u); } catch (e) { document.documentElement.classList.add('shell-ready'); console.error('shell', e); } },
     getScope, setScope, current: () => current,
   };
   // Safety: never leave the menu hidden.
