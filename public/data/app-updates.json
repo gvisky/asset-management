@@ -1,6 +1,15 @@
 [
   {
     "date": "2026-11-24",
+    "title": "One log, written once",
+    "items": [
+      "Every change is now recorded once: a Network map port change, a server edit or an OT restore is one line in the Audit log (before it was written up to 3 times).",
+      "The Network map port history, OT activity (with restore) and OT Reports read the same log; their past entries were copied over automatically.",
+      "Audit log & activities: 'Old copied logs' shows the copied old entries if you need them."
+    ]
+  },
+  {
+    "date": "2026-11-24",
     "title": "📜 Audit log & activities · What's new back on the Overview · Assets list fits the screen",
     "items": [
       "Admin › Audit log & activities: one timeline of every log (sign-ins, changes, exports, imports, Network map, OT, monitoring, QR scans) grouped by area, with filters and CSV. Duplicate detail logs are hidden unless you tick 'Detail logs'.",

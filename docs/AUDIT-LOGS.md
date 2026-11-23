@@ -28,9 +28,28 @@ So one Network map port change was written **3 times** (audit + port log + OT lo
 - Users & access keeps 🔑 Logins (accounts); its Audit Log card now links to the new page.
 - Nothing is deleted or stops being written: the port history on the map, the OT restore, and each record's history usage keep working.
 
+## Write-once (done)
+
+Every change is now written **once**, as one row of `audit_log` (`lib/changelog.js`):
+
+| Change | Before | Now |
+|---|---|---|
+| A Network map port | audit text + `net_port_log` + `ot_activity` (OT switch) | **1 row**: text, site / device / port, before → after; for OT switches also the rows (JSON) for restore |
+| Port owner (OT / IT) | 3 rows | **1 row** |
+| Move a cable between ports | summary + 1 line per port | **1 line per port changed** |
+| A Server Inventory record (create / edit / delete) | audit + `ot_activity` (OT) | **1 row** with the field changes (and the rows for restore when OT) |
+| OT restore | restore line + audit line | **1 row** (kind *restore*, linked to the change it undid) |
+| Bulk imports (CCTV list, MAC tables, OT list …) | 1 summary + 1 port line + 1 OT line per port | 1 summary + **1 line per port** (the OT restore data is added to that line) |
+
+- Readers now use `audit_log`: Network map port history (`GET /api/netmap/log`), OT activity and its restore, OT Reports
+  (port changes), and the 📜 Audit log & activities page.
+- **Migration (automatic, once, on start)**: the rows of `net_port_log` and `ot_activity` are copied into `audit_log`
+  (`legacy` = `portlog` / `ot`) so the map history and OT restore keep their past. The old tables are **kept as a backup**
+  and are no longer written. On the Audit page the copied rows are hidden unless "Old copied logs" is ticked (they repeat old
+  entries), except the old device-level map lines, which existed only there.
+- Each record's *History usage* field stays — it is the record's own trail.
+
 ## Proposal (next, optional)
 
-1. **Stop writing the duplicates** — write a port change once (audit, with before / after in a structured column) and let the
-   Network map port history and the OT activity page read from it. Saves space and keeps one truth. Needs a small migration.
-2. **Retention**: keep page visits 1 year (already), keep everything else for good; nightly backups hold the history.
-3. **Alerts on the log**: failed sign-ins from a new IP, many deletes in a short time, changes outside working hours → Inbox.
+1. **Retention**: keep page visits 1 year (already), keep everything else for good; nightly backups hold the history.
+2. **Alerts on the log**: failed sign-ins from a new IP, many deletes in a short time, changes outside working hours → Inbox.

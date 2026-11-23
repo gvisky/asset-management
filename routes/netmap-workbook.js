@@ -16,6 +16,7 @@ const { get, all, run, batch, audit } = require('../db/database');
 const { requireAuth } = require('../middleware/auth');
 const { macNorm, str, portSort, desc, FIELDS, normSn, parseLoc, placeDevices, modelCode, CAT } = require('./netmap').util;
 
+const CL = require('../lib/changelog');   // write-once change log (audit_log)
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 router.use(requireAuth);
 router.use((req, res, next) => (req.user && ((req.user.asset_access !== 0 && req.user.role === 'admin') || req.user.net_admin) ? next() : res.status(403).json({ error: 'Admins only' })));
@@ -468,7 +469,7 @@ router.post('/apply', wrap(async (req, res) => {
   }
   counts.vms = vms.length;
 
-  if (logs.length) await batch(logs.slice(0, 5000).map(([d, p, b, a]) => ({ sql: 'INSERT INTO net_port_log (site, device, port, before, after, by_user) VALUES (?, ?, ?, ?, ?, ?)', args: [site, d, p, String(b).slice(0, 300), String(a).slice(0, 300), user] })));
+  if (logs.length) await batch(logs.slice(0, 5000).map(([d, p, b, a]) => ({ sql: CL.PORT_LOG_SQL, args: [site, d, p, String(b).slice(0, 300), String(a).slice(0, 300), user] })));
   await audit(req.user, 'NETMAP', null, `Network map "${site}": Factory Info workbook applied (${ids.size} changes: ${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(', ')})`);
   res.json({ ok: true, counts });
 }));

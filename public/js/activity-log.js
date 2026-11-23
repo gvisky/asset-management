@@ -30,7 +30,7 @@
     tb.innerHTML = d.rows.length ? d.rows.map(r => `<tr class="ac-${esc(r.src)}${r.action === 'LOGIN_FAILED' || r.action === 'REFUSED' ? ' ac-bad' : ''}">
         <td class="text-sm" style="white-space:nowrap">${local(r.at)}</td>
         <td>${r.who === 'system' ? '<span class="text-muted">system</span>' : esc(r.who) || '—'}</td>
-        <td><span class="ac-area" style="--ac:${COLOR[r.area] || '#475569'}">${ICON[r.area] || '•'} ${esc(r.area)}</span><div class="ac-act">${esc(r.action)}${r.src !== 'audit' ? ` · ${esc({ health: 'monitoring', scan: 'QR scan', portlog: 'port log', ot: 'OT log' }[r.src] || r.src)}` : ''}</div></td>
+        <td><span class="ac-area" style="--ac:${COLOR[r.area] || '#475569'}">${ICON[r.area] || '•'} ${esc(r.area)}</span><div class="ac-act">${esc(r.action)}${r.src !== 'audit' ? ` · ${esc({ health: 'monitoring', scan: 'QR scan', portlog: 'old port log (copied)', ot: 'old OT log (copied)' }[r.src] || r.src)}` : ''}</div></td>
         <td class="ac-txt">${esc(r.text)}${r.asset_id ? ` <a class="text-sm" href="/inventory.html?view=${r.asset_id}">#${r.asset_id}</a>` : ''}</td>
         <td class="text-muted text-sm">${esc(r.ip)}</td></tr>`).join('') : '<tr><td colspan="5" class="empty-state">Nothing found.</td></tr>';
     const pages = Math.max(1, Math.ceil(d.total / d.limit));

@@ -1351,6 +1351,36 @@ async function migrate() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT DEFAULT (datetime('now')), by_user TEXT DEFAULT '', by_team TEXT DEFAULT '',
       kind TEXT DEFAULT '', ref_type TEXT DEFAULT '', ref_id INTEGER, label TEXT DEFAULT '', summary TEXT DEFAULT '', site TEXT DEFAULT '',
       before TEXT DEFAULT '', after TEXT DEFAULT '', restored_at TEXT DEFAULT NULL, restored_by TEXT DEFAULT '', restore_of INTEGER DEFAULT NULL)`);
+
+  // Write-once change log (lib/changelog.js): every change is ONE row of audit_log, with the structured parts the
+  // Network map port history and the OT activity page need. net_port_log and ot_activity are no longer written; their
+  // rows are copied once into audit_log (legacy = 'portlog' | 'ot') and the old tables stay as a read-only backup.
+  const alcols = (await backend.all('PRAGMA table_info(audit_log)')).map(c => c.name);
+  for (const [col, type] of [['kind', "TEXT DEFAULT ''"], ['ref_type', "TEXT DEFAULT ''"], ['ref_id', 'INTEGER DEFAULT NULL'], ['label', "TEXT DEFAULT ''"],
+    ['summary', "TEXT DEFAULT ''"], ['site', "TEXT DEFAULT ''"], ['device', "TEXT DEFAULT ''"], ['port', "TEXT DEFAULT ''"], ['before_text', "TEXT DEFAULT ''"],
+    ['after_text', "TEXT DEFAULT ''"], ['before_json', "TEXT DEFAULT ''"], ['after_json', "TEXT DEFAULT ''"], ['ot', 'INTEGER DEFAULT 0'], ['by_team', "TEXT DEFAULT ''"],
+    ['restored_at', 'TEXT DEFAULT NULL'], ['restored_by', "TEXT DEFAULT ''"], ['restore_of', 'INTEGER DEFAULT NULL'], ['legacy', "TEXT DEFAULT ''"], ['legacy_id', 'INTEGER DEFAULT NULL']]) {
+    if (!alcols.includes(col)) await backend.run(`ALTER TABLE audit_log ADD COLUMN ${col} ${type}`);
+  }
+  await backend.script(`CREATE INDEX IF NOT EXISTS idx_audit_site_dev ON audit_log(site, device);
+    CREATE INDEX IF NOT EXISTS idx_audit_ot ON audit_log(ot);`);
+  if (!(await backend.get("SELECT value FROM app_meta WHERE key = 'changelog_migrated'"))) {
+    await backend.run(`INSERT INTO audit_log (username, action, details, created_at, ref_type, site, device, port, before_text, after_text, legacy, legacy_id)
+      SELECT by_user, 'NETMAP', 'Network map "' || COALESCE(site, '') || '": ' || COALESCE(device, '') || CASE WHEN COALESCE(port, '') <> '' THEN ' ' || port ELSE '' END || ': '
+          || CASE WHEN COALESCE(before, '') <> '' THEN before || ' → ' ELSE '' END || COALESCE(after, ''),
+        at, CASE WHEN COALESCE(port, '') = '' THEN 'device' ELSE 'port' END, site, device, COALESCE(port, ''), COALESCE(before, ''), COALESCE(after, ''), 'portlog', id
+      FROM net_port_log ORDER BY id`);
+    await backend.run(`INSERT INTO audit_log (username, by_team, action, details, created_at, kind, ref_type, ref_id, label, summary, site, before_json, after_json, ot,
+        restored_at, restored_by, restore_of, legacy, legacy_id)
+      SELECT by_user, by_team, CASE WHEN ref_type = 'port' THEN 'NETMAP' WHEN kind = 'device_add' THEN 'CREATE' WHEN kind = 'device_delete' THEN 'DELETE' ELSE 'UPDATE' END,
+        'OT ' || CASE WHEN ref_type = 'port' THEN 'port ' ELSE 'device ' END || COALESCE(label, '') || ': ' || COALESCE(summary, ''),
+        at, kind, ref_type, ref_id, label, summary, site, COALESCE(before, ''), COALESCE(after, ''), 1, restored_at, restored_by, restore_of, 'ot', id
+      FROM ot_activity ORDER BY id`);
+    // restore_of pointed at ot_activity ids → point it at the copied rows.
+    await backend.run(`UPDATE audit_log SET restore_of = (SELECT a2.id FROM audit_log a2 WHERE a2.legacy = 'ot' AND a2.legacy_id = audit_log.restore_of)
+      WHERE legacy = 'ot' AND restore_of IS NOT NULL`);
+    await backend.run("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('changelog_migrated', datetime('now'))");
+  }
   // Switch port owner: NULL = automatic (OT device / OT switch → OT, else IT), 1 = OT, 0 = IT (set by the IT team).
   const npcols = (await backend.all('PRAGMA table_info(net_ports)')).map(c => c.name);
   if (!npcols.includes('ot')) await backend.run('ALTER TABLE net_ports ADD COLUMN ot INTEGER DEFAULT NULL');
