@@ -19,6 +19,7 @@ async function ensureAuth() {
     renderUserChrome();
     applyRoleGates();
     applyAssetGating();
+    if (window.Shell) Shell.build(window.CURRENT_USER);   // grouped menu, breadcrumb, country switch, bell (js/shell.js)
     if (!['OT', 'NET'].includes(window.CURRENT_USER.team)) loadGlobalSearch();
     return window.CURRENT_USER;
   } catch {
@@ -32,7 +33,7 @@ function loadGlobalSearch() {
   const ready = () => window.GlobalSearch && GlobalSearch.addButton();
   if (window.GlobalSearch) return ready();
   const s = document.createElement('script');
-  s.src = '/js/global-search.js?v=20261119a'; s.onload = ready;
+  s.src = '/js/global-search.js?v=20261123s'; s.onload = ready;
   document.head.appendChild(s);
 }
 
@@ -92,17 +93,19 @@ function renderUserChrome() {
     wrap.style.cssText = 'display:flex;align-items:center;gap:12px;margin-left:auto';
     const nm = String(u.full_name || u.username || '?');
     const initials = nm.split(/\s+/).filter(Boolean).map(w => w[0]).slice(-2).join('').toUpperCase() || '?';
-    // On phones only the round avatar shows; tapping it opens the name + buttons (CSS .uc-menu).
+    // Account menu (every screen size): the round avatar opens name, role, two-step login, password, sign out.
+    const ucEsc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const mi = (d) => `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">${d}</svg>`;
     wrap.innerHTML = `
-      <button type="button" class="uc-avatar" id="uc-avatar" aria-label="Account" title="${nm}">${initials}</button>
-      <div class="uc-menu">
-        <div class="uc-who" style="text-align:right;line-height:1.2">
-          <div style="font-size:13px;font-weight:600">${u.full_name || u.username}</div>
-          <div style="font-size:11px;color:var(--muted)">${roleLabel(u)}</div>
+      <button type="button" class="uc-avatar" id="uc-avatar" aria-label="Account" aria-haspopup="menu" title="${htmlEsc(nm)}">${htmlEsc(initials)}</button>
+      <div class="uc-menu" role="menu">
+        <div class="uc-who">
+          <div class="uc-name">${htmlEsc(u.full_name || u.username)}</div>
+          <div class="uc-role">${htmlEsc(roleLabel(u))}${u.full_name ? ' · ' + htmlEsc(u.username) : ''}</div>
         </div>
-        <button class="btn btn-ghost btn-sm" id="mfa-btn-open" title="Two-step login with Google / Microsoft Authenticator">${u.mfa_enabled ? '🔐 2-step on' : '🔐 2-step login'}</button>
-        <button class="btn btn-ghost btn-sm" id="changepw-btn" title="Change your password">Change password</button>
-        <button class="btn btn-ghost btn-sm" id="logout-btn" title="Sign out">Logout</button>
+        <button class="btn btn-ghost btn-sm" id="mfa-btn-open" role="menuitem">${mi('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>')} Two-step login <span class="uc-tag">${u.mfa_enabled ? 'On' : 'Set up'}</span></button>
+        <button class="btn btn-ghost btn-sm" id="changepw-btn" role="menuitem">${mi('<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>')} Change password</button>
+        <button class="btn btn-ghost btn-sm" id="logout-btn" role="menuitem">${mi('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>')} Sign out</button>
       </div>
     `;
     // Insert before any existing "Add Asset" button if present, else append
@@ -147,15 +150,6 @@ function renderUserChrome() {
   navAdd('nav-otna', '/ot-attention.html', ico('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>') + ' OT Needs Attention', '#nav-netmap', u.team === 'OT');
   navAdd('nav-otrep', '/ot-reports.html', ico('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>') + ' OT Reports', '#nav-otna', u.team === 'OT' || u.team === 'NET');
   navAdd('nav-otact', '/ot-activity.html', ico('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>') + ' OT Activity', '#nav-otrep', !!u.ot_admin);
-  // IT team: the OT pages are reached from Needs Attention / Reports / Users & Audit (not in the menu) — mark that page
-  // in the menu and add a way back in the top bar.
-  const otParent = { '/ot-attention.html': ['nav-alerts', '/alerts.html', 'Needs Attention'], '/ot-reports.html': ['nav-reports', '/reports.html', 'Reports'],
-    '/ot-activity.html': ['nav-users', '/users.html', 'Users & Audit'] }[window.location.pathname];
-  if (otParent && u.team === 'IT') setTimeout(() => {
-    const l = document.getElementById(otParent[0]) || document.querySelector(`.sidebar nav a[href="${otParent[1]}"]`); if (l) l.classList.add('active');
-    const tb = document.querySelector('.topbar-title');
-    if (tb && !document.getElementById('ot-back') && (otParent[0] !== 'nav-users' || isGlobalAdmin())) tb.insertAdjacentHTML('beforebegin', `<a id="ot-back" class="btn btn-ghost btn-sm" href="${otParent[1]}" style="margin-right:8px">← ${otParent[2]}</a>`);
-  }, 0);
   navAdd('nav-kpi', '/kpi.html', ico('<polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/>') + ' KPIs', '#nav-reports', u.asset_access !== 0);
 
   // System Health link — IT team only, right after Devices.

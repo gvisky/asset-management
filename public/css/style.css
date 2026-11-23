@@ -1445,9 +1445,58 @@ tr.sg-in td:first-child { border-left: 3px solid #bfdbfe; }
 .gs-btn span { flex: 1; text-align: left; }
 .gs-btn kbd, .gs-box kbd { font: 11px/1 system-ui, sans-serif; border: 1px solid #cbd5e1; border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; background: #fff; color: #475569; }
 .gs-btn + #user-chrome { margin-left: 12px !important; }
-/* Account menu: desktop shows name + buttons inline; phones show a round avatar (see ≤768px) */
-.uc-menu { display: flex; align-items: center; gap: 12px; }
-.uc-avatar { display: none; }
+/* ── App shell v2 (docs/UX-REDESIGN.md, phase 1 — js/shell.js) ─────────────────────────────────────────── */
+/* Sidebar: slate, grouped, a blue bar on the page you are on. The static menu waits for the role-based one. */
+html:not(.shell-ready) .sidebar nav { visibility: hidden; }
+.sidebar { background: #0f172a; }
+.sidebar-logo { padding: 16px 16px 12px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.sidebar-logo .brand { display: flex; align-items: center; gap: 10px; color: #fff; }
+.sidebar-logo .brand-mark { width: 30px; height: 30px; flex: none; border-radius: 8px; display: grid; place-items: center; font-weight: 800; font-size: 14px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
+.sidebar-logo .brand b { display: block; font-size: 15px; line-height: 1.1; }
+.sidebar-logo .brand small { display: block; font-size: 11px; color: #64748b; margin-top: 2px; }
+.sidebar nav { padding: 6px 10px 14px; }
+.sidebar .nav-section-label { color: #64748b; font-size: 10.5px; padding: 14px 10px 4px; letter-spacing: .08em; }
+.sidebar .nav-link { padding: 7px 10px; border-left: 0; border-radius: 7px; color: #cbd5e1; gap: 10px; margin: 1px 0; }
+.sidebar .nav-link svg { opacity: .85; }
+.sidebar .nav-link:hover { background: #1e293b; color: #fff; }
+.sidebar .nav-link.active { background: #1e293b; color: #fff; box-shadow: inset 3px 0 0 #3b82f6; font-weight: 600; }
+.sidebar .nav-link.active svg { opacity: 1; color: #93c5fd; }
+
+/* Top bar: breadcrumb · title · page actions · search · country · bell · account */
+.topbar { gap: 10px; }
+.tb-crumb { font-size: 12.5px; color: #64748b; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+.tb-crumb::after { content: "›"; color: #cbd5e1; font-size: 15px; }
+.topbar-title { font-size: 17px; letter-spacing: -.01em; white-space: nowrap; }
+.tb-country { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 8px; padding: 0 4px 0 9px; height: 32px;
+  color: #475569; background: #fff; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+.tb-country > span { padding-right: 6px; font-weight: 600; color: #0f172a; }
+.tb-country { position: relative; }
+.tb-country .tb-cc { display: none; }
+.tb-country select { border: 0; background: transparent; font: 600 13px Inter, 'Segoe UI', sans-serif; color: #0f172a; padding: 4px 2px; cursor: pointer; outline: none; max-width: 150px; }
+#tb-bell { display: inline-flex; flex-shrink: 0; }
+#tb-bell .alert-btn { height: 32px; width: auto; min-width: 34px; padding: 0 8px; gap: 4px; display: inline-flex; align-items: center; color: #475569; }
+#tb-bell .alert-btn .alert-lbl { display: none; }
+#tb-bell .alert-btn .badge { padding: 0 6px; font-size: 11px; }
+#tb-bell .alert-pop { right: 0; left: auto; }
+.gs-btn { height: 32px; }
+
+/* Account menu (all screen sizes): round avatar → name, role, two-step login, password, sign out */
+#user-chrome { position: relative; margin-left: 2px !important; gap: 0 !important; flex-shrink: 0; }
+.uc-avatar { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; border: 0;
+  background: #dbeafe; color: #1d4ed8; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.uc-avatar:hover, #user-chrome.open .uc-avatar { box-shadow: 0 0 0 3px #bfdbfe; }
+.uc-menu { display: none; position: absolute; right: 0; top: calc(100% + 8px); z-index: 1600; background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(15,23,42,.18); padding: 6px; flex-direction: column; align-items: stretch; gap: 2px; min-width: 240px; }
+#user-chrome.open .uc-menu { display: flex; }
+.uc-who { padding: 8px 10px 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.uc-name { font-size: 14px; font-weight: 600; color: #0f172a; }
+.uc-role { font-size: 12px; color: #64748b; margin-top: 1px; }
+.uc-menu .btn { justify-content: flex-start; gap: 10px; padding: 8px 10px; font-size: 13.5px; border: 0; color: #334155; }
+.uc-menu .btn:hover { background: #f1f5f9; }
+.uc-menu .btn svg { color: #64748b; }
+.uc-tag { margin-left: auto; font-size: 11px; font-weight: 600; border-radius: 9px; padding: 1px 8px; background: #dcfce7; color: #166534; }
+#logout-btn { color: #b91c1c !important; } #logout-btn svg { color: #ef4444; }
 /* Phone "⋯" topbar menu (created by initTopbarOverflow in app.js) */
 .tb-more { position: relative; display: none; }
 .gs-ov { position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 3000; display: none; align-items: flex-start; justify-content: center; padding-top: 9vh; }
@@ -1738,3 +1787,33 @@ body.nm-full .nm-svg { height: calc(100vh - 78px); } body.nm-full .nm-scroll { m
 /* Phone menu open: the page behind does not scroll (app.js initMobileNav) */
 html.nav-open, html.nav-open body { overflow: hidden; }
 html.nav-open .sidebar-backdrop { touch-action: none; }
+
+/* ── App shell v2: desktop "More" menu + phone top bar (after the older phone block so these win) ───────── */
+@media (min-width: 769px) {
+  .tb-more.desk { display: inline-flex; position: relative; }
+  .tb-more.desk .tb-more-b { height: 32px; border: 1px solid var(--border); background: #fff; border-radius: 8px; padding: 0 12px; font: 600 13px Inter, 'Segoe UI', sans-serif;
+    color: #334155; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .tb-more.desk .tb-more-b::after { content: "▾"; font-size: 10px; color: #94a3b8; }
+  .tb-more.desk .tb-more-b:hover { border-color: #93c5fd; }
+  .tb-more.desk .tb-more-dot { position: static; min-width: 18px; height: 18px; border-radius: 9px; background: #dc2626; color: #fff; font-size: 10.5px; display: inline-grid; place-items: center; padding: 0 5px; }
+  .tb-more.desk .tb-more-dot[hidden] { display: none; }
+  .tb-more.desk .tb-more-m { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 1600; background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(15,23,42,.18); padding: 6px; min-width: 260px; max-height: calc(100vh - 90px); overflow-y: auto; }
+  .tb-more.desk.open .tb-more-m { display: flex; flex-direction: column; gap: 2px; }
+  .tb-more.desk .tb-more-m > .btn, .tb-more.desk .tb-more-m > button, .tb-more.desk .tb-more-m > a { width: 100%; justify-content: flex-start; text-align: left; white-space: normal; padding: 8px 10px; font-size: 13.5px; border-color: transparent; }
+  .tb-more.desk .tb-more-m > .btn:hover { background: #f1f5f9; }
+  .tb-more.desk .tb-more-m .tb-dd { width: 100%; }
+  .tb-more.desk .tb-more-m .tb-dd > .tb-dd-b { width: 100%; justify-content: flex-start; padding: 8px 10px; border-color: transparent; }
+  .tb-more.desk .tb-more-m .tb-dd-m { position: static; box-shadow: none; border: 0; border-left: 2px solid var(--border); border-radius: 0; margin: 2px 0 4px 12px; padding: 0 0 0 6px; min-width: 0; }
+  .tb-more.desk .tb-more-m > span, .tb-more.desk .tb-more-m > div:not(.tb-dd) { padding: 4px 10px; }
+}
+@media (max-width: 768px) {
+  .tb-crumb { display: none; }
+  .tb-country { padding: 0 8px; height: 34px; gap: 4px; flex-shrink: 0; }
+  .tb-country .tb-cc { display: inline; font-size: 12px; color: #0f172a; }
+  .tb-country select { position: absolute; inset: 0; width: 100%; max-width: none; opacity: 0; }   /* tap = native picker */
+  .topbar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .tb-country > span { max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
+  #tb-bell .alert-btn { height: 34px; }
+  .uc-avatar { background: #dbeafe; color: #1d4ed8; }
+}

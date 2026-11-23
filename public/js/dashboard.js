@@ -25,6 +25,8 @@ const STATUSES = [
   { key: 'Stock',  color: '#d97706' },
 ];
 let dashScope = '';          // '' = all countries, else one country
+// The country switch in the top bar (js/shell.js) drives the Dashboard too.
+window.onGlobalCountry = (v) => { if (v === dashScope) return; dashScope = v || ''; dashSite = ''; if (typeof loadStats === 'function') loadStats(); };
 let dashSite = '';           // '' = all sites, else 'Office' / 'Factory' (Vietnam only)
 let allBreakdown = null;     // unfiltered country × site × type × status rows (for "Assets by Country")
 
@@ -84,13 +86,14 @@ function renderScopeSwitch(scopedTo) {
       el.querySelectorAll('.seg-btn').forEach(btn => btn.addEventListener('click', () => {
         dashScope = btn.dataset.country;
         dashSite = '';
+        if (window.Shell) Shell.setScope(dashScope);   // the whole app follows
         loadStats();
       }));
     } else {
       // Many countries → a dropdown instead of buttons.
       el.innerHTML = `<select class="filter-select" aria-label="Country"><option value="">All countries</option>${
         COUNTRIES.map(c => `<option${c === dashScope ? ' selected' : ''}>${escHtml(c)}</option>`).join('')}</select>`;
-      el.querySelector('select').addEventListener('change', (e) => { dashScope = e.target.value; dashSite = ''; loadStats(); });
+      el.querySelector('select').addEventListener('change', (e) => { dashScope = e.target.value; dashSite = ''; if (window.Shell) Shell.setScope(dashScope); loadStats(); });
     }
   }
   // Second switch: Office / Factory, for a country that has sites (e.g. Vietnam).
