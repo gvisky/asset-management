@@ -229,14 +229,16 @@ function renderTable(rows) {
     return;
   }
 
+  rows.forEach(a => invRows.set(String(a.id), a));
   tbody.innerHTML = rows.map(a => assetRowHtml(a)).join('');
 }
+const invRows = new Map();   // id → asset of the rows on screen (bulk actions, CSV)
 
 // One asset row. `devHtml`: Intune / Entra status of the linked device (view by user).
 function assetRowHtml(a, devHtml = '', extraClass = '') {
   return `
-    <tr class="${a.ad_issue_reason ? 'row-adissue' : ((a.fields_locked || a.user_locked) ? 'row-locked' : '')} ${extraClass}">
-      <td class="text-muted text-sm">${a.id}</td>
+    <tr class="${a.ad_issue_reason ? 'row-adissue' : ((a.fields_locked || a.user_locked) ? 'row-locked' : '')} ${extraClass}" data-id="${a.id}">
+      <td class="text-muted text-sm lk-idc">${canEdit() ? `<input type="checkbox" class="lk-sel" data-id="${a.id}" aria-label="Select asset ${a.id}">` : ''}${a.id}</td>
       <td class="when-cell">${whenCell(a.created_at, a.updated_at, assetBaseline)}</td>
       <td>${a.fields_locked ? '<span title="Locked — Serial/Brand/Asset Code frozen">🔒</span> ' : ''}${a.asset_s4
           ? `<code style="font-size:12px;color:var(--brand)" title="SAP S/4 asset code (main)">${esc(a.asset_s4)}</code><br><span class="text-muted" style="font-size:10.5px">ECC ${esc(a.asset_code) || '—'}</span>`
@@ -329,6 +331,7 @@ function renderGrouped(r) {
       + ` · ${h.asset_id ? `asset #${h.asset_id}` : '<span style="color:#dc2626">not in Asset Inventory</span>'}`
       + ` <a href="/devices.html?search=${encodeURIComponent(h.name || h.serial || '')}">open →</a></span>`).join('')}</td></tr>` : '';
   if (!r.groups.length) { tbody.innerHTML = hits + '<tr><td colspan="14"><div class="empty-state"><p>No assets found.</p></div></td></tr>'; return; }
+  r.groups.forEach(g => g.assets.forEach(a => invRows.set(String(a.id), a)));
   tbody.innerHTML = hits + r.groups.map(g => {
     const p = g.person;
     const linked = new Map();
@@ -841,7 +844,53 @@ function setAdIssueButton(active) {
   btn.classList.toggle('btn-ghost', !active);
 }
 
+// ── Phase 3 list pattern (js/listkit.js): view tabs, saved views, bulk actions ─────────────────────────────
+function initListKit() {
+  // Tabs "By user | List" drive the (hidden) view-mode select.
+  const vm = document.getElementById('view-mode');
+  const tabs = [...document.querySelectorAll('.lk-tablist [data-vm]')];
+  const mark = () => tabs.forEach(t => { const on = t.dataset.vm === vm.value; t.classList.toggle('on', on); t.setAttribute('aria-selected', String(on)); });
+  tabs.forEach(t => t.addEventListener('click', () => { if (vm.value === t.dataset.vm) return; vm.value = t.dataset.vm; vm.dispatchEvent(new Event('change')); mark(); }));
+  setTimeout(mark, 0);
+
+  ListKit.savedViews({
+    key: 'assets', mount: '#inv-views',
+    fields: ['search-input', 'filter-country', 'filter-location', 'filter-status', 'filter-asset-type', 'filter-department', 'filter-cost-center', 'sort-by', 'view-mode'],
+    get: () => ({ brand: document.getElementById('filter-brand').value }),
+    set: async (x, f) => { await refreshBrandOptions(); document.getElementById('filter-brand').value = (x && x.brand) || ''; if (f['filter-country'] !== undefined && window.Shell) Shell.setScope(f['filter-country']); mark(); },
+    apply: () => loadAssets(1),
+  });
+
+  // Bulk actions need to know the account (editors / admins only) — wait for it.
+  const t = setInterval(() => { if (!window.CURRENT_USER) return; clearInterval(t); initBulk(); }, 100);
+}
+function initBulk() {
+  if (!canEdit()) { const all = document.getElementById('inv-all'); if (all) all.remove(); return; }
+  // Rows drawn before the account was known have no checkboxes yet.
+  if (document.querySelector('#assets-tbody tr[data-id]') && !document.querySelector('#assets-tbody .lk-sel')) loadAssets(currentPage);
+  // Change many assets at once: each is loaded and saved through the normal edit (same locks, history lines, stock flow).
+  const setField = (field, value) => async (id) => {
+    const a = await apiGet(`${API}/${id}`);
+    if (String(a[field] || '') === value) return;
+    await apiPut(`${API}/${id}`, { ...a, [field]: value });
+  };
+  const bulk = ListKit.bulk({
+    tbody: '#assets-tbody', all: '#inv-all', noun: 'asset',
+    actions: [
+      { label: 'Set status…', run: async (ids) => { const v = await ListKit.choose(`Status for ${ids.length} asset(s)`, ['Active', 'Broken', 'Stock'], 'Saved like a normal edit: a history line is added to each asset.'); if (!v) return; await ListKit.each(ids, setField('status', v), `Status → ${v}`); bulk.clear(); loadAssets(currentPage); loadSummary(); } },
+      { label: 'Set site…', run: async (ids) => { const v = await ListKit.choose(`Site for ${ids.length} asset(s)`, ['Office', 'Factory'], 'Vietnam only — assets in other countries keep no site.'); if (!v) return; await ListKit.each(ids, setField('location', v), `Site → ${v}`); bulk.clear(); loadAssets(currentPage); } },
+      { label: 'Export CSV', run: async (ids) => {
+        const rows = ids.map(id => invRows.get(String(id))).filter(Boolean);
+        ListKit.csv(`assets-${new Date().toISOString().slice(0, 10)}.csv`, rows, [['#', r => r.id], ['Asset code', r => r.asset_code], ['Asset S4', r => r.asset_s4], ['Type', r => r.asset_type], ['Brand / Model', r => r.brand_model],
+          ['Serial', r => r.serial_no], ['Computer no', r => r.computer_no], ['Country', r => r.country], ['Site', r => r.location], ['Department', r => r.department], ['Cost center', r => r.cost_center],
+          ['User', r => r.user_name], ['AD name', r => r.ad_name], ['Status', r => r.status], ['Purchase date', r => r.purchase_date], ['Warranty', r => r.warranty_expiry]]);
+      } },
+    ],
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  initListKit();
   // Load dropdown options first, then apply any URL filters and load the table.
   loadFilters().then(() => {
     applyUrlFilters();
