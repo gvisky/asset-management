@@ -53,10 +53,12 @@ async function loadUsers() {
         <td>${u.team ? `<span class="badge badge-office">${htmlEsc(u.team)}</span>` : '<span class="text-muted text-sm">—</span>'}</td>
         <td>${u.country ? String(u.country).split(',').map(c => `<span class="badge badge-factory" style="margin:1px">${htmlEsc(c)}</span>`).join('') : '<span class="text-muted text-sm">Global</span>'}</td>
         <td class="text-sm">${Number(u.asset_access) === 0 ? '<span class="text-muted">User Inv. only</span>' : 'Yes'}</td>
+        <td class="text-sm">${Number(u.mfa_enabled) ? '<span class="badge badge-active" title="Signs in with password + authenticator code">🔐 On</span>' : '<span class="text-muted">Off</span>'}</td>
         <td class="text-muted text-sm">${(u.created_at || '').split(' ')[0]}</td>
         <td>
           <div style="display:flex;gap:6px">
             <button class="btn btn-ghost btn-sm" onclick="editUser(window._usersById.get(${u.id}))">Edit</button>
+            ${Number(u.mfa_enabled) ? `<button class="btn btn-ghost btn-sm" title="Lost phone: turn off this user's two-step login so they can sign in with the password and set it up again" onclick="resetMfa(${u.id}, ${jsArg(u.username)})">Reset 2-step</button>` : ''}
             <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, ${jsArg(u.username)})">Delete</button>
           </div>
         </td>
@@ -270,3 +272,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// Lost phone: turn off the user's two-step login (they set it up again after signing in).
+async function resetMfa(id, username) {
+  if (!confirm(`Turn off two-step login for ${username}?\n\nThey can then sign in with the password only, and should set up the authenticator again (avatar menu → Two-step login).`)) return;
+  try { await apiPost(`/api/users/${id}/mfa-reset`, {}); showToast(`Two-step login of ${username} reset`); loadUsers(); }
+  catch (e) { showToast('Could not reset', 'error'); }
+}

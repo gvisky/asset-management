@@ -32,7 +32,7 @@ async function getUserFromRequest(req) {
   }
 
   const user = await get(
-    'SELECT id, username, full_name, role, country, team, asset_access FROM users WHERE id = ?', [session.user_id]
+    'SELECT id, username, full_name, role, country, team, asset_access, mfa_enabled FROM users WHERE id = ?', [session.user_id]
   );
   // OT admin (team OT + role admin): everywhere else an OT editor — never an IT admin — plus the OT activity log and
   // restoring / deleting OT devices (checked with user.ot_admin).

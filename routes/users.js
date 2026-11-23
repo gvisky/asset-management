@@ -32,7 +32,7 @@ async function globalAdminCount() {
 
 // ── GET /api/users — list all users ───────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
-  const rows = await all('SELECT id, username, full_name, role, country, team, asset_access, created_at FROM users ORDER BY id');
+  const rows = await all('SELECT id, username, full_name, role, country, team, asset_access, mfa_enabled, created_at FROM users ORDER BY id');
   res.json(rows);
 }));
 
@@ -100,6 +100,17 @@ router.put('/:id', wrap(async (req, res) => {
 }));
 
 // ── DELETE /api/users/:id — delete a user ─────────────────────────────────
+// ── POST /api/users/:id/mfa-reset — turn off a user's two-step login (lost phone) ──
+// The user signs in with the password only and can set up the authenticator again.
+router.post('/:id/mfa-reset', wrap(async (req, res) => {
+  const u = await get('SELECT id, username, mfa_enabled FROM users WHERE id = ?', [req.params.id]);
+  if (!u) return res.status(404).json({ error: 'User not found' });
+  await run("UPDATE users SET mfa_enabled = 0, mfa_secret = '', mfa_pending = '', mfa_recovery = '[]', mfa_last_step = 0 WHERE id = ?", [u.id]);
+  await run('DELETE FROM mfa_challenges WHERE user_id = ?', [u.id]);
+  await audit(req.user, 'MFA', null, `Reset two-step login of ${u.username}${u.mfa_enabled ? '' : ' (it was off)'}`);
+  res.json({ ok: true });
+}));
+
 router.delete('/:id', wrap(async (req, res) => {
   const user = await get('SELECT * FROM users WHERE id = ?', [req.params.id]);
   if (!user) return res.status(404).json({ error: 'User not found' });

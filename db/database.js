@@ -824,6 +824,14 @@ async function migrate() {
   if (!ucols.includes('country'))      await backend.run('ALTER TABLE users ADD COLUMN country TEXT DEFAULT NULL');
   if (!ucols.includes('team'))         await backend.run('ALTER TABLE users ADD COLUMN team TEXT DEFAULT NULL');
   if (!ucols.includes('asset_access')) await backend.run('ALTER TABLE users ADD COLUMN asset_access INTEGER NOT NULL DEFAULT 1');
+  // Two-step login (TOTP — Google / Microsoft Authenticator). See routes/auth.js + lib/totp.js.
+  if (!ucols.includes('mfa_enabled'))   await backend.run('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER NOT NULL DEFAULT 0');
+  if (!ucols.includes('mfa_secret'))    await backend.run("ALTER TABLE users ADD COLUMN mfa_secret TEXT DEFAULT ''");
+  if (!ucols.includes('mfa_pending'))   await backend.run("ALTER TABLE users ADD COLUMN mfa_pending TEXT DEFAULT ''");
+  if (!ucols.includes('mfa_recovery'))  await backend.run("ALTER TABLE users ADD COLUMN mfa_recovery TEXT DEFAULT '[]'");
+  if (!ucols.includes('mfa_last_step')) await backend.run('ALTER TABLE users ADD COLUMN mfa_last_step INTEGER NOT NULL DEFAULT 0');
+  await backend.script(`CREATE TABLE IF NOT EXISTS mfa_challenges (
+      token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)`);
 
   await backend.script(`CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT);`);
   await backend.script(`CREATE TABLE IF NOT EXISTS notifications (
