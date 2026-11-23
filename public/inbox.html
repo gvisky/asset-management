@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Inbox — Hayat IT</title>
+  <link rel="stylesheet" href="/css/style.css?v=20261123u">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-title">🖥️ Hayat Communication Tools</div>
+    <div class="logo-sub">Asset &amp; User Management</div>
+  </div>
+  <nav>
+    <div class="nav-section-label">Menu</div>
+    <a href="/" class="nav-link" id="nav-dashboard"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Dashboard</a>
+    <a href="/inventory.html" class="nav-link"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2"/></svg> Asset Inventory</a>
+    <a href="/server-inventory.html" class="nav-link" id="nav-servers"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg> Server Inventory</a>
+    <a href="/devices.html" class="nav-link" id="nav-devices"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg> Devices</a>
+    <a href="/maintenance.html" class="nav-link" id="nav-maintenance"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-2.4 2.6-2.6z"/></svg> Maintenance</a>
+    <a href="/licenses.html" class="nav-link" id="nav-licenses"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M9 11l3 3L22 4"/></svg> Licenses</a>
+    <a href="/reports.html" class="nav-link" id="nav-reports"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Reports</a>
+  </nav>
+</aside>
+
+<div class="main-wrap">
+  <header class="topbar"><span class="topbar-title">Inbox</span><span id="alert-btn-slot"></span></header>
+  <main class="content">
+
+    <!-- Summary: one card per area, with the count of each "needs attention" rule (GET /api/inbox) -->
+    <div class="ib-head">
+      <div><div class="ib-total" id="ib-total">…</div><div class="text-muted text-sm" id="ib-at"></div></div>
+      <button class="btn btn-ghost btn-sm" id="ib-refresh" type="button">⟳ Refresh</button>
+    </div>
+    <div class="ib-grid" id="ib-areas"><div class="text-muted text-sm">Loading…</div></div>
+
+    <!-- Details: the lists where each item is fixed -->
+    <section class="ib-sec" id="sec-assets" hidden>
+      <h2 class="ib-h">Assets</h2>
+      <div id="na-missing" style="margin-bottom:18px"></div>
+      <div id="na-ad" style="margin-bottom:18px"></div>
+    </section>
+    <section class="ib-sec" id="sec-servers" hidden>
+      <h2 class="ib-h">Servers &amp; network</h2>
+      <div id="na-servers" style="margin-bottom:18px"></div>
+    </section>
+    <section class="ib-sec" id="sec-ot" hidden>
+      <h2 class="ib-h">OT</h2>
+      <div id="ot-box" data-ot="attention"></div>
+    </section>
+    <section class="ib-sec" id="sec-people" hidden>
+      <h2 class="ib-h">People</h2>
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header"><span class="card-title">Leavers with open checklist items</span><a class="btn btn-ghost btn-sm" href="/leavers.html">Open Leavers →</a></div>
+        <div class="card-body" id="ib-leavers" style="padding-top:6px;padding-bottom:6px"><div class="text-muted text-sm">Loading…</div></div>
+      </div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header"><span class="card-title">Changes by HR members</span></div>
+        <div class="card-body" id="hr-box" style="max-height:280px;overflow-y:auto;padding-top:6px;padding-bottom:6px"><div class="text-muted text-sm">Loading…</div></div>
+      </div>
+    </section>
+    <section class="ib-sec" id="sec-health" hidden>
+      <h2 class="ib-h">Monitoring</h2>
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-header"><span class="card-title">Systems down or with a warning</span><a class="btn btn-ghost btn-sm" href="/system-health.html">Open Monitoring →</a></div>
+        <div class="card-body" id="ib-health" style="padding-top:6px;padding-bottom:6px"><div class="text-muted text-sm">Loading…</div></div>
+      </div>
+    </section>
+    <section class="ib-sec" id="sec-notes" hidden>
+      <h2 class="ib-h">Notifications</h2>
+      <div id="alert-box"></div>
+    </section>
+
+  </main>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+<script src="/js/shell.js?v=20261123u"></script>
+<script src="/js/auth.js?v=20261123u"></script>
+<script src="/js/ot-links.js?v=20261120a"></script>
+<script src="/js/app.js?v=20261123s"></script>
+<script src="/js/alerts.js?v=20261123s"></script>
+<script src="/js/needs-attention.js?v=20261117a"></script>
+<script src="/js/server-attention.js?v=20261123u"></script>
+<script src="/js/inbox.js?v=20261123u"></script>
+</body>
+</html>

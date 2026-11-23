@@ -85,7 +85,7 @@ function dataQualityHtml(d) {
       ${x.missing ? `<div class="text-sm k-why">${kEsc(why)}</div>` : ''}</td>`;
   };
   return `<section class="card k-sec"><div class="card-header"><span class="card-title">Data quality by asset type <span class="text-muted text-sm" style="font-weight:400">· target 98 %</span></span>
-    <span class="text-muted text-sm">ⓘ Assets with no missing info — serial, asset code, PC No / AD Name for laptops &amp; desktops, no duplicate serial (same rule as <a href="/alerts.html">Needs Attention</a>).
+    <span class="text-muted text-sm">ⓘ Assets with no missing info — serial, asset code, PC No / AD Name for laptops &amp; desktops, no duplicate serial (same rule as <a href="/inbox.html">Needs Attention</a>).
       Not checked: ${kEsc((d.exemptTypes || []).join(', '))}.
       <span class="k-lg"><i style="background:#16a34a"></i>Complete <i style="background:#dc2626"></i>Needs info</span></span></div>
     <div class="table-wrap"><table class="k-ut"><thead><tr><th>Asset type</th>${d.countries.map(c => `<th>${kEsc(c)}</th>`).join('')}</tr></thead><tbody>

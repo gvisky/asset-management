@@ -64,6 +64,8 @@ app.use('/api/netmap/workbook', require('./routes/netmap-workbook'));
 app.use('/api/netmap', require('./routes/netmap'));
 app.use('/api/ot-reports', require('./routes/ot-reports'));
 app.use('/api/ot-activity', require('./routes/ot-activity'));
+app.use('/api/inbox', require('./routes/inbox'));
+app.use('/api/settings', require('./routes/settings'));
 app.use('/api/confirm-forms', require('./routes/confirm').forms);
 app.use('/api/confirm', require('./routes/confirm').admin);
 app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff confirm their devices with a personal link
@@ -79,6 +81,8 @@ app.get('/api/version', (req, res) => {
   res.json({ commit: (process.env.RENDER_GIT_COMMIT || process.env.APP_COMMIT || '').slice(0, 7) || 'local', started: STARTED });
 });
 const STARTED = new Date().toISOString();
+
+app.get('/alerts.html', (req, res) => res.redirect(301, '/inbox.html'));   // Needs Attention → Inbox (phase 2)
 
 // Gate the HTML pages: anyone not logged in is redirected to /login.html
 app.use(async (req, res, next) => {
