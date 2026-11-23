@@ -98,6 +98,7 @@ function renderUserChrome() {
           <div style="font-size:13px;font-weight:600">${u.full_name || u.username}</div>
           <div style="font-size:11px;color:var(--muted)">${roleLabel(u)}</div>
         </div>
+        <button class="btn btn-ghost btn-sm" id="mfa-btn-open" title="Two-step login with Google / Microsoft Authenticator">${u.mfa_enabled ? '🔐 2-step on' : '🔐 2-step login'}</button>
         <button class="btn btn-ghost btn-sm" id="changepw-btn" title="Change your password">Change password</button>
         <button class="btn btn-ghost btn-sm" id="logout-btn" title="Sign out">Logout</button>
       </div>
@@ -106,6 +107,7 @@ function renderUserChrome() {
     topbar.appendChild(wrap);
     document.getElementById('logout-btn').addEventListener('click', logout);
     document.getElementById('changepw-btn').addEventListener('click', changePassword);
+    document.getElementById('mfa-btn-open').addEventListener('click', () => { wrap.classList.remove('open'); openMfaSettings(); });
     document.getElementById('uc-avatar').addEventListener('click', (e) => { e.stopPropagation(); wrap.classList.toggle('open'); });
     document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) wrap.classList.remove('open'); });
   }
@@ -303,3 +305,92 @@ async function logout() {
 
 // Run immediately on load.
 ensureAuth();
+
+// ── Two-step login settings (Google / Microsoft Authenticator) ───────────────
+// Turn on: QR → scan with the app → type a code → save the 10 recovery codes.
+// Turn off / new recovery codes: password (+ a current code to turn off).
+function mfaModal(title, body, foot) {
+  let ov = document.getElementById('mfa-ov');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'mfa-ov'; ov.className = 'modal-overlay';
+    ov.innerHTML = `<div class="modal" style="max-width:480px"><div class="modal-header"><span class="modal-title" id="mfa-t"></span>
+      <button class="modal-close" aria-label="Close" onclick="document.getElementById('mfa-ov').classList.remove('open')">✕</button></div>
+      <div class="modal-body" id="mfa-b"></div><div class="modal-footer" id="mfa-f"></div></div>`;
+    ov.addEventListener('click', (e) => { if (e.target === ov) ov.classList.remove('open'); });
+    document.body.appendChild(ov);
+  }
+  document.getElementById('mfa-t').textContent = title;
+  document.getElementById('mfa-b').innerHTML = body;
+  document.getElementById('mfa-f').innerHTML = foot || '<button class="btn btn-ghost" onclick="document.getElementById(\'mfa-ov\').classList.remove(\'open\')">Close</button>';
+  ov.classList.add('open');
+}
+async function mfaApi(path, body) {
+  const r = await fetch('/api/auth/mfa' + path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || 'Something went wrong');
+  return d;
+}
+const mfaEsc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function mfaCodesHtml(codes) {
+  const txt = codes.join('\n');
+  return `<p style="margin:0 0 8px"><b>Save these 10 recovery codes</b> somewhere safe (password manager, printed in a drawer). Each works <b>once</b> if you lose your phone. They are shown <b>only now</b>.</p>
+    <pre style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:15px;columns:2;line-height:1.8;margin:0">${codes.map(mfaEsc).join('\n')}</pre>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${JSON.stringify(txt).replace(/"/g, '&quot;')}).then(()=>showToast('Copied'))">📋 Copy</button>
+      <a class="btn btn-ghost btn-sm" download="hayat-tools-recovery-codes.txt" href="data:text/plain;charset=utf-8,${encodeURIComponent('Hayat Tools — recovery codes (' + ((window.CURRENT_USER || {}).username || '') + ')\n\n' + txt + '\n')}">⬇ Download .txt</a>
+    </div>`;
+}
+async function openMfaSettings() {
+  let st;
+  try { st = await mfaApi(''); } catch (e) { showToast(e.message, 'error'); return; }
+  if (!st.enabled) {
+    mfaModal('🔐 Two-step login', `
+      <p style="margin:0 0 10px">Protect your account with a 6-digit code from your phone in addition to your password.</p>
+      <ol style="margin:0 0 4px 18px;padding:0;line-height:1.7;font-size:13.5px">
+        <li>Install <b>Google Authenticator</b> (or Microsoft Authenticator) on your phone.</li>
+        <li>Scan the QR code on the next screen.</li>
+        <li>Type the code the app shows.</li>
+      </ol>`,
+      `<button class="btn btn-ghost" onclick="document.getElementById('mfa-ov').classList.remove('open')">Not now</button><button class="btn btn-primary" id="mfa-start">Set up</button>`);
+    document.getElementById('mfa-start').onclick = mfaSetup;
+    return;
+  }
+  mfaModal('🔐 Two-step login is on', `
+    <p style="margin:0 0 8px">✅ You sign in with your password <b>and</b> a code from your authenticator app.</p>
+    <p class="text-muted" style="margin:0 0 14px;font-size:13px">Recovery codes left: <b>${st.recovery_left}</b> of 10.</p>
+    <div class="form-group"><label class="form-label">Your password</label><input class="form-control" id="mfa-pw" type="password" autocomplete="current-password"></div>
+    <div class="form-group"><label class="form-label">Current 6-digit code (only to turn it off)</label><input class="form-control" id="mfa-off-code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456"></div>
+    <div id="mfa-msg" class="text-sm" style="color:#dc2626"></div>`,
+    `<button class="btn btn-ghost" id="mfa-newcodes">New recovery codes</button><button class="btn btn-danger" id="mfa-off">Turn off</button>`);
+  document.getElementById('mfa-newcodes').onclick = async () => {
+    try { const d = await mfaApi('/recovery', { password: document.getElementById('mfa-pw').value }); mfaModal('🔐 New recovery codes', mfaCodesHtml(d.recovery_codes) + '<p class="text-muted text-sm" style="margin:10px 0 0">The old codes no longer work.</p>'); }
+    catch (e) { document.getElementById('mfa-msg').textContent = e.message; }
+  };
+  document.getElementById('mfa-off').onclick = async () => {
+    if (!confirm('Turn off two-step login? Your account will be protected by the password only.')) return;
+    try { await mfaApi('/disable', { password: document.getElementById('mfa-pw').value, code: document.getElementById('mfa-off-code').value }); showToast('Two-step login turned off'); setTimeout(() => location.reload(), 600); }
+    catch (e) { document.getElementById('mfa-msg').textContent = e.message; }
+  };
+}
+async function mfaSetup() {
+  let d;
+  try { d = await mfaApi('/setup', {}); } catch (e) { showToast(e.message, 'error'); return; }
+  mfaModal('🔐 Scan with your authenticator app', `
+    <div style="text-align:center"><img src="${d.qr}" alt="QR code" width="220" height="220" style="border:1px solid var(--border);border-radius:10px;padding:6px;background:#fff"></div>
+    <p class="text-muted" style="font-size:12.5px;margin:8px 0 2px;text-align:center">Can't scan? In the app choose <b>Enter a setup key</b> and type:</p>
+    <p style="text-align:center;font-family:monospace;font-size:15px;letter-spacing:1px;margin:0 0 14px;user-select:all">${mfaEsc(d.secret)}</p>
+    <div class="form-group"><label class="form-label">Code shown in the app</label>
+      <input class="form-control" id="mfa-first" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" style="text-align:center;font-size:22px;letter-spacing:5px"></div>
+    <div id="mfa-msg" class="text-sm" style="color:#dc2626"></div>`,
+    `<button class="btn btn-ghost" onclick="document.getElementById('mfa-ov').classList.remove('open')">Cancel</button><button class="btn btn-primary" id="mfa-confirm">Turn on</button>`);
+  const go = async () => {
+    try {
+      const r = await mfaApi('/enable', { code: document.getElementById('mfa-first').value });
+      mfaModal('✅ Two-step login is on', mfaCodesHtml(r.recovery_codes) + '<p class="text-muted text-sm" style="margin:10px 0 0">Next time you sign in you will be asked for the code from the app.</p>',
+        '<button class="btn btn-primary" onclick="location.reload()">I saved them — done</button>');
+    } catch (e) { document.getElementById('mfa-msg').textContent = e.message; }
+  };
+  document.getElementById('mfa-confirm').onclick = go;
+  document.getElementById('mfa-first').addEventListener('input', (e) => { if (/^\d{6}$/.test(e.target.value.trim())) go(); });
+  setTimeout(() => document.getElementById('mfa-first').focus(), 100);
+}

@@ -29,6 +29,25 @@
           <div id="login-error" style="display:none;color:#dc2626;font-size:13px;margin-bottom:14px"></div>
           <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center" id="login-btn">Sign in</button>
         </form>
+
+        <!-- Step 2: two-step login (authenticator app) -->
+        <form id="mfa-form" style="display:none" autocomplete="off">
+          <div style="text-align:center;margin-bottom:14px">
+            <div style="font-size:28px">🔐</div>
+            <div style="font-weight:600;margin-top:4px">Two-step login</div>
+            <div class="text-muted" style="font-size:13px;margin-top:4px">Open <b>Google Authenticator</b> (or Microsoft Authenticator) on your phone and enter the 6-digit code for <b id="mfa-user">Hayat Tools</b>.</div>
+          </div>
+          <div class="form-group" style="margin-bottom:14px">
+            <input class="form-control" id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="9"
+              placeholder="123 456" style="text-align:center;font-size:24px;letter-spacing:6px;padding:12px" required>
+          </div>
+          <div id="mfa-error" style="display:none;color:#dc2626;font-size:13px;margin-bottom:12px"></div>
+          <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center" id="mfa-btn">Verify</button>
+          <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:12.5px">
+            <a href="#" id="mfa-recovery">Use a recovery code</a>
+            <a href="#" id="mfa-back">← Back</a>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -37,6 +56,6 @@
     </p>
   </div>
 
-  <script src="/js/login.js?v=20261119a"></script>
+  <script src="/js/login.js?v=20261123a"></script>
 </body>
 </html>

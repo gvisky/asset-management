@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-11-23",
+    "title": "Two-step login (Google / Microsoft Authenticator)",
+    "items": [
+      "Protect your account with a 6-digit code from your phone: avatar menu (top right) → 🔐 2-step login → scan the QR with Google Authenticator or Microsoft Authenticator → type the code → save the 10 recovery codes.",
+      "When it is on, sign-in asks for the password and then the code (5 tries, within 5 minutes). Lost phone? Use a recovery code (each works once), or ask an admin.",
+      "Users & Audit: a 2-step column shows who has it on; admins can Reset 2-step for a user who lost their phone. All logins, wrong codes and changes are in the audit log."
+    ]
+  },
+  {
     "date": "2026-11-22",
     "title": "Phone: the side menu scrolls",
     "items": [
