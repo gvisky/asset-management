@@ -1875,3 +1875,66 @@ html.nav-open .sidebar-backdrop { touch-action: none; }
   .st-nav a { white-space: nowrap; }
   .ib-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Phase 3: list pattern (js/listkit.js) ─────────────────────────────────────────────────────────────── */
+/* Filter rows: one row of main filters, a second row under "Filters" */
+.lk-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.lk-bar2 { background: #f8fafc; padding-top: 10px; padding-bottom: 10px; }
+.lk-bar2[hidden] { display: none; }
+.lk-more-b[aria-expanded="true"] { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.lk-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 9px; background: #2563eb; color: #fff; font-size: 11px; padding: 0 5px; margin-left: 2px; }
+.lk-n[hidden] { display: none; }
+/* Tabs (views of the list) + tools */
+.lk-tabs { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.lk-tablist { display: flex; gap: 20px; }
+.lk-tablist button { border: 0; background: none; padding: 8px 0 9px; font: 500 14px Inter, 'Segoe UI', sans-serif; color: #64748b; cursor: pointer; box-shadow: inset 0 -2px 0 transparent; }
+.lk-tablist button:hover { color: #0f172a; }
+.lk-tablist button.on { color: #1d4ed8; font-weight: 600; box-shadow: inset 0 -2px 0 #2563eb; }
+.lk-tools { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 6px; }
+.lk-tools .btn { font-size: 12.5px; }
+/* Saved views menu */
+.lk-views { position: relative; display: inline-block; }
+.lk-views-m { position: absolute; right: 0; top: calc(100% + 6px); z-index: 300; background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(15,23,42,.18); padding: 6px; min-width: 260px; }
+.lk-views-m[hidden] { display: none; }
+.lk-v { display: flex; align-items: center; }
+.lk-v button, .lk-v-save { border: 0; background: none; text-align: left; padding: 7px 10px; border-radius: 7px; font: 13.5px Inter, 'Segoe UI', sans-serif; cursor: pointer; color: #0f172a; }
+.lk-v button:first-child { flex: 1; } .lk-v button:hover, .lk-v-save:hover { background: #f1f5f9; }
+.lk-v-x { color: #94a3b8 !important; } .lk-v-x:hover { color: #dc2626 !important; }
+.lk-v-empty { padding: 8px 10px; color: #94a3b8; font-size: 13px; }
+.lk-v-save { display: block; width: 100%; color: #1d4ed8 !important; border-top: 1px solid #f1f5f9 !important; border-radius: 0 0 7px 7px !important; margin-top: 4px; }
+/* Selection + bulk bar */
+.lk-sel, .lk-all { width: 15px; height: 15px; vertical-align: -3px; margin-right: 6px; cursor: pointer; accent-color: #2563eb; }
+tr.lk-on > td { background: #eff6ff !important; }
+.lk-bulk { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 250; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: #0f172a; color: #fff; border-radius: 12px; padding: 8px 10px 8px 16px; box-shadow: 0 12px 32px rgba(15,23,42,.3); max-width: calc(100vw - 24px); }
+.lk-bulk[hidden] { display: none; }
+.lk-bulk-n { font-size: 13.5px; margin-right: 6px; white-space: nowrap; }
+.lk-bulk .btn { background: #1e293b; border: 1px solid #334155; color: #fff; }
+.lk-bulk .btn:hover { background: #334155; }
+.lk-bulk .lk-danger { color: #fecaca; }
+.lk-bulk-sp { flex: 1; min-width: 4px; }
+.lk-bulk .lk-bulk-clear { background: transparent; border-color: transparent; color: #94a3b8; }
+
+/* Side panel (desktop): <div class="modal-overlay" data-drawer> — opens on the right, the list stays usable */
+@media (min-width: 1025px) {
+  .modal-overlay[data-drawer] { background: transparent; justify-content: flex-end; align-items: stretch; pointer-events: none !important; z-index: 120; }
+  .modal-overlay[data-drawer] .modal { pointer-events: auto; width: min(560px, 44vw); max-width: none; max-height: none; height: calc(100vh - var(--header-h)); margin-top: var(--header-h);
+    border-radius: 0; border-left: 1px solid var(--border); box-shadow: -14px 0 32px rgba(15,23,42,.10); display: flex; flex-direction: column; overflow: hidden;
+    transform: translateX(24px); transition: transform .18s ease; }
+  .modal-overlay[data-drawer]:not(.open) .modal { pointer-events: none; visibility: hidden; transition: transform .18s ease, visibility 0s linear .2s; }
+  .modal-overlay[data-drawer].open .modal { transform: translateX(0); }
+  .modal-overlay[data-drawer] .modal-body { flex: 1; overflow-y: auto; }
+  .modal-overlay[data-drawer] .modal-footer { flex-wrap: wrap; background: #f8fafc; }
+  .modal-overlay[data-drawer] .modal-header { background: #fff; }
+  body:has(.modal-overlay[data-drawer].open) .main-wrap { margin-right: min(560px, 44vw); }
+  body:has(.modal-overlay[data-drawer].open) .lk-bulk { left: calc((100vw - min(560px, 44vw) + var(--sidebar-w)) / 2); }
+}
+.topbar .btn { white-space: nowrap; flex-shrink: 0; }
+@media (max-width: 768px) {
+  .lk-bar .search-box { flex: 1 1 100% !important; min-width: 0 !important; }
+  .lk-bar select.filter-select { flex: 1 1 calc(50% - 8px); min-width: 0; }
+  .lk-tabs { flex-direction: column; align-items: stretch; gap: 4px; }
+  .lk-tools { margin-left: 0; overflow-x: auto; flex-wrap: nowrap; }
+  .lk-tools .btn { white-space: nowrap; }
+  .lk-bulk { left: 12px; right: 12px; transform: none; }
+}
