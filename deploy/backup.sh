@@ -3,7 +3,7 @@
 # Works for both Turso and the local database. Keeps BACKUP_KEEP_DAYS days (default 30).
 # Optional off-site copy with rclone: set BACKUP_RCLONE_REMOTE in .env.
 #
-# cron (as the user that runs docker):   15 2 * * *  /opt/asset-management/deploy/backup.sh >> /opt/asset-management/deploy/backups/backup.log 2>&1
+# cron (as the user that runs docker):   15 2 * * *  /DATA/asset-management/deploy/backup.sh >> /DATA/asset-management/deploy/backups/backup.log 2>&1
 set -euo pipefail
 cd "$(dirname "$0")"
 KEEP="$(grep -E '^BACKUP_KEEP_DAYS=' .env | cut -d= -f2)"; KEEP="${KEEP:-30}"
