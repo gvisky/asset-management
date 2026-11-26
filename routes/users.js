@@ -4,6 +4,7 @@ const { get, all, run, audit } = require('../db/database');
 const { hashPassword } = require('../db/auth-utils');
 const { requireGlobalAdmin } = require('../middleware/auth');
 const { pagesFor } = require('../lib/access');
+const { isOwner } = require('../lib/owner');   // the app owner's login is protected
 
 const wrap = (fn) => (req, res, next) => fn(req, res, next).catch(next);
 const { normCountry: canonCountry } = require('../lib/countries');
@@ -34,7 +35,7 @@ async function globalAdminCount() {
 // ── GET /api/users — list all users ───────────────────────────────────────
 router.get('/', wrap(async (req, res) => {
   const rows = await all('SELECT id, username, full_name, role, country, team, asset_access, mfa_enabled, created_at FROM users ORDER BY id');
-  res.json(rows);
+  res.json(rows.map(r => ({ ...r, owner: isOwner(r.username) })));
 }));
 
 // ── Two-step login policy: required for everyone (default) or optional ──────────
@@ -70,9 +71,15 @@ router.post('/', wrap(async (req, res) => {
 
 // ── PUT /api/users/:id — update role / region / name / (optional) password ─
 router.put('/:id', wrap(async (req, res) => {
-  const { full_name, role, password, country } = req.body;
+  const { full_name, password } = req.body;
+  let { role, country } = req.body;
   const user = await get('SELECT * FROM users WHERE id = ?', [req.params.id]);
   if (!user) return res.status(404).json({ error: 'User not found' });
+  // App owner: only the owner may change this login, and only the name and password — it stays a global IT admin.
+  if (isOwner(user.username)) {
+    if (!isOwner(req.user.username)) return res.status(403).json({ error: `"${user.username}" is the app owner's login — only the owner can change it.` });
+    role = 'admin'; country = ''; req.body.team = 'IT'; req.body.asset_access = 1;
+  }
 
   if (role && !['admin', 'editor', 'viewer'].includes(role)) {
     return res.status(400).json({ error: 'Invalid role' });
@@ -119,6 +126,7 @@ router.put('/:id', wrap(async (req, res) => {
 router.post('/:id/mfa-reset', wrap(async (req, res) => {
   const u = await get('SELECT id, username, mfa_enabled FROM users WHERE id = ?', [req.params.id]);
   if (!u) return res.status(404).json({ error: 'User not found' });
+  if (isOwner(u.username) && !isOwner(req.user.username)) return res.status(403).json({ error: `"${u.username}" is the app owner's login — only the owner can reset its two-step login.` });
   await run("UPDATE users SET mfa_enabled = 0, mfa_secret = '', mfa_pending = '', mfa_recovery = '[]', mfa_last_step = 0 WHERE id = ?", [u.id]);
   await run('DELETE FROM mfa_challenges WHERE user_id = ?', [u.id]);
   await audit(req.user, 'MFA', null, `Reset two-step login of ${u.username}${u.mfa_enabled ? '' : ' (it was off)'}`);
@@ -129,6 +137,10 @@ router.delete('/:id', wrap(async (req, res) => {
   const user = await get('SELECT * FROM users WHERE id = ?', [req.params.id]);
   if (!user) return res.status(404).json({ error: 'User not found' });
 
+  if (isOwner(user.username)) {
+    await audit(req.user, 'USER', null, `Refused: tried to delete the app owner's login "${user.username}"`);
+    return res.status(403).json({ error: `"${user.username}" is the app owner's login and cannot be deleted.` });
+  }
   if (Number(req.params.id) === req.user.id) {
     return res.status(400).json({ error: 'You cannot delete your own account' });
   }

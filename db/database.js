@@ -147,6 +147,7 @@ async function setup() {
   await initSchema();
   await migrate();
   await seedUsers();
+  await ensureOwner();
   await ensureRegionalUsers();
   await ensureTeams();
   await seedAssets();
@@ -1609,6 +1610,24 @@ async function ensureRegionalUsers() {
 }
 
 // Seed the team's accounts on first run (only if no users exist).
+// The app owner's login (lib/owner.js) is always there and always a global admin in the IT team: fixed on every start,
+// recreated with ADMIN_PASS if it was ever removed.
+async function ensureOwner() {
+  const { OWNER } = require('../lib/owner');
+  const u = await backend.get('SELECT id, role, country, team, asset_access FROM users WHERE LOWER(username) = ?', [OWNER]);
+  if (u) {
+    if (u.role !== 'admin' || (u.country || '') !== '' || u.team !== 'IT' || Number(u.asset_access) !== 1) {
+      await backend.run("UPDATE users SET role = 'admin', country = NULL, team = 'IT', asset_access = 1 WHERE id = ?", [u.id]);
+      console.log(`  [owner] "${OWNER}" restored to global admin (IT)`);
+    }
+    return;
+  }
+  if (!process.env.ADMIN_PASS) { console.warn(`  [owner] "${OWNER}" is missing and ADMIN_PASS is not set — not recreated`); return; }
+  await backend.run("INSERT INTO users (username, full_name, password_hash, role, team, asset_access) VALUES (?, ?, ?, 'admin', 'IT', 1)",
+    [OWNER, OWNER.charAt(0).toUpperCase() + OWNER.slice(1), hashPassword(process.env.ADMIN_PASS)]);
+  console.log(`  [owner] "${OWNER}" was missing — recreated with ADMIN_PASS`);
+}
+
 async function seedUsers() {
   const { c } = await backend.get('SELECT COUNT(*) AS c FROM users');
   if (Number(c) > 0) return;

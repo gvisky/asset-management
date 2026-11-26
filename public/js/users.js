@@ -47,7 +47,7 @@ async function loadUsers() {
     tbody.innerHTML = users.map(u => `
       <tr>
         <td class="text-muted text-sm">${u.id}</td>
-        <td><strong>${htmlEsc(u.username)}</strong>${u.id === (me && me.id) ? ' <span class="text-muted text-sm">(you)</span>' : ''}</td>
+        <td><strong>${htmlEsc(u.username)}</strong>${u.owner ? ' <span class="badge badge-active" title="App owner — this login cannot be deleted and only the owner can change it">👑 Owner</span>' : ''}${u.id === (me && me.id) ? ' <span class="text-muted text-sm">(you)</span>' : ''}</td>
         <td>${htmlEsc(u.full_name) || '—'}</td>
         <td>${u.team === 'NET' && u.role === 'admin' ? '<span class="badge badge-broken" title="Network admin: Network team editor + delete / import network devices — no IT admin rights">Network admin</span>' : u.team === 'OT' && u.role === 'admin' ? '<span class="badge badge-broken" title="OT admin: OT editor + OT activity log, restore and delete OT devices — no IT admin rights">OT admin</span>' : roleBadge(u.role)}</td>
         <td>${u.team ? `<span class="badge badge-office">${htmlEsc(u.team)}</span>` : '<span class="text-muted text-sm">—</span>'}</td>
@@ -57,9 +57,9 @@ async function loadUsers() {
         <td class="text-muted text-sm">${(u.created_at || '').split(' ')[0]}</td>
         <td>
           <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost btn-sm" onclick="editUser(window._usersById.get(${u.id}))">Edit</button>
-            ${Number(u.mfa_enabled) ? `<button class="btn btn-ghost btn-sm" title="Lost phone: turn off this user's two-step login so they can sign in with the password and set it up again" onclick="resetMfa(${u.id}, ${jsArg(u.username)})">Reset 2-step</button>` : ''}
-            <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, ${jsArg(u.username)})">Delete</button>
+            ${u.owner && !(me && me.id === u.id) ? '<span class="text-muted text-sm" title="Only the app owner can change this login">🔒 Protected</span>' : `<button class="btn btn-ghost btn-sm" onclick="editUser(window._usersById.get(${u.id}))">Edit</button>`}
+            ${Number(u.mfa_enabled) && !(u.owner && !(me && me.id === u.id)) ? `<button class="btn btn-ghost btn-sm" title="Lost phone: turn off this user's two-step login so they can sign in with the password and set it up again" onclick="resetMfa(${u.id}, ${jsArg(u.username)})">Reset 2-step</button>` : ''}
+            ${u.owner ? '' : `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, ${jsArg(u.username)})">Delete</button>`}
           </div>
         </td>
       </tr>
