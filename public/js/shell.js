@@ -28,6 +28,7 @@
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     scroll: '<path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 0 0-2-2 2 2 0 0 0-2 2v3h4"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M10 7h6M10 11h6"/>',
+    video: '<rect x="2" y="5" width="14" height="14" rx="2"/><path d="m16 10 6-4v12l-6-4"/>',
     bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
   };
 
@@ -55,6 +56,7 @@
       ['Finance', 'nav-budget', '/budget.html', 'Budget', 'money', f.itAdmin],
       ['Insights', 'nav-reports', '/reports.html', 'Reports', 'report', f.asset, ['/kpi.html']],
       ['Insights', 'nav-kpi', '/kpi.html', 'KPIs', 'kpi', f.asset, [], 'tab'],
+      ['Insights', 'nav-videos', '/videos.html', 'Videos', 'video', f.it && (f.admin || f.editor), [], 'tab'],
       ['Admin', 'nav-users', '/users.html', 'Users & access', 'lock', f.globalAdmin],
       ['Admin', 'nav-activity', '/activity.html', 'Audit log & activities', 'scroll', f.globalAdmin],
       ['Admin', 'nav-bin', '/deleted.html', 'Recycle bin', 'bin', f.admin],
@@ -75,7 +77,7 @@
   // Families of pages shown as one set of tabs (docs/UX-REDESIGN.md, phase 4). Each page keeps its address.
   const FAMILIES = [
     [['/user-inventory.html', 'Users'], ['/leavers.html', 'Leavers']],
-    [['/reports.html', 'Reports'], ['/kpi.html', 'KPIs']],
+    [['/reports.html', 'Reports'], ['/kpi.html', 'KPIs'], ['/videos.html', 'Videos']],
     [['/stocktake.html', 'Stocktake'], ['/labels.html', 'QR labels']],
     [['/ot-reports.html', 'OT reports'], ['/ot-attention.html', 'OT needs attention'], ['/ot-activity.html', 'OT activity']],
   ];
