@@ -70,6 +70,8 @@ app.use('/api/activity', require('./routes/activity'));
 app.use('/api/confirm-forms', require('./routes/confirm').forms);
 app.use('/api/confirm', require('./routes/confirm').admin);
 app.use('/api/my-devices', require('./routes/confirm').pub);   // public: staff confirm their devices with a personal link
+app.use('/api/media', require('./routes/media').admin);   // 🎬 videos (IT)
+app.use(require('./routes/media').pub);   // public: /v/<token> watch page, /media/<token>.mp4 / .jpg — no login (the link is the key)
 
 // Public files that must load before login (login page + shared CSS/JS)
 const PUBLIC_FILES = ['/login.html', '/css/style.css', '/js/auth.js', '/js/login.js', '/favicon.ico',

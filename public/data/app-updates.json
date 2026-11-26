@@ -1,5 +1,14 @@
 [
   {
+    "date": "2026-11-26",
+    "title": "🎬 Videos with a public link, and an e-mail with the video",
+    "items": [
+      "Reports → Videos (IT admins and editors): upload a video (MP4, up to 500 MB). It is kept in the app's database and gets a public link (…/v/…) that plays without login — on phones too, with seeking. Switch the link off or delete the video at any time; views are counted.",
+      "✉ E-mail: subject and message, a live preview, then ⬇ E-mail draft (.eml — opens in Outlook / Apple Mail as a new message to send) or 📋 Copy e-mail (paste into a new message). Apple Mail and iPhone Mail play the video inside the e-mail; Outlook and Gmail never play video in a mail, so they show the video's picture with ▶ — one click plays it on the video page.",
+      "The picture is the brightest of a few frames of the video, with a play button."
+    ]
+  },
+  {
     "date": "2026-11-24",
     "title": "One log, written once",
     "items": [

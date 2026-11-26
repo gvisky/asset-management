@@ -1381,6 +1381,14 @@ async function migrate() {
       WHERE legacy = 'ot' AND restore_of IS NOT NULL`);
     await backend.run("INSERT OR REPLACE INTO app_meta (key, value) VALUES ('changelog_migrated', datetime('now'))");
   }
+  // Videos with a public link (/v/<token>): the file in 2 MB pieces (media_chunks), so it lives in the database like the
+  // drawings and photos — on Turso, on the server's database file and in its backups (routes/media.js).
+  await backend.run(`CREATE TABLE IF NOT EXISTS media_videos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT UNIQUE NOT NULL, title TEXT DEFAULT '', note TEXT DEFAULT '', mime TEXT DEFAULT 'video/mp4',
+      size INTEGER DEFAULT 0, chunk_size INTEGER DEFAULT 0, chunks INTEGER DEFAULT 0, duration REAL DEFAULT 0, width INTEGER DEFAULT 0, height INTEGER DEFAULT 0,
+      poster_b64 TEXT DEFAULT '', ready INTEGER DEFAULT 0, public INTEGER DEFAULT 1, views INTEGER DEFAULT 0,
+      uploaded_by TEXT DEFAULT '', uploaded_at TEXT DEFAULT (datetime('now')))`);
+  await backend.run(`CREATE TABLE IF NOT EXISTS media_chunks (video_id INTEGER NOT NULL, n INTEGER NOT NULL, data_b64 TEXT NOT NULL, PRIMARY KEY (video_id, n))`);
   // Switch port owner: NULL = automatic (OT device / OT switch → OT, else IT), 1 = OT, 0 = IT (set by the IT team).
   const npcols = (await backend.all('PRAGMA table_info(net_ports)')).map(c => c.name);
   if (!npcols.includes('ot')) await backend.run('ALTER TABLE net_ports ADD COLUMN ot INTEGER DEFAULT NULL');
