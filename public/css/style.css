@@ -2057,3 +2057,31 @@ tr.ac-bad td { background: #fef2f2; } tr.ac-health td:first-child, tr.ac-portlog
 .vm-b { display: grid; grid-template-columns: 340px 1fr; gap: 16px; } .vm-prev iframe { width: 100%; height: 520px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .vm-note { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; line-height: 1.5; }
 @media (max-width: 800px) { .vm-b { grid-template-columns: 1fr; } }
+
+/* ── Menu minimize / pin (shell.js, html.sb-mini; desktop only — phones keep the slide-in menu) ── */
+.sidebar-logo { display: flex; align-items: center; gap: 6px; }
+.sidebar-logo .brand { flex: 1; min-width: 0; }
+.sb-pin { flex: none; border: 0; background: transparent; color: #64748b; width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; cursor: pointer; }
+.sb-pin:hover { background: #1e293b; color: #fff; }
+html.sb-mini .sb-pin .sb-arr { transform: rotate(180deg); transform-origin: 14px 12px; }
+@media (min-width: 769px) {
+  .sidebar, .main-wrap { transition: width .18s ease, margin-left .18s ease, box-shadow .18s ease; }
+  html.sb-mini { --sidebar-w: 64px; }
+  html.sb-mini .sidebar { overflow-x: hidden; }
+  html.sb-mini .sidebar .nav-link > span, html.sb-mini .sidebar-logo .brand > span:last-child { display: none; }
+  html.sb-mini .sidebar .nav-section-label { font-size: 0; padding: 8px 0 4px; margin: 0 14px; border-top: 1px solid rgba(255,255,255,.08); }
+  html.sb-mini .sidebar .nav-link { justify-content: center; position: relative; }
+  html.sb-mini .sidebar .nav-link .nav-cnt { position: absolute; top: 0; right: 4px; font-size: 9.5px; padding: 0 4px; line-height: 15px; }
+  html.sb-mini .sidebar-logo { flex-direction: column; padding-left: 8px; padding-right: 8px; }
+  html.sb-mini .sidebar-logo .brand { justify-content: center; }
+  /* Mouse on the minimized menu: it opens over the page (the page does not move) */
+  html.sb-mini .sidebar:hover { width: calc(240px + env(safe-area-inset-left)); box-shadow: 8px 0 30px rgba(15,23,42,.35); }
+  html.sb-mini .sidebar:hover .nav-link > span, html.sb-mini .sidebar:hover .sidebar-logo .brand > span:last-child { display: inline; }
+  html.sb-mini .sidebar:hover .sidebar-logo .brand > span:last-child { display: block; }
+  html.sb-mini .sidebar:hover .nav-section-label { font-size: 10.5px; padding: 14px 10px 4px; margin: 0; border-top: 0; }
+  html.sb-mini .sidebar:hover .nav-link { justify-content: flex-start; }
+  html.sb-mini .sidebar:hover .nav-link .nav-cnt { position: static; font-size: 11px; padding: 0 7px; line-height: 18px; }
+  html.sb-mini .sidebar:hover .sidebar-logo { flex-direction: row; padding-left: 20px; padding-right: 20px; }
+  html.sb-mini .sidebar:hover .sidebar-logo .brand { justify-content: flex-start; }
+}
+@media (max-width: 768px) { .sb-pin { display: none; } }

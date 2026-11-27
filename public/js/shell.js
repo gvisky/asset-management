@@ -4,6 +4,21 @@
    - Top bar: breadcrumb (group ›), one country switch for the whole app (remembered), the bell, the account menu.
    Called by auth.js (ensureAuth) before the older menu code, which then finds every link already in place. */
 (function () {
+  // Menu on the left: pinned open (default) or minimized to icons (opens over the page while the mouse is on it).
+  // Remembered in this browser (localStorage "hc-sidebar" = "mini"); set before the page draws, so it does not jump.
+  const SB = 'hc-sidebar';
+  const isMini = () => { try { return localStorage.getItem(SB) === 'mini'; } catch { return false; } };
+  if (isMini()) document.documentElement.classList.add('sb-mini');
+  function setMini(on) {
+    try { localStorage.setItem(SB, on ? 'mini' : 'pinned'); } catch { /* private mode */ }
+    document.documentElement.classList.toggle('sb-mini', on);
+    const b = document.getElementById('sb-pin'); if (b) { b.title = on ? 'Keep the menu open (pin)' : 'Minimize the menu (more space)'; b.setAttribute('aria-pressed', on ? 'false' : 'true'); }
+    window.dispatchEvent(new Event('resize'));   // charts / maps fit the new width
+  }
+  window.ShellSidebar = { toggle: () => setMini(!isMini()), setMini };
+  document.addEventListener('keydown', (e) => {   // Ctrl + B (or ⌘ B): minimize / pin the menu
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b' && !/INPUT|TEXTAREA|SELECT/.test((e.target || {}).tagName || '') && !(e.target || {}).isContentEditable) { e.preventDefault(); setMini(!isMini()); }
+  });
   const ico = (d) => `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">${d}</svg>`;
   const I = {
     home: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
@@ -106,7 +121,7 @@
     let html = '', grp = '';
     for (const [g, id, href, label, icon] of menu) {
       if (g !== grp) { html += `<div class="nav-section-label">${g}</div>`; grp = g; }
-      html += `<a href="${href}" class="nav-link${act && act[1] === id ? ' active' : ''}" id="${id}">${ico(I[icon])}<span>${label}</span></a>`;
+      html += `<a href="${href}" class="nav-link${act && act[1] === id ? ' active' : ''}" id="${id}" title="${label}">${ico(I[icon])}<span>${label}</span></a>`;
     }
     nav.innerHTML = html;
     // Inbox count on the menu (GET /api/inbox?count=1 — cached on the server for 2 minutes).
@@ -114,7 +129,11 @@
       setTimeout(() => fetch('/api/inbox?count=1').then(r => (r.ok ? r.json() : null)).then(d => d && setInboxCount(d.total)).catch(() => {}), 1200);
     }
     const logo = document.querySelector('.sidebar-logo');
-    if (logo) logo.innerHTML = '<a href="/" class="brand"><span class="brand-mark">H</span><span><b>Hayat IT</b><small>Communication Tools</small></span></a>';
+    if (logo) {
+      logo.innerHTML = `<a href="/" class="brand"><span class="brand-mark">H</span><span><b>Hayat IT</b><small>Communication Tools</small></span></a>
+        <button type="button" class="sb-pin" id="sb-pin" aria-label="Minimize or pin the menu" title="${isMini() ? 'Keep the menu open (pin)' : 'Minimize the menu (more space)'} — Ctrl+B"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path class="sb-arr" d="m15 10-2 2 2 2"/></svg></button>`;
+      document.getElementById('sb-pin').onclick = (e) => { e.preventDefault(); setMini(!isMini()); };
+    }
     document.documentElement.classList.add('shell-ready');
   }
 

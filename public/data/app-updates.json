@@ -1,5 +1,13 @@
 [
   {
+    "date": "2026-11-27",
+    "title": "Minimize or pin the menu",
+    "items": [
+      "The button next to Hayat IT (top of the menu) minimizes the menu to icons, so every page gets about 176 px more width. Point at the icon strip and the full menu slides over the page; click the button again (or press Ctrl+B) to pin it open.",
+      "Your choice is remembered in this browser on every page. Phones keep the slide-in menu (☰)."
+    ]
+  },
+  {
     "date": "2026-11-26",
     "title": "🎬 Videos with a public link, and an e-mail with the video",
     "items": [
